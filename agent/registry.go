@@ -125,11 +125,23 @@ func (r *Registry) Len() int {
 }
 
 // TypedHandler is a function that executes a tool call with typed arguments.
+// The args parameter is automatically unmarshaled from the tool call's JSON arguments.
 type TypedHandler[T any] func(ctx context.Context, args T) (string, error)
 
 // RegisterFunc registers a tool with a typed handler that automatically
 // unmarshals the arguments JSON into the specified type T.
-// This provides a cleaner API compared to manually unmarshaling in each handler.
+//
+// Example:
+//
+//	type SearchArgs struct {
+//	    Query string `json:"query"`
+//	}
+//	RegisterFunc(registry, "search", "Search the web",
+//	    ai.SchemaFrom[SearchArgs]().Desc("query", "Search query").Required("query").Build(),
+//	    func(ctx context.Context, args SearchArgs) (string, error) {
+//	        return doSearch(args.Query), nil
+//	    },
+//	)
 func RegisterFunc[T any](r *Registry, name, description string, params json.RawMessage, fn TypedHandler[T]) error {
 	tool := ai.Tool{
 		Name:        name,

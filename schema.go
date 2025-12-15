@@ -7,7 +7,8 @@ import (
 )
 
 // SchemaBuilder provides a fluent API for constructing JSON Schema objects
-// from Go structs. Use SchemaFrom[T]() to create a builder from a struct type.
+// from Go structs for use as AI tool parameters. Use [SchemaFrom] to create
+// a builder from a struct type, then chain methods to add metadata.
 type SchemaBuilder struct {
 	properties    map[string]*propertyDef
 	required      []string
@@ -25,7 +26,25 @@ type propertyDef struct {
 }
 
 // SchemaFrom creates a SchemaBuilder by reflecting on the given struct type.
-// Field names are taken from json tags, types are mapped to JSON Schema types.
+// Field names are derived from json tags (or field names if no tag).
+//
+// Type mappings:
+//   - string → "string"
+//   - int, int64, uint, etc. → "integer"
+//   - float32, float64 → "number"
+//   - bool → "boolean"
+//   - []T → "array" with items
+//   - struct → "object" with properties
+//
+// Example:
+//
+//	type Args struct {
+//	    Query string `json:"query"`
+//	    Limit int    `json:"limit"`
+//	}
+//	schema := SchemaFrom[Args]().
+//	    Desc("query", "Search query").Required("query").
+//	    Build()
 func SchemaFrom[T any]() *SchemaBuilder {
 	var zero T
 	t := reflect.TypeOf(zero)
@@ -123,7 +142,7 @@ func typeToPropertyDef(t reflect.Type) *propertyDef {
 	}
 }
 
-// Desc sets the description for a field.
+// Desc sets the description for a field. Unknown fields are ignored.
 func (s *SchemaBuilder) Desc(field, description string) *SchemaBuilder {
 	if prop, ok := s.properties[field]; ok {
 		prop.Description = description
@@ -131,7 +150,7 @@ func (s *SchemaBuilder) Desc(field, description string) *SchemaBuilder {
 	return s
 }
 
-// Required marks the specified fields as required.
+// Required marks the specified fields as required. Unknown fields are ignored.
 func (s *SchemaBuilder) Required(fields ...string) *SchemaBuilder {
 	for _, field := range fields {
 		if _, ok := s.properties[field]; ok {
@@ -151,7 +170,7 @@ func (s *SchemaBuilder) Required(fields ...string) *SchemaBuilder {
 	return s
 }
 
-// Enum sets the allowed values for a string field.
+// Enum sets the allowed values for a field. Unknown fields are ignored.
 func (s *SchemaBuilder) Enum(field string, values ...string) *SchemaBuilder {
 	if prop, ok := s.properties[field]; ok {
 		prop.Enum = make([]any, len(values))
@@ -162,7 +181,7 @@ func (s *SchemaBuilder) Enum(field string, values ...string) *SchemaBuilder {
 	return s
 }
 
-// Build generates the JSON Schema as json.RawMessage.
+// Build generates the JSON Schema as json.RawMessage, suitable for [Tool.Parameters].
 func (s *SchemaBuilder) Build() json.RawMessage {
 	schema := s.toMap()
 	data, err := json.Marshal(schema)
