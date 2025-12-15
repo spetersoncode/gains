@@ -11,7 +11,7 @@ import (
 // Embed generates embeddings for the provided texts using Google's embedding API.
 func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.EmbeddingOption) (*gains.EmbeddingResponse, error) {
 	if len(texts) == 0 {
-		return nil, fmt.Errorf("at least one text is required for embedding")
+		return nil, fmt.Errorf("%w: at least one text is required for embedding", gains.ErrEmptyInput)
 	}
 
 	options := gains.ApplyEmbeddingOptions(opts...)

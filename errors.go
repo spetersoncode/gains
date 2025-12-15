@@ -1,38 +1,24 @@
 package gains
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
-// APIError represents an error returned by a provider's API.
-type APIError struct {
-	StatusCode int
-	Message    string
-	Provider   string
+// ErrEmptyInput is returned when a required input slice is empty.
+var ErrEmptyInput = errors.New("empty input")
+
+// ImageError represents an error during image processing.
+type ImageError struct {
+	Op  string // "decode" or "fetch"
+	URL string // the image URL or "base64"
+	Err error  // underlying error
 }
 
-func (e *APIError) Error() string {
-	return fmt.Sprintf("%s API error (status %d): %s", e.Provider, e.StatusCode, e.Message)
+func (e *ImageError) Error() string {
+	return fmt.Sprintf("image %s error for %s: %v", e.Op, e.URL, e.Err)
 }
 
-// AuthError represents an authentication failure.
-type AuthError struct {
-	Provider string
-	Message  string
-}
-
-func (e *AuthError) Error() string {
-	return fmt.Sprintf("%s authentication error: %s", e.Provider, e.Message)
-}
-
-// RateLimitError represents a rate limiting error.
-type RateLimitError struct {
-	Provider   string
-	Message    string
-	RetryAfter int // seconds until retry is allowed, if provided
-}
-
-func (e *RateLimitError) Error() string {
-	if e.RetryAfter > 0 {
-		return fmt.Sprintf("%s rate limit exceeded: %s (retry after %ds)", e.Provider, e.Message, e.RetryAfter)
-	}
-	return fmt.Sprintf("%s rate limit exceeded: %s", e.Provider, e.Message)
+func (e *ImageError) Unwrap() error {
+	return e.Err
 }

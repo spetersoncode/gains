@@ -54,7 +54,10 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		model = options.Model
 	}
 
-	contents := convertMessages(messages)
+	contents, err := convertMessages(messages)
+	if err != nil {
+		return nil, err
+	}
 	config := &genai.GenerateContentConfig{}
 	if options.MaxTokens > 0 {
 		maxTokens := int32(options.MaxTokens)
@@ -122,7 +125,10 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		model = options.Model
 	}
 
-	contents := convertMessages(messages)
+	contents, err := convertMessages(messages)
+	if err != nil {
+		return nil, err
+	}
 	config := &genai.GenerateContentConfig{}
 	if options.MaxTokens > 0 {
 		maxTokens := int32(options.MaxTokens)

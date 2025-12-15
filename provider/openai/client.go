@@ -49,9 +49,14 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		model = options.Model
 	}
 
+	convertedMessages, err := convertMessages(messages)
+	if err != nil {
+		return nil, err
+	}
+
 	params := openai.ChatCompletionNewParams{
 		Model:    model,
-		Messages: convertMessages(messages),
+		Messages: convertedMessages,
 	}
 	if options.MaxTokens > 0 {
 		params.MaxTokens = openai.Int(int64(options.MaxTokens))
@@ -101,9 +106,14 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		model = options.Model
 	}
 
+	convertedMessages, err := convertMessages(messages)
+	if err != nil {
+		return nil, err
+	}
+
 	params := openai.ChatCompletionNewParams{
 		Model:    model,
-		Messages: convertMessages(messages),
+		Messages: convertedMessages,
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{
 			IncludeUsage: openai.Bool(true),
 		},

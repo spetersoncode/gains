@@ -12,7 +12,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func convertMessages(messages []gains.Message) []*genai.Content {
+func convertMessages(messages []gains.Message) ([]*genai.Content, error) {
 	var contents []*genai.Content
 
 	for _, msg := range messages {
@@ -35,7 +35,11 @@ func convertMessages(messages []gains.Message) []*genai.Content {
 
 		// Handle multimodal content
 		if msg.HasParts() {
-			parts = convertPartsToGoogleParts(msg.Parts)
+			convertedParts, err := convertPartsToGoogleParts(msg.Parts)
+			if err != nil {
+				return nil, err
+			}
+			parts = convertedParts
 		} else if msg.Content != "" {
 			parts = append(parts, &genai.Part{Text: msg.Content})
 		}
@@ -75,10 +79,10 @@ func convertMessages(messages []gains.Message) []*genai.Content {
 		}
 	}
 
-	return contents
+	return contents, nil
 }
 
-func convertPartsToGoogleParts(parts []gains.ContentPart) []*genai.Part {
+func convertPartsToGoogleParts(parts []gains.ContentPart) ([]*genai.Part, error) {
 	var result []*genai.Part
 	for _, part := range parts {
 		switch part.Type {
@@ -88,18 +92,19 @@ func convertPartsToGoogleParts(parts []gains.ContentPart) []*genai.Part {
 			if part.Base64 != "" {
 				// Decode base64 to bytes
 				data, err := base64.StdEncoding.DecodeString(part.Base64)
-				if err == nil {
-					mimeType := part.MimeType
-					if mimeType == "" {
-						mimeType = "image/jpeg" // Default
-					}
-					result = append(result, &genai.Part{
-						InlineData: &genai.Blob{
-							Data:     data,
-							MIMEType: mimeType,
-						},
-					})
+				if err != nil {
+					return nil, &gains.ImageError{Op: "decode", URL: "base64", Err: err}
 				}
+				mimeType := part.MimeType
+				if mimeType == "" {
+					mimeType = "image/jpeg" // Default
+				}
+				result = append(result, &genai.Part{
+					InlineData: &genai.Blob{
+						Data:     data,
+						MIMEType: mimeType,
+					},
+				})
 			} else if part.ImageURL != "" {
 				// Google supports GCS URIs directly
 				if strings.HasPrefix(part.ImageURL, "gs://") {
@@ -116,22 +121,23 @@ func convertPartsToGoogleParts(parts []gains.ContentPart) []*genai.Part {
 				} else {
 					// HTTP/HTTPS URLs need to be fetched and converted to inline data
 					data, mimeType, err := fetchImageFromURL(part.ImageURL)
-					if err == nil {
-						if part.MimeType != "" {
-							mimeType = part.MimeType
-						}
-						result = append(result, &genai.Part{
-							InlineData: &genai.Blob{
-								Data:     data,
-								MIMEType: mimeType,
-							},
-						})
+					if err != nil {
+						return nil, &gains.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
 					}
+					if part.MimeType != "" {
+						mimeType = part.MimeType
+					}
+					result = append(result, &genai.Part{
+						InlineData: &genai.Blob{
+							Data:     data,
+							MIMEType: mimeType,
+						},
+					})
 				}
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func fetchImageFromURL(url string) ([]byte, string, error) {

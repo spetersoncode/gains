@@ -11,13 +11,16 @@ import (
 	"github.com/spetersoncode/gains"
 )
 
-func convertMessages(messages []gains.Message) []openai.ChatCompletionMessageParamUnion {
+func convertMessages(messages []gains.Message) ([]openai.ChatCompletionMessageParamUnion, error) {
 	var result []openai.ChatCompletionMessageParamUnion
 	for _, msg := range messages {
 		switch msg.Role {
 		case gains.RoleUser:
 			if msg.HasParts() {
-				contentParts := convertPartsToOpenAIParts(msg.Parts)
+				contentParts, err := convertPartsToOpenAIParts(msg.Parts)
+				if err != nil {
+					return nil, err
+				}
 				result = append(result, openai.ChatCompletionMessageParamUnion{
 					OfUser: &openai.ChatCompletionUserMessageParam{
 						Content: openai.ChatCompletionUserMessageParamContentUnion{
@@ -61,10 +64,10 @@ func convertMessages(messages []gains.Message) []openai.ChatCompletionMessagePar
 			result = append(result, openai.UserMessage(msg.Content))
 		}
 	}
-	return result
+	return result, nil
 }
 
-func convertPartsToOpenAIParts(parts []gains.ContentPart) []openai.ChatCompletionContentPartUnionParam {
+func convertPartsToOpenAIParts(parts []gains.ContentPart) ([]openai.ChatCompletionContentPartUnionParam, error) {
 	var result []openai.ChatCompletionContentPartUnionParam
 	for _, part := range parts {
 		switch part.Type {
@@ -84,16 +87,14 @@ func convertPartsToOpenAIParts(parts []gains.ContentPart) []openai.ChatCompletio
 				// This avoids issues where OpenAI's servers can't fetch certain URLs
 				if strings.HasPrefix(part.ImageURL, "http://") || strings.HasPrefix(part.ImageURL, "https://") {
 					data, mimeType, err := fetchImageFromURL(part.ImageURL)
-					if err == nil {
-						if part.MimeType != "" {
-							mimeType = part.MimeType
-						}
-						b64 := base64.StdEncoding.EncodeToString(data)
-						imageURL = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
-					} else {
-						// Fall back to passing the URL directly if fetching fails
-						imageURL = part.ImageURL
+					if err != nil {
+						return nil, &gains.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
 					}
+					if part.MimeType != "" {
+						mimeType = part.MimeType
+					}
+					b64 := base64.StdEncoding.EncodeToString(data)
+					imageURL = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
 				} else {
 					// Non-HTTP URLs (data URIs, etc.) pass through directly
 					imageURL = part.ImageURL
@@ -106,7 +107,7 @@ func convertPartsToOpenAIParts(parts []gains.ContentPart) []openai.ChatCompletio
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func fetchImageFromURL(url string) ([]byte, string, error) {
