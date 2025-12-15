@@ -97,9 +97,14 @@ func main() {
 	}
 	fmt.Println()
 
-	// Demo: Chat Streaming
-	if askYesNo("Demo chat streaming?") {
-		demoChatStreaming(ctx, c)
+	// Demo: Chat
+	if askYesNo("Demo chat?") {
+		demoChat(ctx, c)
+	}
+
+	// Demo: Chat Stream
+	if askYesNo("Demo chat stream?") {
+		demoChatStream(ctx, c)
 	}
 
 	// Demo: Vision/Image Input
@@ -117,6 +122,16 @@ func main() {
 	// Demo: Tool Calling
 	if askYesNo("Demo tool/function calling?") {
 		demoToolCalling(ctx, c)
+	}
+
+	// Demo: Agent
+	if askYesNo("Demo agent?") {
+		demoAgent(ctx, c)
+	}
+
+	// Demo: Agent Stream
+	if askYesNo("Demo agent stream?") {
+		demoAgentStream(ctx, c)
 	}
 
 	// Demo: JSON Mode / Structured Output

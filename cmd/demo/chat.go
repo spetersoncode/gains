@@ -9,9 +9,31 @@ import (
 	"github.com/spetersoncode/gains/client"
 )
 
-func demoChatStreaming(ctx context.Context, c *client.Client) {
+func demoChat(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
-	fmt.Println("│          Chat Streaming Demo            │")
+	fmt.Println("│              Chat Demo                  │")
+	fmt.Println("└─────────────────────────────────────────┘")
+
+	messages := []gains.Message{
+		{Role: gains.RoleUser, Content: "What is the capital of France? Reply in one sentence."},
+	}
+
+	fmt.Printf("\nUser: %s\n", messages[0].Content)
+	fmt.Printf("\n%s: ", c.Provider())
+
+	resp, err := c.Chat(ctx, messages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	fmt.Println(resp.Content)
+	fmt.Printf("[Tokens: %d in, %d out]\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
+}
+
+func demoChatStream(ctx context.Context, c *client.Client) {
+	fmt.Println("\n┌─────────────────────────────────────────┐")
+	fmt.Println("│          Chat Stream Demo               │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	messages := []gains.Message{
