@@ -16,32 +16,21 @@ type Client struct {
 	model  string
 }
 
-// New creates a new OpenAI client.
-// It reads the API key from the OPENAI_API_KEY environment variable.
-func New(opts ...ClientOption) *Client {
+// New creates a new OpenAI client with the given API key.
+func New(apiKey string, opts ...ClientOption) *Client {
+	client := openai.NewClient(option.WithAPIKey(apiKey))
 	c := &Client{
-		model: DefaultModel,
+		client: &client,
+		model:  DefaultModel,
 	}
 	for _, opt := range opts {
 		opt(c)
-	}
-	if c.client == nil {
-		client := openai.NewClient()
-		c.client = &client
 	}
 	return c
 }
 
 // ClientOption configures the OpenAI client.
 type ClientOption func(*Client)
-
-// WithAPIKey sets the API key explicitly instead of using the environment variable.
-func WithAPIKey(key string) ClientOption {
-	return func(c *Client) {
-		client := openai.NewClient(option.WithAPIKey(key))
-		c.client = &client
-	}
-}
 
 // WithModel sets the default model for requests.
 func WithModel(model string) ClientOption {

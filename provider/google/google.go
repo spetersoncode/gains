@@ -2,7 +2,6 @@ package google
 
 import (
 	"context"
-	"os"
 
 	"google.golang.org/genai"
 	"github.com/spetersoncode/gains"
@@ -16,44 +15,27 @@ type Client struct {
 	model  string
 }
 
-// New creates a new Google GenAI client.
-// It reads the API key from the GOOGLE_API_KEY environment variable.
-func New(ctx context.Context, opts ...ClientOption) (*Client, error) {
+// New creates a new Google GenAI client with the given API key.
+func New(ctx context.Context, apiKey string, opts ...ClientOption) (*Client, error) {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, err
+	}
 	c := &Client{
-		model: DefaultModel,
+		client: client,
+		model:  DefaultModel,
 	}
 	for _, opt := range opts {
 		opt(c)
-	}
-	if c.client == nil {
-		apiKey := os.Getenv("GOOGLE_API_KEY")
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  apiKey,
-			Backend: genai.BackendGeminiAPI,
-		})
-		if err != nil {
-			return nil, err
-		}
-		c.client = client
 	}
 	return c, nil
 }
 
 // ClientOption configures the Google client.
 type ClientOption func(*Client)
-
-// WithAPIKey sets the API key explicitly instead of using the environment variable.
-func WithAPIKey(ctx context.Context, key string) ClientOption {
-	return func(c *Client) {
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  key,
-			Backend: genai.BackendGeminiAPI,
-		})
-		if err == nil {
-			c.client = client
-		}
-	}
-}
 
 // WithModel sets the default model for requests.
 func WithModel(model string) ClientOption {

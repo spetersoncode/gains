@@ -16,32 +16,21 @@ type Client struct {
 	model  string
 }
 
-// New creates a new Anthropic client.
-// It reads the API key from the ANTHROPIC_API_KEY environment variable.
-func New(opts ...ClientOption) *Client {
+// New creates a new Anthropic client with the given API key.
+func New(apiKey string, opts ...ClientOption) *Client {
+	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 	c := &Client{
-		model: DefaultModel,
+		client: &client,
+		model:  DefaultModel,
 	}
 	for _, opt := range opts {
 		opt(c)
-	}
-	if c.client == nil {
-		client := anthropic.NewClient()
-		c.client = &client
 	}
 	return c
 }
 
 // ClientOption configures the Anthropic client.
 type ClientOption func(*Client)
-
-// WithAPIKey sets the API key explicitly instead of using the environment variable.
-func WithAPIKey(key string) ClientOption {
-	return func(c *Client) {
-		client := anthropic.NewClient(option.WithAPIKey(key))
-		c.client = &client
-	}
-}
 
 // WithModel sets the default model for requests.
 func WithModel(model string) ClientOption {

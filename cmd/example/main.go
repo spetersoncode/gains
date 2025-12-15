@@ -21,20 +21,26 @@ func main() {
 	}
 
 	// Anthropic
-	fmt.Println("=== Anthropic ===")
-	testProvider(anthropic.New(), ctx, prompt)
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		fmt.Println("=== Anthropic ===")
+		testProvider(anthropic.New(key), ctx, prompt)
+	}
 
 	// OpenAI
-	fmt.Println("\n=== OpenAI ===")
-	testProvider(openai.New(), ctx, prompt)
+	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+		fmt.Println("\n=== OpenAI ===")
+		testProvider(openai.New(key), ctx, prompt)
+	}
 
 	// Google
-	fmt.Println("\n=== Google ===")
-	googleClient, err := google.New(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Google client error: %v\n", err)
-	} else {
-		testProvider(googleClient, ctx, prompt)
+	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
+		fmt.Println("\n=== Google ===")
+		googleClient, err := google.New(ctx, key)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Google client error: %v\n", err)
+		} else {
+			testProvider(googleClient, ctx, prompt)
+		}
 	}
 }
 
