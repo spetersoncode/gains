@@ -95,6 +95,9 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	params := openai.ChatCompletionNewParams{
 		Model:    model,
 		Messages: convertMessages(messages),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 	if options.MaxTokens > 0 {
 		params.MaxTokens = openai.Int(int64(options.MaxTokens))
