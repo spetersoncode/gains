@@ -39,13 +39,14 @@ import (
 )
 
 func main() {
-    c, _ := client.New(client.Config{
+    ctx := context.Background()
+    c, _ := client.New(ctx, client.Config{
         Provider: client.ProviderAnthropic,
     })
 
-    resp, _ := c.Chat(context.Background(), []gains.Message{
+    resp, _ := c.Chat(ctx, []gains.Message{
         {Role: gains.RoleUser, Content: "Hello!"},
-    }, gains.WithModel(models.ClaudeSonnet4))
+    }, gains.WithModel(models.ClaudeSonnet45))
 
     fmt.Println(resp.Content)
 }
@@ -62,14 +63,16 @@ The unified client supports all three providers with feature detection:
 | Google    | ✓    | ✓      | ✓          |
 
 ```go
+ctx := context.Background()
+
 // Anthropic - uses ANTHROPIC_API_KEY
-c, _ := client.New(client.Config{Provider: client.ProviderAnthropic})
+c, _ := client.New(ctx, client.Config{Provider: client.ProviderAnthropic})
 
 // OpenAI - uses OPENAI_API_KEY
-c, _ := client.New(client.Config{Provider: client.ProviderOpenAI})
+c, _ := client.New(ctx, client.Config{Provider: client.ProviderOpenAI})
 
 // Google - uses GOOGLE_API_KEY
-c, _ := client.New(client.Config{Provider: client.ProviderGoogle})
+c, _ := client.New(ctx, client.Config{Provider: client.ProviderGoogle})
 ```
 
 ## Chat & Streaming
@@ -132,12 +135,12 @@ registry.MustRegister(gains.Tool{
 })
 
 // Create and run agent
-a := agent.New(chatProvider, registry,
+a := agent.New(chatProvider, registry)
+
+result, _ := a.Run(ctx, messages,
     agent.WithMaxSteps(10),
     agent.WithTimeout(2*time.Minute),
 )
-
-result, _ := a.Run(ctx, messages)
 fmt.Println(result.Response.Content)
 ```
 
@@ -146,12 +149,14 @@ fmt.Println(result.Response.Content)
 Require approval for sensitive operations:
 
 ```go
-a := agent.New(provider, registry,
+a := agent.New(provider, registry)
+
+result, _ := a.Run(ctx, messages,
     agent.WithApprovalRequired("delete_file", "send_email"),
-    agent.WithApprover(func(ctx context.Context, call gains.ToolCall) bool {
+    agent.WithApprover(func(ctx context.Context, call gains.ToolCall) (bool, string) {
         fmt.Printf("Allow %s? [y/n]: ", call.Name)
         // Get user input...
-        return approved
+        return approved, "" // Return approval and optional rejection reason
     }),
 )
 ```
@@ -210,17 +215,17 @@ fmt.Println(resp.Images[0].URL)
 
 ## Structured Output
 
-Force JSON output with schema validation:
+Force JSON output or use schema validation:
 
 ```go
+// Simple JSON mode
+resp, _ := c.Chat(ctx, messages, gains.WithJSONMode())
+
+// With schema validation
 resp, _ := c.Chat(ctx, messages,
-    gains.WithJSONMode(true),
-    gains.WithResponseSchema(map[string]any{
-        "type": "object",
-        "properties": map[string]any{
-            "name":  map[string]any{"type": "string"},
-            "score": map[string]any{"type": "number"},
-        },
+    gains.WithResponseSchema(gains.ResponseSchema{
+        Name:   "result",
+        Schema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"},"score":{"type":"number"}}}`),
     }),
 )
 ```
@@ -233,19 +238,20 @@ The `models` package provides type-safe model selection with pricing info:
 import "github.com/spetersoncode/gains/models"
 
 // Auto-updating aliases (recommended)
-gains.WithModel(models.ClaudeSonnet4)
-gains.WithModel(models.GPT4o)
-gains.WithModel(models.Gemini25Flash)
+gains.WithModel(models.ClaudeSonnet45)    // Anthropic
+gains.WithModel(models.GPT52)             // OpenAI
+gains.WithModel(models.Gemini25Flash)     // Google
 
-// Pinned versions
-gains.WithModel(models.ClaudeSonnet4_20250514)
+// Pinned versions for production stability
+gains.WithModel(models.ClaudeSonnet45_20250929)
+gains.WithModel(models.Gemini3Pro)
 ```
 
 ## Request Options
 
 ```go
 resp, _ := c.Chat(ctx, messages,
-    gains.WithModel(models.ClaudeOpus4),
+    gains.WithModel(models.ClaudeOpus45),
     gains.WithMaxTokens(4096),
     gains.WithTemperature(0.7),
     gains.WithTools(tools),
@@ -256,13 +262,20 @@ resp, _ := c.Chat(ctx, messages,
 ## Retry Configuration
 
 ```go
-c, _ := client.New(client.Config{
+c, _ := client.New(ctx, client.Config{
     Provider: client.ProviderOpenAI,
-    Retry: &client.RetryConfig{
+    RetryConfig: &client.RetryConfig{
         MaxAttempts:  5,
         InitialDelay: time.Second,
         MaxDelay:     30 * time.Second,
     },
+})
+
+// Or disable retries entirely
+disabled := client.DisabledRetryConfig()
+c, _ := client.New(ctx, client.Config{
+    Provider:    client.ProviderOpenAI,
+    RetryConfig: &disabled,
 })
 ```
 
@@ -271,13 +284,22 @@ c, _ := client.New(client.Config{
 Observe operations at multiple levels:
 
 ```go
-// Client events
-c.OnEvent(func(e client.Event) {
-    fmt.Printf("[%s] %s %s %v\n", e.Type, e.Provider, e.Model, e.Duration)
+// Client events via channel
+events := make(chan client.Event, 100)
+c, _ := client.New(ctx, client.Config{
+    Provider: client.ProviderOpenAI,
+    Events:   events,
 })
 
-// Agent events (via streaming)
-stream := agent.RunStream(ctx, messages)
+go func() {
+    for e := range events {
+        fmt.Printf("[%s] %s %v\n", e.Type, e.Operation, e.Duration)
+    }
+}()
+
+// Agent events via streaming
+a := agent.New(provider, registry)
+stream := a.RunStream(ctx, messages)
 for event := range stream {
     switch event.Type {
     case agent.EventToolCallStarted:
