@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/retry"
 )
 
 // EventType identifies the kind of event occurring during client operations.
@@ -48,7 +47,7 @@ type Event struct {
 	Error error
 
 	// RetryEvent contains the underlying retry event for EventRetry.
-	RetryEvent *retry.Event
+	RetryEvent *RetryEvent
 
 	// Timestamp is when the event occurred.
 	Timestamp time.Time

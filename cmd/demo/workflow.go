@@ -9,7 +9,6 @@ import (
 
 	"github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
-	"github.com/spetersoncode/gains/store"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -24,7 +23,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 1: Generate a random topic
 	step1 := workflow.NewPromptStep("generate-topic", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: "Give me one random nature topic in 1-2 words only. Just the topic, nothing else."},
 			}
@@ -34,7 +33,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 2: Write a haiku about the topic
 	step2 := workflow.NewPromptStep("write-haiku", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			topic := s.GetString("topic")
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", topic)},
@@ -45,7 +44,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 3: Transform the haiku
 	step3 := workflow.NewPromptStep("transform", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			haiku := s.GetString("haiku")
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", haiku)},
@@ -60,7 +59,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Run with streaming
 	fmt.Println("\n--- Executing Chain ---")
-	state := store.New(nil)
+	state := workflow.NewState(nil)
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	currentStep := ""
@@ -113,7 +112,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 		steps = append(steps, workflow.NewPromptStep(
 			perspective.name,
 			c,
-			func(s *store.Store) []gains.Message {
+			func(s *workflow.State) []gains.Message {
 				return []gains.Message{
 					{Role: gains.RoleUser, Content: fmt.Sprintf(perspective.prompt, s.GetString("topic"))},
 				}
@@ -123,7 +122,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	}
 
 	// Aggregator combines all perspectives
-	aggregator := func(state *store.Store, results map[string]*workflow.StepResult) error {
+	aggregator := func(state *workflow.State, results map[string]*workflow.StepResult) error {
 		var combined strings.Builder
 		combined.WriteString("## Multi-Perspective Analysis\n\n")
 		for _, p := range perspectives {
@@ -142,7 +141,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 
 	// Run
 	fmt.Println("\n--- Executing Parallel Analysis ---")
-	state := store.NewFrom(map[string]any{"topic": topic})
+	state := workflow.NewStateFrom(map[string]any{"topic": topic})
 	events := wf.RunStream(ctx, state,
 		workflow.WithTimeout(2*time.Minute),
 		workflow.WithMaxConcurrency(3),
@@ -181,7 +180,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 	// Define steps for each route
 	answerStep := workflow.NewPromptStep("answer", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: fmt.Sprintf("Please answer this question concisely: %s", s.GetString("input"))},
 			}
@@ -190,7 +189,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	)
 
 	expandStep := workflow.NewPromptStep("expand", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: fmt.Sprintf("Please expand on this statement with additional context: %s", s.GetString("input"))},
 			}
@@ -199,7 +198,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	)
 
 	defaultStep := workflow.NewPromptStep("default", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: fmt.Sprintf("Please respond appropriately to: %s", s.GetString("input"))},
 			}
@@ -212,7 +211,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 		[]workflow.Route{
 			{
 				Name: "question",
-				Condition: func(ctx context.Context, s *store.Store) bool {
+				Condition: func(ctx context.Context, s *workflow.State) bool {
 					input := s.GetString("input")
 					return strings.Contains(input, "?") || strings.HasPrefix(strings.ToLower(input), "what") ||
 						strings.HasPrefix(strings.ToLower(input), "how") || strings.HasPrefix(strings.ToLower(input), "why")
@@ -221,7 +220,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 			},
 			{
 				Name: "statement",
-				Condition: func(ctx context.Context, s *store.Store) bool {
+				Condition: func(ctx context.Context, s *workflow.State) bool {
 					input := s.GetString("input")
 					return strings.HasSuffix(input, ".") && len(input) > 20
 				},
@@ -242,7 +241,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 	for _, input := range testInputs {
 		fmt.Printf("\n--- Input: %q ---\n", input)
-		state := store.NewFrom(map[string]any{"input": input})
+		state := workflow.NewStateFrom(map[string]any{"input": input})
 
 		events := wf.RunStream(ctx, state, workflow.WithTimeout(1*time.Minute))
 
@@ -272,7 +271,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	// Define handlers for each category
 	billingHandler := workflow.NewPromptStep("billing-handler", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleSystem, Content: "You are a billing support specialist. Be helpful and mention payment options if relevant."},
 				{Role: gains.RoleUser, Content: s.GetString("ticket")},
@@ -282,7 +281,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	)
 
 	technicalHandler := workflow.NewPromptStep("technical-handler", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleSystem, Content: "You are a technical support specialist. Provide clear troubleshooting steps."},
 				{Role: gains.RoleUser, Content: s.GetString("ticket")},
@@ -292,7 +291,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	)
 
 	generalHandler := workflow.NewPromptStep("general-handler", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleSystem, Content: "You are a general support agent. Be friendly and helpful."},
 				{Role: gains.RoleUser, Content: s.GetString("ticket")},
@@ -303,7 +302,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	// Create classifier router
 	classifier := workflow.NewClassifierRouter("ticket-classifier", c,
-		func(s *store.Store) []gains.Message {
+		func(s *workflow.State) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleSystem, Content: "Classify the following support ticket into exactly one category. Respond with only one word: billing, technical, or general"},
 				{Role: gains.RoleUser, Content: s.GetString("ticket")},
@@ -328,7 +327,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	for _, ticket := range tickets {
 		fmt.Printf("\n--- Ticket ---\n%s\n\n", ticket)
-		state := store.NewFrom(map[string]any{"ticket": ticket})
+		state := workflow.NewStateFrom(map[string]any{"ticket": ticket})
 
 		events := wf.RunStream(ctx, state, workflow.WithTimeout(1*time.Minute))
 

@@ -6,11 +6,10 @@ import (
 	"strings"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/store"
 )
 
 // Condition determines if a route should be taken.
-type Condition func(ctx context.Context, state *store.Store) bool
+type Condition func(ctx context.Context, state *State) bool
 
 // Route represents a conditional path in a router.
 type Route struct {
@@ -41,7 +40,7 @@ func NewRouter(name string, routes []Route, defaultRoute Step) *Router {
 func (r *Router) Name() string { return r.name }
 
 // Run evaluates conditions and executes the matching step.
-func (r *Router) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
+func (r *Router) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -78,7 +77,7 @@ func (r *Router) Run(ctx context.Context, state *store.Store, opts ...Option) (*
 }
 
 // RunStream evaluates conditions and streams the matching step's events.
-func (r *Router) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
+func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -164,7 +163,7 @@ func NewClassifierRouter(
 func (c *ClassifierRouter) Name() string { return c.name }
 
 // Run classifies input and executes the matching route.
-func (c *ClassifierRouter) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
+func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -203,7 +202,7 @@ func (c *ClassifierRouter) Run(ctx context.Context, state *store.Store, opts ...
 }
 
 // RunStream classifies input with streaming and executes the matching route.
-func (c *ClassifierRouter) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
+func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {

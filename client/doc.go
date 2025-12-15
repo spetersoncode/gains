@@ -62,7 +62,7 @@
 //	client, err := client.New(ctx, client.Config{
 //	    Provider:    client.ProviderOpenAI,
 //	    APIKey:      apiKey,
-//	    RetryConfig: &retry.Config{
+//	    RetryConfig: &client.RetryConfig{
 //	        MaxAttempts:  5,
 //	        InitialDelay: 500 * time.Millisecond,
 //	        MaxDelay:     30 * time.Second,
@@ -71,7 +71,7 @@
 //
 // Disable retries entirely:
 //
-//	cfg := retry.Disabled()
+//	cfg := client.DisabledRetryConfig()
 //	client, err := client.New(ctx, client.Config{
 //	    Provider:    client.ProviderOpenAI,
 //	    APIKey:      apiKey,

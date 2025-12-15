@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/store"
+	"github.com/spetersoncode/gains/internal/store"
 )
 
 // EventType identifies the kind of event occurring during agent execution.
@@ -103,8 +103,8 @@ type Result struct {
 	// Response is the final response from the model.
 	Response *gains.Response
 
-	// History contains the complete conversation history.
-	History *store.MessageStore
+	// history contains the complete conversation history (private).
+	history *store.MessageStore
 
 	// Steps is the number of iterations completed.
 	Steps int
@@ -120,10 +120,30 @@ type Result struct {
 }
 
 // Messages returns the conversation history as a slice.
-// This is a convenience method for accessing the history.
 func (r *Result) Messages() []gains.Message {
-	if r.History == nil {
+	if r.history == nil {
 		return nil
 	}
-	return r.History.Messages()
+	return r.history.Messages()
+}
+
+// MessageCount returns the number of messages in the conversation history.
+func (r *Result) MessageCount() int {
+	if r.history == nil {
+		return 0
+	}
+	return r.history.Len()
+}
+
+// LastMessages returns the last n messages from the conversation history.
+// If n exceeds the total message count, all messages are returned.
+func (r *Result) LastMessages(n int) []gains.Message {
+	if r.history == nil {
+		return nil
+	}
+	msgs := r.history.Messages()
+	if n >= len(msgs) {
+		return msgs
+	}
+	return msgs[len(msgs)-n:]
 }

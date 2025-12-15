@@ -5,11 +5,10 @@ import (
 	"sync"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/store"
 )
 
 // Aggregator combines results from parallel steps into the shared state.
-type Aggregator func(state *store.Store, results map[string]*StepResult) error
+type Aggregator func(state *State, results map[string]*StepResult) error
 
 // Parallel executes steps concurrently and aggregates results.
 type Parallel struct {
@@ -33,7 +32,7 @@ func NewParallel(name string, steps []Step, aggregator Aggregator) *Parallel {
 func (p *Parallel) Name() string { return p.name }
 
 // Run executes steps concurrently.
-func (p *Parallel) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
+func (p *Parallel) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -105,7 +104,7 @@ func (p *Parallel) Run(ctx context.Context, state *store.Store, opts ...Option) 
 	} else {
 		// Default: merge all branch states back
 		for _, result := range results {
-			if branchState, ok := result.Metadata["branch_state"].(*store.Store); ok {
+			if branchState, ok := result.Metadata["branch_state"].(*State); ok {
 				state.Merge(branchState)
 			}
 		}
@@ -126,7 +125,7 @@ func (p *Parallel) Run(ctx context.Context, state *store.Store, opts ...Option) 
 }
 
 // RunStream executes steps concurrently and emits events.
-func (p *Parallel) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
+func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -143,7 +142,7 @@ func (p *Parallel) RunStream(ctx context.Context, state *store.Store, opts ...Op
 
 		results := make(map[string]*StepResult)
 		errors := make(map[string]error)
-		branchStates := make(map[string]*store.Store)
+		branchStates := make(map[string]*State)
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 

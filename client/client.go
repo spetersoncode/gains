@@ -9,7 +9,7 @@ import (
 	"github.com/spetersoncode/gains/internal/provider/anthropic"
 	"github.com/spetersoncode/gains/internal/provider/google"
 	"github.com/spetersoncode/gains/internal/provider/openai"
-	"github.com/spetersoncode/gains/retry"
+	"github.com/spetersoncode/gains/internal/retry"
 )
 
 // ProviderName identifies supported AI providers.

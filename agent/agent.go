@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/store"
+	"github.com/spetersoncode/gains/internal/store"
 )
 
 // Agent orchestrates autonomous tool-calling conversations.
@@ -29,7 +29,7 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 	eventCh := a.RunStream(ctx, messages, opts...)
 
 	result := &Result{
-		History: store.NewMessageStoreFrom(messages, nil),
+		history: store.NewMessageStoreFrom(messages, nil),
 	}
 
 	var totalUsage gains.Usage
@@ -44,11 +44,11 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 		case EventStepStart:
 			// Commit pending messages from previous step
 			if pendingAssistantMsg != nil {
-				result.History.Append(*pendingAssistantMsg)
+				result.history.Append(*pendingAssistantMsg)
 				pendingAssistantMsg = nil
 			}
 			if len(pendingToolResults) > 0 {
-				result.History.Append(gains.NewToolResultMessage(pendingToolResults...))
+				result.history.Append(gains.NewToolResultMessage(pendingToolResults...))
 				pendingToolResults = nil
 			}
 
@@ -87,10 +87,10 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 
 	// Commit any remaining messages
 	if pendingAssistantMsg != nil {
-		result.History.Append(*pendingAssistantMsg)
+		result.history.Append(*pendingAssistantMsg)
 	}
 	if len(pendingToolResults) > 0 {
-		result.History.Append(gains.NewToolResultMessage(pendingToolResults...))
+		result.history.Append(gains.NewToolResultMessage(pendingToolResults...))
 	}
 
 	result.TotalUsage = totalUsage
