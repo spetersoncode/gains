@@ -7,14 +7,10 @@ import (
 	"google.golang.org/genai"
 )
 
-const DefaultModel = "gemini-2.0-flash"
-const DefaultImageModel = "imagen-3.0-generate-002"
-const DefaultEmbeddingModel = "text-embedding-004"
-
 // Client wraps the Google GenAI SDK to implement gains.ChatProvider.
 type Client struct {
 	client *genai.Client
-	model  string
+	model  ChatModel
 }
 
 // New creates a new Google GenAI client with the given API key.
@@ -28,7 +24,7 @@ func New(ctx context.Context, apiKey string, opts ...ClientOption) (*Client, err
 	}
 	c := &Client{
 		client: client,
-		model:  DefaultModel,
+		model:  DefaultChatModel,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -40,7 +36,7 @@ func New(ctx context.Context, apiKey string, opts ...ClientOption) (*Client, err
 type ClientOption func(*Client)
 
 // WithModel sets the default model for requests.
-func WithModel(model string) ClientOption {
+func WithModel(model ChatModel) ClientOption {
 	return func(c *Client) {
 		c.model = model
 	}
@@ -50,8 +46,8 @@ func WithModel(model string) ClientOption {
 func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	contents, err := convertMessages(messages)
@@ -82,7 +78,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		config.ResponseMIMEType = "application/json"
 	}
 
-	resp, err := c.client.Models.GenerateContent(ctx, model, contents, config)
+	resp, err := c.client.Models.GenerateContent(ctx, model.String(), contents, config)
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +117,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	contents, err := convertMessages(messages)
@@ -163,7 +159,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		var usage gains.Usage
 		var allParts []*genai.Part
 
-		for resp := range c.client.Models.GenerateContentStream(ctx, model, contents, config) {
+		for resp := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
 			if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 				for _, part := range resp.Candidates[0].Content.Parts {
 					allParts = append(allParts, part)

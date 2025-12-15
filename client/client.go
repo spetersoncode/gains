@@ -56,11 +56,14 @@ type Config struct {
 	// APIKey is the authentication key for the provider.
 	APIKey string
 	// ChatModel is the default model for chat operations.
-	ChatModel string
+	// Use provider-specific types (e.g., openai.GPT52, anthropic.ClaudeSonnet45).
+	ChatModel gains.Model
 	// ImageModel is the default model for image generation.
-	ImageModel string
+	// Use provider-specific types (e.g., openai.GPTImage1, google.Imagen4).
+	ImageModel gains.Model
 	// EmbeddingModel is the default model for embeddings.
-	EmbeddingModel string
+	// Use provider-specific types (e.g., openai.TextEmbedding3Small).
+	EmbeddingModel gains.Model
 	// RequiredFeatures lists features that must be available.
 	// Construction fails if any required feature is unsupported.
 	RequiredFeatures []Feature
@@ -95,9 +98,8 @@ type Client struct {
 	chatProvider   gains.ChatProvider
 	imageProvider  gains.ImageProvider
 	embedProvider  gains.EmbeddingProvider
-	chatModel      string
-	imageModel     string
-	embeddingModel string
+	imageModel     gains.Model
+	embeddingModel gains.Model
 	retryConfig    retry.Config
 }
 
@@ -131,16 +133,16 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	switch cfg.Provider {
 	case ProviderAnthropic:
 		var opts []anthropic.ClientOption
-		if cfg.ChatModel != "" {
-			opts = append(opts, anthropic.WithModel(cfg.ChatModel))
+		if cfg.ChatModel != nil {
+			opts = append(opts, anthropic.WithModel(anthropic.ChatModel(cfg.ChatModel.String())))
 		}
 		ac := anthropic.New(cfg.APIKey, opts...)
 		chatProv = ac
 
 	case ProviderOpenAI:
 		var opts []openai.ClientOption
-		if cfg.ChatModel != "" {
-			opts = append(opts, openai.WithModel(cfg.ChatModel))
+		if cfg.ChatModel != nil {
+			opts = append(opts, openai.WithModel(openai.ChatModel(cfg.ChatModel.String())))
 		}
 		oc := openai.New(cfg.APIKey, opts...)
 		chatProv = oc
@@ -149,8 +151,8 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 
 	case ProviderGoogle:
 		var opts []google.ClientOption
-		if cfg.ChatModel != "" {
-			opts = append(opts, google.WithModel(cfg.ChatModel))
+		if cfg.ChatModel != nil {
+			opts = append(opts, google.WithModel(google.ChatModel(cfg.ChatModel.String())))
 		}
 		gc, err := google.New(ctx, cfg.APIKey, opts...)
 		if err != nil {
@@ -172,7 +174,6 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		chatProvider:   chatProv,
 		imageProvider:  imageProv,
 		embedProvider:  embedProv,
-		chatModel:      cfg.ChatModel,
 		imageModel:     cfg.ImageModel,
 		embeddingModel: cfg.EmbeddingModel,
 		retryConfig:    retryConfig,
@@ -207,7 +208,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	}
 
 	// Prepend default model if set
-	if c.imageModel != "" {
+	if c.imageModel != nil {
 		opts = append([]gains.ImageOption{gains.WithImageModel(c.imageModel)}, opts...)
 	}
 
@@ -228,7 +229,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 	}
 
 	// Prepend default model if set
-	if c.embeddingModel != "" {
+	if c.embeddingModel != nil {
 		opts = append([]gains.EmbeddingOption{gains.WithEmbeddingModel(c.embeddingModel)}, opts...)
 	}
 

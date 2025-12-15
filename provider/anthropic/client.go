@@ -8,12 +8,10 @@ import (
 	"github.com/spetersoncode/gains"
 )
 
-const DefaultModel = "claude-sonnet-4-20250514"
-
 // Client wraps the Anthropic SDK to implement gains.ChatProvider.
 type Client struct {
 	client *anthropic.Client
-	model  string
+	model  ChatModel
 }
 
 // New creates a new Anthropic client with the given API key.
@@ -21,7 +19,7 @@ func New(apiKey string, opts ...ClientOption) *Client {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 	c := &Client{
 		client: &client,
-		model:  DefaultModel,
+		model:  DefaultChatModel,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -33,7 +31,7 @@ func New(apiKey string, opts ...ClientOption) *Client {
 type ClientOption func(*Client)
 
 // WithModel sets the default model for requests.
-func WithModel(model string) ClientOption {
+func WithModel(model ChatModel) ClientOption {
 	return func(c *Client) {
 		c.model = model
 	}
@@ -43,8 +41,8 @@ func WithModel(model string) ClientOption {
 func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	maxTokens := int64(4096)
@@ -54,7 +52,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 
 	msgs, system := convertMessages(messages)
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
+		Model:     anthropic.Model(model.String()),
 		MaxTokens: maxTokens,
 		Messages:  msgs,
 	}
@@ -124,8 +122,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	maxTokens := int64(4096)
@@ -135,7 +133,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 
 	msgs, system := convertMessages(messages)
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
+		Model:     anthropic.Model(model.String()),
 		MaxTokens: maxTokens,
 		Messages:  msgs,
 	}

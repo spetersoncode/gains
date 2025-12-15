@@ -8,14 +8,10 @@ import (
 	"github.com/spetersoncode/gains"
 )
 
-const DefaultModel = "gpt-4o"
-const DefaultImageModel = "dall-e-3"
-const DefaultEmbeddingModel = "text-embedding-3-small"
-
 // Client wraps the OpenAI SDK to implement gains.ChatProvider.
 type Client struct {
 	client *openai.Client
-	model  string
+	model  ChatModel
 }
 
 // New creates a new OpenAI client with the given API key.
@@ -23,7 +19,7 @@ func New(apiKey string, opts ...ClientOption) *Client {
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 	c := &Client{
 		client: &client,
-		model:  DefaultModel,
+		model:  DefaultChatModel,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -35,7 +31,7 @@ func New(apiKey string, opts ...ClientOption) *Client {
 type ClientOption func(*Client)
 
 // WithModel sets the default model for requests.
-func WithModel(model string) ClientOption {
+func WithModel(model ChatModel) ClientOption {
 	return func(c *Client) {
 		c.model = model
 	}
@@ -45,8 +41,8 @@ func WithModel(model string) ClientOption {
 func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	convertedMessages, err := convertMessages(messages)
@@ -55,7 +51,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:    model,
+		Model:    model.String(),
 		Messages: convertedMessages,
 	}
 	if options.MaxTokens > 0 {
@@ -102,8 +98,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
 	options := gains.ApplyOptions(opts...)
 	model := c.model
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ChatModel(options.Model.String())
 	}
 
 	convertedMessages, err := convertMessages(messages)
@@ -112,7 +108,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:    model,
+		Model:    model.String(),
 		Messages: convertedMessages,
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{
 			IncludeUsage: openai.Bool(true),

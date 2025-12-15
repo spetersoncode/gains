@@ -122,7 +122,7 @@ func WithChatOptions(opts ...gains.Option) Option {
 }
 
 // WithModel is a convenience option to set the model for chat calls.
-func WithModel(model string) Option {
+func WithModel(model gains.Model) Option {
 	return func(o *Options) {
 		o.ChatOptions = append(o.ChatOptions, gains.WithModel(model))
 	}

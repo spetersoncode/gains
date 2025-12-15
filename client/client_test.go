@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testModel implements gains.Model for testing.
+type testModel string
+
+func (m testModel) String() string { return string(m) }
+
 func TestProviderNameConstants(t *testing.T) {
 	assert.Equal(t, ProviderName("anthropic"), ProviderAnthropic)
 	assert.Equal(t, ProviderName("openai"), ProviderOpenAI)
@@ -191,7 +196,7 @@ func TestNewWithCustomModels(t *testing.T) {
 		cfg := Config{
 			Provider:  ProviderAnthropic,
 			APIKey:    "test-key",
-			ChatModel: "claude-3-opus",
+			ChatModel: testModel("claude-3-opus"),
 		}
 
 		client, err := New(ctx, cfg)
@@ -203,9 +208,9 @@ func TestNewWithCustomModels(t *testing.T) {
 		cfg := Config{
 			Provider:       ProviderOpenAI,
 			APIKey:         "test-key",
-			ChatModel:      "gpt-4-turbo",
-			ImageModel:     "dall-e-2",
-			EmbeddingModel: "text-embedding-3-large",
+			ChatModel:      testModel("gpt-4-turbo"),
+			ImageModel:     testModel("dall-e-2"),
+			EmbeddingModel: testModel("text-embedding-3-large"),
 		}
 
 		client, err := New(ctx, cfg)
@@ -375,17 +380,17 @@ func TestConfigStruct(t *testing.T) {
 		cfg := Config{
 			Provider:         ProviderOpenAI,
 			APIKey:           "sk-test-key",
-			ChatModel:        "gpt-4",
-			ImageModel:       "dall-e-3",
-			EmbeddingModel:   "text-embedding-3-small",
+			ChatModel:        testModel("gpt-4"),
+			ImageModel:       testModel("dall-e-3"),
+			EmbeddingModel:   testModel("text-embedding-3-small"),
 			RequiredFeatures: []Feature{FeatureChat, FeatureImage},
 		}
 
 		assert.Equal(t, ProviderOpenAI, cfg.Provider)
 		assert.Equal(t, "sk-test-key", cfg.APIKey)
-		assert.Equal(t, "gpt-4", cfg.ChatModel)
-		assert.Equal(t, "dall-e-3", cfg.ImageModel)
-		assert.Equal(t, "text-embedding-3-small", cfg.EmbeddingModel)
+		assert.Equal(t, "gpt-4", cfg.ChatModel.String())
+		assert.Equal(t, "dall-e-3", cfg.ImageModel.String())
+		assert.Equal(t, "text-embedding-3-small", cfg.EmbeddingModel.String())
 		assert.Len(t, cfg.RequiredFeatures, 2)
 	})
 }

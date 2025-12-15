@@ -6,11 +6,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// testImageModel is a simple Model implementation for testing.
+type testImageModel string
+
+func (m testImageModel) String() string { return string(m) }
+
 func TestApplyImageOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {
 		opts := ApplyImageOptions()
 		assert.NotNil(t, opts)
-		assert.Empty(t, opts.Model)
+		assert.Nil(t, opts.Model)
 		assert.Empty(t, opts.Size)
 		assert.Zero(t, opts.Count)
 		assert.Empty(t, opts.Quality)
@@ -20,7 +25,7 @@ func TestApplyImageOptions(t *testing.T) {
 
 	t.Run("applies multiple options", func(t *testing.T) {
 		opts := ApplyImageOptions(
-			WithImageModel("dall-e-3"),
+			WithImageModel(testImageModel("dall-e-3")),
 			WithImageSize(ImageSize1024x1024),
 			WithImageCount(1),
 			WithImageQuality(ImageQualityHD),
@@ -28,7 +33,7 @@ func TestApplyImageOptions(t *testing.T) {
 			WithImageFormat(ImageFormatURL),
 		)
 
-		assert.Equal(t, "dall-e-3", opts.Model)
+		assert.Equal(t, "dall-e-3", opts.Model.String())
 		assert.Equal(t, ImageSize1024x1024, opts.Size)
 		assert.Equal(t, 1, opts.Count)
 		assert.Equal(t, ImageQualityHD, opts.Quality)
@@ -40,19 +45,18 @@ func TestApplyImageOptions(t *testing.T) {
 func TestWithImageModel(t *testing.T) {
 	tests := []struct {
 		name     string
-		model    string
+		model    testImageModel
 		expected string
 	}{
 		{"sets dall-e-3", "dall-e-3", "dall-e-3"},
 		{"sets dall-e-2", "dall-e-2", "dall-e-2"},
 		{"sets Google Imagen", "imagen-3.0-generate-002", "imagen-3.0-generate-002"},
-		{"handles empty string", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := ApplyImageOptions(WithImageModel(tt.model))
-			assert.Equal(t, tt.expected, opts.Model)
+			assert.Equal(t, tt.expected, opts.Model.String())
 		})
 	}
 }
@@ -173,12 +177,12 @@ func TestImageFormatConstants(t *testing.T) {
 func TestImageOptionsOverride(t *testing.T) {
 	t.Run("later option overrides earlier", func(t *testing.T) {
 		opts := ApplyImageOptions(
-			WithImageModel("dall-e-2"),
+			WithImageModel(testImageModel("dall-e-2")),
 			WithImageSize(ImageSize1024x1024),
-			WithImageModel("dall-e-3"),
+			WithImageModel(testImageModel("dall-e-3")),
 			WithImageSize(ImageSize1792x1024),
 		)
-		assert.Equal(t, "dall-e-3", opts.Model)
+		assert.Equal(t, "dall-e-3", opts.Model.String())
 		assert.Equal(t, ImageSize1792x1024, opts.Size)
 	})
 }

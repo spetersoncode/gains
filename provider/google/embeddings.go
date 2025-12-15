@@ -18,8 +18,8 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 
 	// Determine model
 	model := DefaultEmbeddingModel
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = EmbeddingModel(options.Model.String())
 	}
 
 	// Build embed content config
@@ -45,7 +45,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 	}
 
 	// Make API call
-	resp, err := c.client.Models.EmbedContent(ctx, model, contents, config)
+	resp, err := c.client.Models.EmbedContent(ctx, model.String(), contents, config)
 	if err != nil {
 		return nil, err
 	}

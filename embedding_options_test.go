@@ -6,23 +6,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// testEmbeddingModel is a simple Model implementation for testing.
+type testEmbeddingModel string
+
+func (m testEmbeddingModel) String() string { return string(m) }
+
 func TestApplyEmbeddingOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {
 		opts := ApplyEmbeddingOptions()
 		assert.NotNil(t, opts)
-		assert.Empty(t, opts.Model)
+		assert.Nil(t, opts.Model)
 		assert.Zero(t, opts.Dimensions)
 		assert.Empty(t, opts.TaskType)
 	})
 
 	t.Run("applies multiple options", func(t *testing.T) {
 		opts := ApplyEmbeddingOptions(
-			WithEmbeddingModel("text-embedding-3-large"),
+			WithEmbeddingModel(testEmbeddingModel("text-embedding-3-large")),
 			WithEmbeddingDimensions(1024),
 			WithEmbeddingTaskType(EmbeddingTaskTypeRetrievalQuery),
 		)
 
-		assert.Equal(t, "text-embedding-3-large", opts.Model)
+		assert.Equal(t, "text-embedding-3-large", opts.Model.String())
 		assert.Equal(t, 1024, opts.Dimensions)
 		assert.Equal(t, EmbeddingTaskTypeRetrievalQuery, opts.TaskType)
 	})
@@ -31,19 +36,18 @@ func TestApplyEmbeddingOptions(t *testing.T) {
 func TestWithEmbeddingModel(t *testing.T) {
 	tests := []struct {
 		name     string
-		model    string
+		model    testEmbeddingModel
 		expected string
 	}{
 		{"sets OpenAI model", "text-embedding-3-small", "text-embedding-3-small"},
 		{"sets OpenAI large model", "text-embedding-3-large", "text-embedding-3-large"},
 		{"sets Google model", "text-embedding-004", "text-embedding-004"},
-		{"handles empty string", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := ApplyEmbeddingOptions(WithEmbeddingModel(tt.model))
-			assert.Equal(t, tt.expected, opts.Model)
+			assert.Equal(t, tt.expected, opts.Model.String())
 		})
 	}
 }
@@ -102,12 +106,12 @@ func TestEmbeddingTaskTypeConstants(t *testing.T) {
 func TestEmbeddingOptionsOverride(t *testing.T) {
 	t.Run("later option overrides earlier", func(t *testing.T) {
 		opts := ApplyEmbeddingOptions(
-			WithEmbeddingModel("first-model"),
+			WithEmbeddingModel(testEmbeddingModel("first-model")),
 			WithEmbeddingDimensions(256),
-			WithEmbeddingModel("second-model"),
+			WithEmbeddingModel(testEmbeddingModel("second-model")),
 			WithEmbeddingDimensions(512),
 		)
-		assert.Equal(t, "second-model", opts.Model)
+		assert.Equal(t, "second-model", opts.Model.String())
 		assert.Equal(t, 512, opts.Dimensions)
 	})
 }

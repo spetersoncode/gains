@@ -18,13 +18,13 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 
 	// Determine model
 	model := DefaultEmbeddingModel
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = EmbeddingModel(options.Model.String())
 	}
 
 	// Build request params
 	params := openai.EmbeddingNewParams{
-		Model: openai.EmbeddingModel(model),
+		Model: openai.EmbeddingModel(model.String()),
 		Input: openai.EmbeddingNewParamsInputUnion{
 			OfArrayOfStrings: texts,
 		},

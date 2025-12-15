@@ -2,7 +2,7 @@ package gains
 
 // ImageOptions contains configuration for an image generation request.
 type ImageOptions struct {
-	Model   string
+	Model   Model
 	Size    ImageSize
 	Count   int
 	Quality ImageQuality
@@ -14,7 +14,7 @@ type ImageOptions struct {
 type ImageOption func(*ImageOptions)
 
 // WithImageModel sets the model to use for image generation.
-func WithImageModel(model string) ImageOption {
+func WithImageModel(model Model) ImageOption {
 	return func(o *ImageOptions) {
 		o.Model = model
 	}

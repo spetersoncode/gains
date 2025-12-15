@@ -2,6 +2,12 @@ package gains
 
 import "encoding/json"
 
+// Model is an interface implemented by all provider model types.
+// It allows strongly-typed model selection while maintaining a unified API.
+type Model interface {
+	String() string
+}
+
 // ResponseFormat specifies how the model should format its response.
 type ResponseFormat string
 
@@ -26,7 +32,7 @@ type ResponseSchema struct {
 
 // Options contains configuration for a chat request.
 type Options struct {
-	Model          string
+	Model          Model
 	MaxTokens      int
 	Temperature    *float64
 	Tools          []Tool
@@ -39,7 +45,7 @@ type Options struct {
 type Option func(*Options)
 
 // WithModel sets the model to use for the request.
-func WithModel(model string) Option {
+func WithModel(model Model) Option {
 	return func(o *Options) {
 		o.Model = model
 	}

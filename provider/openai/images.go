@@ -13,13 +13,13 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 
 	// Determine model
 	model := DefaultImageModel
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ImageModel(options.Model.String())
 	}
 
 	// Build request params
 	params := openai.ImageGenerateParams{
-		Model:  openai.ImageModel(model),
+		Model:  openai.ImageModel(model.String()),
 		Prompt: prompt,
 	}
 

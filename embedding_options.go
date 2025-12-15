@@ -2,7 +2,7 @@ package gains
 
 // EmbeddingOptions contains configuration for an embedding request.
 type EmbeddingOptions struct {
-	Model      string
+	Model      Model
 	Dimensions int
 	TaskType   EmbeddingTaskType
 }
@@ -11,7 +11,7 @@ type EmbeddingOptions struct {
 type EmbeddingOption func(*EmbeddingOptions)
 
 // WithEmbeddingModel sets the model to use for embedding generation.
-func WithEmbeddingModel(model string) EmbeddingOption {
+func WithEmbeddingModel(model Model) EmbeddingOption {
 	return func(o *EmbeddingOptions) {
 		o.Model = model
 	}

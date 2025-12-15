@@ -14,8 +14,8 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 
 	// Determine model
 	model := DefaultImageModel
-	if options.Model != "" {
-		model = options.Model
+	if options.Model != nil {
+		model = ImageModel(options.Model.String())
 	}
 
 	// Build image generation config
@@ -34,7 +34,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	}
 
 	// Make API call
-	resp, err := c.client.Models.GenerateImages(ctx, model, prompt, config)
+	resp, err := c.client.Models.GenerateImages(ctx, model.String(), prompt, config)
 	if err != nil {
 		return nil, err
 	}

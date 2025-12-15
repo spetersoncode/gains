@@ -8,11 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testModel is a simple Model implementation for testing.
+type testModel string
+
+func (m testModel) String() string { return string(m) }
+
 func TestApplyOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {
 		opts := ApplyOptions()
 		assert.NotNil(t, opts)
-		assert.Empty(t, opts.Model)
+		assert.Nil(t, opts.Model)
 		assert.Zero(t, opts.MaxTokens)
 		assert.Nil(t, opts.Temperature)
 		assert.Nil(t, opts.Tools)
@@ -24,14 +29,14 @@ func TestApplyOptions(t *testing.T) {
 	t.Run("applies multiple options", func(t *testing.T) {
 		tools := []Tool{{Name: "test"}}
 		opts := ApplyOptions(
-			WithModel("gpt-4"),
+			WithModel(testModel("gpt-4")),
 			WithMaxTokens(1000),
 			WithTemperature(0.7),
 			WithTools(tools),
 			WithToolChoice(ToolChoiceRequired),
 		)
 
-		assert.Equal(t, "gpt-4", opts.Model)
+		assert.Equal(t, "gpt-4", opts.Model.String())
 		assert.Equal(t, 1000, opts.MaxTokens)
 		require.NotNil(t, opts.Temperature)
 		assert.Equal(t, 0.7, *opts.Temperature)
@@ -43,19 +48,18 @@ func TestApplyOptions(t *testing.T) {
 func TestWithModel(t *testing.T) {
 	tests := []struct {
 		name     string
-		model    string
+		model    testModel
 		expected string
 	}{
 		{"sets gpt-4", "gpt-4", "gpt-4"},
 		{"sets claude-3-opus", "claude-3-opus", "claude-3-opus"},
 		{"sets gemini-pro", "gemini-pro", "gemini-pro"},
-		{"handles empty string", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := ApplyOptions(WithModel(tt.model))
-			assert.Equal(t, tt.expected, opts.Model)
+			assert.Equal(t, tt.expected, opts.Model.String())
 		})
 	}
 }
@@ -167,10 +171,10 @@ func TestWithResponseSchema(t *testing.T) {
 
 	t.Run("later option overrides earlier", func(t *testing.T) {
 		opts := ApplyOptions(
-			WithModel("first"),
-			WithModel("second"),
+			WithModel(testModel("first")),
+			WithModel(testModel("second")),
 		)
-		assert.Equal(t, "second", opts.Model)
+		assert.Equal(t, "second", opts.Model.String())
 	})
 }
 
