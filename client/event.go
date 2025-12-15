@@ -3,7 +3,7 @@ package client
 import (
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // EventType identifies the kind of event occurring during client operations.
@@ -41,7 +41,7 @@ type Event struct {
 	Duration time.Duration
 
 	// Usage contains token usage information (for chat operations).
-	Usage *gains.Usage
+	Usage *ai.Usage
 
 	// Error contains the error for EventRequestError.
 	Error error

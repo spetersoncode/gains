@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/internal/provider/anthropic"
 	"github.com/spetersoncode/gains/internal/provider/google"
 	"github.com/spetersoncode/gains/internal/provider/openai"
@@ -57,13 +57,13 @@ type Config struct {
 	APIKey string
 	// ChatModel is the default model for chat operations.
 	// Use types from the models package (e.g., models.GPT52, models.ClaudeSonnet45).
-	ChatModel gains.Model
+	ChatModel ai.Model
 	// ImageModel is the default model for image generation.
 	// Use types from the models package (e.g., models.GPTImage1, models.Imagen4).
-	ImageModel gains.Model
+	ImageModel ai.Model
 	// EmbeddingModel is the default model for embeddings.
 	// Use types from the models package (e.g., models.TextEmbedding3Small).
-	EmbeddingModel gains.Model
+	EmbeddingModel ai.Model
 	// RequiredFeatures lists features that must be available.
 	// Construction fails if any required feature is unsupported.
 	RequiredFeatures []Feature
@@ -100,11 +100,11 @@ func (e *ErrInvalidProvider) Error() string {
 // Client is a unified interface to all AI provider capabilities.
 type Client struct {
 	provider       ProviderName
-	chatProvider   gains.ChatProvider
-	imageProvider  gains.ImageProvider
-	embedProvider  gains.EmbeddingProvider
-	imageModel     gains.Model
-	embeddingModel gains.Model
+	chatProvider   ai.ChatProvider
+	imageProvider  ai.ImageProvider
+	embedProvider  ai.EmbeddingProvider
+	imageModel     ai.Model
+	embeddingModel ai.Model
 	retryConfig    retry.Config
 	events         chan<- Event
 }
@@ -131,9 +131,9 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 
 	// Create provider-specific client
 	var (
-		chatProv  gains.ChatProvider
-		imageProv gains.ImageProvider
-		embedProv gains.EmbeddingProvider
+		chatProv  ai.ChatProvider
+		imageProv ai.ImageProvider
+		embedProv ai.EmbeddingProvider
 	)
 
 	switch cfg.Provider {
@@ -189,7 +189,7 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 
 // Chat sends a conversation and returns a complete response.
 // Automatically retries on transient errors according to the client's retry configuration.
-func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
+func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
 	start := time.Now()
 	emit(c.events, Event{
 		Type:      EventRequestStart,
@@ -204,7 +204,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		go c.forwardRetryEvents(retryEvents, "chat")
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.Response, error) {
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.Response, error) {
 		return c.chatProvider.Chat(ctx, messages, opts...)
 	})
 
@@ -223,7 +223,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		return nil, err
 	}
 
-	var usage *gains.Usage
+	var usage *ai.Usage
 	if resp != nil {
 		usage = &resp.Usage
 	}
@@ -239,7 +239,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 
 // ChatStream sends a conversation and returns a channel of streaming events.
 // Automatically retries on transient errors when establishing the stream connection.
-func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
+func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
 	start := time.Now()
 	emit(c.events, Event{
 		Type:      EventRequestStart,
@@ -254,7 +254,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		go c.forwardRetryEvents(retryEvents, "chat_stream")
 	}
 
-	ch, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan gains.StreamEvent, error) {
+	ch, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan ai.StreamEvent, error) {
 		return c.chatProvider.ChatStream(ctx, messages, opts...)
 	})
 
@@ -285,7 +285,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 // GenerateImage creates images from a text prompt.
 // Returns ErrFeatureNotSupported if the provider doesn't support image generation.
 // Automatically retries on transient errors according to the client's retry configuration.
-func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains.ImageOption) (*gains.ImageResponse, error) {
+func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.ImageOption) (*ai.ImageResponse, error) {
 	if c.imageProvider == nil {
 		return nil, &ErrFeatureNotSupported{
 			Provider: string(c.provider),
@@ -302,7 +302,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 
 	// Prepend default model if set
 	if c.imageModel != nil {
-		opts = append([]gains.ImageOption{gains.WithImageModel(c.imageModel)}, opts...)
+		opts = append([]ai.ImageOption{ai.WithImageModel(c.imageModel)}, opts...)
 	}
 
 	// Create retry events channel if client events are enabled
@@ -312,7 +312,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 		go c.forwardRetryEvents(retryEvents, "image")
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.ImageResponse, error) {
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.ImageResponse, error) {
 		return c.imageProvider.GenerateImage(ctx, prompt, opts...)
 	})
 
@@ -343,7 +343,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 // Embed generates embeddings for the provided texts.
 // Returns ErrFeatureNotSupported if the provider doesn't support embeddings.
 // Automatically retries on transient errors according to the client's retry configuration.
-func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.EmbeddingOption) (*gains.EmbeddingResponse, error) {
+func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.EmbeddingOption) (*ai.EmbeddingResponse, error) {
 	if c.embedProvider == nil {
 		return nil, &ErrFeatureNotSupported{
 			Provider: string(c.provider),
@@ -360,7 +360,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 
 	// Prepend default model if set
 	if c.embeddingModel != nil {
-		opts = append([]gains.EmbeddingOption{gains.WithEmbeddingModel(c.embeddingModel)}, opts...)
+		opts = append([]ai.EmbeddingOption{ai.WithEmbeddingModel(c.embeddingModel)}, opts...)
 	}
 
 	// Create retry events channel if client events are enabled
@@ -370,7 +370,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 		go c.forwardRetryEvents(retryEvents, "embed")
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.EmbeddingResponse, error) {
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.EmbeddingResponse, error) {
 		return c.embedProvider.Embed(ctx, texts, opts...)
 	})
 
