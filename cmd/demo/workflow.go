@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 	"github.com/spetersoncode/gains/workflow"
 )
@@ -23,9 +23,9 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 1: Generate a random topic
 	step1 := workflow.NewPromptStep("generate-topic", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: "Give me one random nature topic in 1-2 words only. Just the topic, nothing else."},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: "Give me one random nature topic in 1-2 words only. Just the topic, nothing else."},
 			}
 		},
 		"topic",
@@ -33,10 +33,10 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 2: Write a haiku about the topic
 	step2 := workflow.NewPromptStep("write-haiku", c,
-		func(s *workflow.State) []gains.Message {
+		func(s *workflow.State) []ai.Message {
 			topic := s.GetString("topic")
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", topic)},
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", topic)},
 			}
 		},
 		"haiku",
@@ -44,10 +44,10 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Step 3: Transform the haiku
 	step3 := workflow.NewPromptStep("transform", c,
-		func(s *workflow.State) []gains.Message {
+		func(s *workflow.State) []ai.Message {
 			haiku := s.GetString("haiku")
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", haiku)},
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", haiku)},
 			}
 		},
 		"transformed",
@@ -112,9 +112,9 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 		steps = append(steps, workflow.NewPromptStep(
 			perspective.name,
 			c,
-			func(s *workflow.State) []gains.Message {
-				return []gains.Message{
-					{Role: gains.RoleUser, Content: fmt.Sprintf(perspective.prompt, s.GetString("topic"))},
+			func(s *workflow.State) []ai.Message {
+				return []ai.Message{
+					{Role: ai.RoleUser, Content: fmt.Sprintf(perspective.prompt, s.GetString("topic"))},
 				}
 			},
 			perspective.name+"_analysis",
@@ -180,27 +180,27 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 	// Define steps for each route
 	answerStep := workflow.NewPromptStep("answer", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: fmt.Sprintf("Please answer this question concisely: %s", s.GetString("input"))},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Please answer this question concisely: %s", s.GetString("input"))},
 			}
 		},
 		"response",
 	)
 
 	expandStep := workflow.NewPromptStep("expand", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: fmt.Sprintf("Please expand on this statement with additional context: %s", s.GetString("input"))},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Please expand on this statement with additional context: %s", s.GetString("input"))},
 			}
 		},
 		"response",
 	)
 
 	defaultStep := workflow.NewPromptStep("default", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: fmt.Sprintf("Please respond appropriately to: %s", s.GetString("input"))},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Please respond appropriately to: %s", s.GetString("input"))},
 			}
 		},
 		"response",
@@ -271,30 +271,30 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	// Define handlers for each category
 	billingHandler := workflow.NewPromptStep("billing-handler", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleSystem, Content: "You are a billing support specialist. Be helpful and mention payment options if relevant."},
-				{Role: gains.RoleUser, Content: s.GetString("ticket")},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleSystem, Content: "You are a billing support specialist. Be helpful and mention payment options if relevant."},
+				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
 		"response",
 	)
 
 	technicalHandler := workflow.NewPromptStep("technical-handler", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleSystem, Content: "You are a technical support specialist. Provide clear troubleshooting steps."},
-				{Role: gains.RoleUser, Content: s.GetString("ticket")},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleSystem, Content: "You are a technical support specialist. Provide clear troubleshooting steps."},
+				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
 		"response",
 	)
 
 	generalHandler := workflow.NewPromptStep("general-handler", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleSystem, Content: "You are a general support agent. Be friendly and helpful."},
-				{Role: gains.RoleUser, Content: s.GetString("ticket")},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleSystem, Content: "You are a general support agent. Be friendly and helpful."},
+				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
 		"response",
@@ -302,10 +302,10 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	// Create classifier router
 	classifier := workflow.NewClassifierRouter("ticket-classifier", c,
-		func(s *workflow.State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleSystem, Content: "Classify the following support ticket into exactly one category. Respond with only one word: billing, technical, or general"},
-				{Role: gains.RoleUser, Content: s.GetString("ticket")},
+		func(s *workflow.State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleSystem, Content: "Classify the following support ticket into exactly one category. Respond with only one word: billing, technical, or general"},
+				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
 		map[string]workflow.Step{
@@ -313,7 +313,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 			"technical": technicalHandler,
 			"general":   generalHandler,
 		},
-		gains.WithMaxTokens(10),
+		ai.WithMaxTokens(10),
 	)
 
 	wf := workflow.New("support-workflow", classifier)

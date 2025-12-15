@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -16,7 +16,7 @@ func demoToolCalling(ctx context.Context, c *client.Client) {
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	// Define a weather tool
-	tools := []gains.Tool{
+	tools := []ai.Tool{
 		{
 			Name:        "get_weather",
 			Description: "Get the current weather for a location",
@@ -38,8 +38,8 @@ func demoToolCalling(ctx context.Context, c *client.Client) {
 		},
 	}
 
-	messages := []gains.Message{
-		{Role: gains.RoleUser, Content: "What's the weather like in Tokyo?"},
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: "What's the weather like in Tokyo?"},
 	}
 
 	fmt.Println("User: What's the weather like in Tokyo?")
@@ -47,7 +47,7 @@ func demoToolCalling(ctx context.Context, c *client.Client) {
 	fmt.Println()
 
 	// First call: model should request tool use
-	resp, err := c.Chat(ctx, messages, gains.WithTools(tools))
+	resp, err := c.Chat(ctx, messages, ai.WithTools(tools))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -69,18 +69,18 @@ func demoToolCalling(ctx context.Context, c *client.Client) {
 
 	// Continue conversation with tool result
 	messages = append(messages,
-		gains.Message{
-			Role:      gains.RoleAssistant,
+		ai.Message{
+			Role:      ai.RoleAssistant,
 			ToolCalls: resp.ToolCalls,
 		},
-		gains.NewToolResultMessage(gains.ToolResult{
+		ai.NewToolResultMessage(ai.ToolResult{
 			ToolCallID: tc.ID,
 			Content:    toolResult,
 		}),
 	)
 
 	// Second call: model should use the tool result
-	finalResp, err := c.Chat(ctx, messages, gains.WithTools(tools))
+	finalResp, err := c.Chat(ctx, messages, ai.WithTools(tools))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return

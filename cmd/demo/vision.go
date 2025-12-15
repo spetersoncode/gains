@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -17,12 +17,12 @@ func demoVisionInput(ctx context.Context, c *client.Client) {
 	// Use a public domain image URL
 	imageURL := "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png"
 
-	messages := []gains.Message{
+	messages := []ai.Message{
 		{
-			Role: gains.RoleUser,
-			Parts: []gains.ContentPart{
-				gains.NewTextPart("Describe this image in one sentence. What do you see?"),
-				gains.NewImageURLPart(imageURL),
+			Role: ai.RoleUser,
+			Parts: []ai.ContentPart{
+				ai.NewTextPart("Describe this image in one sentence. What do you see?"),
+				ai.NewImageURLPart(imageURL),
 			},
 		},
 	}
@@ -50,7 +50,7 @@ func demoImageGeneration(ctx context.Context, c *client.Client) {
 	fmt.Printf("Prompt: %q\n\n", prompt)
 
 	resp, err := c.GenerateImage(ctx, prompt,
-		gains.WithImageSize(gains.ImageSize1024x1024),
+		ai.WithImageSize(ai.ImageSize1024x1024),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

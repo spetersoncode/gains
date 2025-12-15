@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
 )
@@ -22,7 +22,7 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 
 	// Weather tool
 	registry.MustRegister(
-		gains.Tool{
+		ai.Tool{
 			Name:        "get_weather",
 			Description: "Get the current weather for a location",
 			Parameters: json.RawMessage(`{
@@ -36,7 +36,7 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 				"required": ["location"]
 			}`),
 		},
-		func(ctx context.Context, call gains.ToolCall) (string, error) {
+		func(ctx context.Context, call ai.ToolCall) (string, error) {
 			var args struct {
 				Location string `json:"location"`
 			}
@@ -50,7 +50,7 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 
 	// Calculator tool
 	registry.MustRegister(
-		gains.Tool{
+		ai.Tool{
 			Name:        "calculate",
 			Description: "Perform a mathematical calculation",
 			Parameters: json.RawMessage(`{
@@ -64,7 +64,7 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 				"required": ["expression"]
 			}`),
 		},
-		func(ctx context.Context, call gains.ToolCall) (string, error) {
+		func(ctx context.Context, call ai.ToolCall) (string, error) {
 			var args struct {
 				Expression string `json:"expression"`
 			}
@@ -83,8 +83,8 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 	fmt.Println("\nUser: What's the weather in Tokyo? Also, what is 21 * 2?")
 	fmt.Println("\n--- Agent Execution ---")
 
-	events := a.RunStream(ctx, []gains.Message{
-		{Role: gains.RoleUser, Content: "What's the weather in Tokyo? Also, what is 21 * 2?"},
+	events := a.RunStream(ctx, []ai.Message{
+		{Role: ai.RoleUser, Content: "What's the weather in Tokyo? Also, what is 21 * 2?"},
 	},
 		agent.WithMaxSteps(5),
 		agent.WithTimeout(2*time.Minute),
@@ -137,12 +137,12 @@ func demoAgent(ctx context.Context, c *client.Client) {
 	// Create a registry with a single tool
 	registry := agent.NewRegistry()
 	registry.MustRegister(
-		gains.Tool{
+		ai.Tool{
 			Name:        "get_time",
 			Description: "Get the current time",
 			Parameters:  json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
-		func(ctx context.Context, call gains.ToolCall) (string, error) {
+		func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return fmt.Sprintf(`{"time": %q}`, time.Now().Format(time.RFC3339)), nil
 		},
 	)
@@ -151,8 +151,8 @@ func demoAgent(ctx context.Context, c *client.Client) {
 
 	fmt.Println("\nUser: What time is it?")
 
-	result, err := a.Run(ctx, []gains.Message{
-		{Role: gains.RoleUser, Content: "What time is it?"},
+	result, err := a.Run(ctx, []ai.Message{
+		{Role: ai.RoleUser, Content: "What time is it?"},
 	}, agent.WithMaxSteps(3))
 
 	if err != nil {

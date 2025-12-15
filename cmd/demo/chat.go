@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -14,8 +14,8 @@ func demoChat(ctx context.Context, c *client.Client) {
 	fmt.Println("│              Chat Demo                  │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	messages := []gains.Message{
-		{Role: gains.RoleUser, Content: "What is the capital of France? Reply in one sentence."},
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: "What is the capital of France? Reply in one sentence."},
 	}
 
 	fmt.Printf("\nUser: %s\n", messages[0].Content)
@@ -36,8 +36,8 @@ func demoChatStream(ctx context.Context, c *client.Client) {
 	fmt.Println("│          Chat Stream Demo               │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	messages := []gains.Message{
-		{Role: gains.RoleUser, Content: "Say hello in 3 different languages, one per line."},
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: "Say hello in 3 different languages, one per line."},
 	}
 
 	stream, err := c.ChatStream(ctx, messages)

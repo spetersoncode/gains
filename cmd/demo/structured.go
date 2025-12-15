@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -16,7 +16,7 @@ func demoJSONMode(ctx context.Context, c *client.Client) {
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	// Define a schema for structured output
-	schema := gains.ResponseSchema{
+	schema := ai.ResponseSchema{
 		Name:        "book_info",
 		Description: "Information about a book",
 		Schema: json.RawMessage(`{
@@ -44,15 +44,15 @@ func demoJSONMode(ctx context.Context, c *client.Client) {
 		}`),
 	}
 
-	messages := []gains.Message{
-		{Role: gains.RoleUser, Content: "Give me information about the book '1984' by George Orwell."},
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: "Give me information about the book '1984' by George Orwell."},
 	}
 
 	fmt.Println("User: Give me information about the book '1984' by George Orwell.")
 	fmt.Println("Schema: book_info (title, author, year, genres)")
 	fmt.Println()
 
-	resp, err := c.Chat(ctx, messages, gains.WithResponseSchema(schema))
+	resp, err := c.Chat(ctx, messages, ai.WithResponseSchema(schema))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
