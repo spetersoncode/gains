@@ -3,7 +3,7 @@ package workflow
 import (
 	"context"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // Chain executes steps sequentially, passing state between them.
@@ -30,7 +30,7 @@ func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepRes
 		defer cancel()
 	}
 
-	var totalUsage gains.Usage
+	var totalUsage ai.Usage
 
 	for _, step := range c.steps {
 		if err := ctx.Err(); err != nil {
@@ -87,7 +87,7 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 
 		emit(ch, Event{Type: EventWorkflowStart, StepName: c.name})
 
-		var totalUsage gains.Usage
+		var totalUsage ai.Usage
 
 		for _, step := range c.steps {
 			if err := ctx.Err(); err != nil {

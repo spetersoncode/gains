@@ -3,7 +3,7 @@ package workflow
 import (
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // EventType identifies the kind of event occurring during workflow execution.
@@ -59,7 +59,7 @@ type Event struct {
 	Result *StepResult
 
 	// ToolCall contains tool call info for EventToolCall.
-	ToolCall *gains.ToolCall
+	ToolCall *ai.ToolCall
 
 	// ParallelResults contains results from parallel execution.
 	ParallelResults map[string]*StepResult
@@ -86,10 +86,10 @@ type StepResult struct {
 	Output any
 
 	// Response contains the LLM response if the step used one.
-	Response *gains.Response
+	Response *ai.Response
 
 	// Usage aggregates token usage if applicable.
-	Usage gains.Usage
+	Usage ai.Usage
 
 	// Metadata holds step-specific metadata.
 	Metadata map[string]any
@@ -124,7 +124,7 @@ type Result struct {
 	Output any
 
 	// Usage aggregates token usage across all steps.
-	Usage gains.Usage
+	Usage ai.Usage
 
 	// Termination indicates why execution stopped.
 	Termination TerminationReason

@@ -3,7 +3,7 @@ package workflow
 import (
 	"context"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // Step represents a single unit of work in a workflow.
@@ -70,21 +70,21 @@ func (f *FuncStep) RunStream(ctx context.Context, state *State, opts ...Option) 
 }
 
 // PromptFunc generates messages from state for an LLM call.
-type PromptFunc func(state *State) []gains.Message
+type PromptFunc func(state *State) []ai.Message
 
 // PromptStep makes a single LLM call with a dynamic prompt.
 type PromptStep struct {
 	name      string
-	provider  gains.ChatProvider
+	provider  ai.ChatProvider
 	prompt    PromptFunc
 	outputKey string
-	chatOpts  []gains.Option
+	chatOpts  []ai.Option
 }
 
 // NewPromptStep creates a step for a single LLM call.
 // The prompt function generates messages from current state.
 // If outputKey is non-empty, the response content is stored in state under that key.
-func NewPromptStep(name string, provider gains.ChatProvider, prompt PromptFunc, outputKey string, opts ...gains.Option) *PromptStep {
+func NewPromptStep(name string, provider ai.ChatProvider, prompt PromptFunc, outputKey string, opts ...ai.Option) *PromptStep {
 	return &PromptStep{
 		name:      name,
 		provider:  provider,
@@ -102,7 +102,7 @@ func (p *PromptStep) Run(ctx context.Context, state *State, opts ...Option) (*St
 	options := ApplyOptions(opts...)
 
 	// Merge chat options
-	chatOpts := make([]gains.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
+	chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
 	chatOpts = append(chatOpts, p.chatOpts...)
 	chatOpts = append(chatOpts, options.ChatOptions...)
 
@@ -135,7 +135,7 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 		options := ApplyOptions(opts...)
 
 		// Merge chat options
-		chatOpts := make([]gains.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
+		chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
 		chatOpts = append(chatOpts, p.chatOpts...)
 		chatOpts = append(chatOpts, options.ChatOptions...)
 
@@ -146,7 +146,7 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 			return
 		}
 
-		var response *gains.Response
+		var response *ai.Response
 		for event := range streamCh {
 			if event.Err != nil {
 				emit(ch, Event{Type: EventError, StepName: p.name, Error: event.Err})

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // ErrorHandler is called when a step encounters an error.
@@ -35,7 +35,7 @@ type Options struct {
 	ContinueOnError bool
 
 	// ChatOptions are passed to LLM calls within steps.
-	ChatOptions []gains.Option
+	ChatOptions []ai.Option
 }
 
 // Option is a functional option for workflow configuration.
@@ -85,30 +85,30 @@ func WithContinueOnError(enabled bool) Option {
 }
 
 // WithChatOptions passes options to LLM calls.
-func WithChatOptions(opts ...gains.Option) Option {
+func WithChatOptions(opts ...ai.Option) Option {
 	return func(o *Options) {
 		o.ChatOptions = append(o.ChatOptions, opts...)
 	}
 }
 
 // WithModel is a convenience option to set the model for chat calls.
-func WithModel(model gains.Model) Option {
+func WithModel(model ai.Model) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithModel(model))
+		o.ChatOptions = append(o.ChatOptions, ai.WithModel(model))
 	}
 }
 
 // WithMaxTokens is a convenience option to set max tokens for chat calls.
 func WithMaxTokens(n int) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithMaxTokens(n))
+		o.ChatOptions = append(o.ChatOptions, ai.WithMaxTokens(n))
 	}
 }
 
 // WithTemperature is a convenience option to set temperature for chat calls.
 func WithTemperature(t float64) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithTemperature(t))
+		o.ChatOptions = append(o.ChatOptions, ai.WithTemperature(t))
 	}
 }
 

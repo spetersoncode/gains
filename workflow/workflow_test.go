@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,42 +25,42 @@ type mockProvider struct {
 
 type mockResponse struct {
 	content   string
-	toolCalls []gains.ToolCall
+	toolCalls []ai.ToolCall
 	err       error
 }
 
-func (m *mockProvider) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
+func (m *mockProvider) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.callCount >= len(m.responses) {
-		return &gains.Response{Content: "No more responses"}, nil
+		return &ai.Response{Content: "No more responses"}, nil
 	}
 	resp := m.responses[m.callCount]
 	m.callCount++
 	if resp.err != nil {
 		return nil, resp.err
 	}
-	return &gains.Response{
+	return &ai.Response{
 		Content:   resp.content,
 		ToolCalls: resp.toolCalls,
-		Usage:     gains.Usage{InputTokens: 10, OutputTokens: 20},
+		Usage:     ai.Usage{InputTokens: 10, OutputTokens: 20},
 	}, nil
 }
 
-func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
+func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ch := make(chan gains.StreamEvent)
+	ch := make(chan ai.StreamEvent)
 
 	if m.callCount >= len(m.responses) {
 		go func() {
 			defer close(ch)
-			ch <- gains.StreamEvent{
+			ch <- ai.StreamEvent{
 				Delta: "No more responses",
 				Done:  true,
-				Response: &gains.Response{
+				Response: &ai.Response{
 					Content: "No more responses",
 				},
 			}
@@ -74,7 +74,7 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 	if resp.err != nil {
 		go func() {
 			defer close(ch)
-			ch <- gains.StreamEvent{Err: resp.err}
+			ch <- ai.StreamEvent{Err: resp.err}
 		}()
 		return ch, nil
 	}
@@ -84,17 +84,17 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 		for _, c := range resp.content {
 			select {
 			case <-ctx.Done():
-				ch <- gains.StreamEvent{Err: ctx.Err()}
+				ch <- ai.StreamEvent{Err: ctx.Err()}
 				return
-			case ch <- gains.StreamEvent{Delta: string(c)}:
+			case ch <- ai.StreamEvent{Delta: string(c)}:
 			}
 		}
-		ch <- gains.StreamEvent{
+		ch <- ai.StreamEvent{
 			Done: true,
-			Response: &gains.Response{
+			Response: &ai.Response{
 				Content:   resp.content,
 				ToolCalls: resp.toolCalls,
-				Usage:     gains.Usage{InputTokens: 10, OutputTokens: 20},
+				Usage:     ai.Usage{InputTokens: 10, OutputTokens: 20},
 			},
 		}
 	}()
@@ -157,9 +157,9 @@ func TestPromptStep_Run(t *testing.T) {
 	}
 
 	step := NewPromptStep("prompt", provider,
-		func(s *State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleUser, Content: s.GetString("input")},
+		func(s *State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: s.GetString("input")},
 			}
 		},
 		"output",
@@ -181,8 +181,8 @@ func TestPromptStep_RunStream(t *testing.T) {
 	}
 
 	step := NewPromptStep("prompt", provider,
-		func(s *State) []gains.Message {
-			return []gains.Message{{Role: gains.RoleUser, Content: "Hi"}}
+		func(s *State) []ai.Message {
+			return []ai.Message{{Role: ai.RoleUser, Content: "Hi"}}
 		},
 		"output",
 	)
@@ -599,10 +599,10 @@ func TestClassifierRouter_Run(t *testing.T) {
 	})
 
 	router := NewClassifierRouter("classifier", provider,
-		func(s *State) []gains.Message {
-			return []gains.Message{
-				{Role: gains.RoleSystem, Content: "Classify as: billing, technical"},
-				{Role: gains.RoleUser, Content: s.GetString("ticket")},
+		func(s *State) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleSystem, Content: "Classify as: billing, technical"},
+				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
 		map[string]Step{
@@ -625,8 +625,8 @@ func TestClassifierRouter_UnknownClassification(t *testing.T) {
 	}
 
 	router := NewClassifierRouter("classifier", provider,
-		func(s *State) []gains.Message {
-			return []gains.Message{{Role: gains.RoleUser, Content: "test"}}
+		func(s *State) []ai.Message {
+			return []ai.Message{{Role: ai.RoleUser, Content: "test"}}
 		},
 		map[string]Step{
 			"known": NewFuncStep("known", func(ctx context.Context, state *State) error {

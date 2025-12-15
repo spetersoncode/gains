@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // Aggregator combines results from parallel steps into the shared state.
@@ -111,7 +111,7 @@ func (p *Parallel) Run(ctx context.Context, state *State, opts ...Option) (*Step
 	}
 
 	// Calculate total usage
-	var totalUsage gains.Usage
+	var totalUsage ai.Usage
 	for _, result := range results {
 		totalUsage.InputTokens += result.Usage.InputTokens
 		totalUsage.OutputTokens += result.Usage.OutputTokens
@@ -216,7 +216,7 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 		}
 
 		// Calculate total usage
-		var totalUsage gains.Usage
+		var totalUsage ai.Usage
 		for _, result := range results {
 			totalUsage.InputTokens += result.Usage.InputTokens
 			totalUsage.OutputTokens += result.Usage.OutputTokens

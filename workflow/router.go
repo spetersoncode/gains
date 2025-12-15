@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // Condition determines if a route should be taken.
@@ -136,10 +136,10 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 // ClassifierRouter uses an LLM to classify input and route accordingly.
 type ClassifierRouter struct {
 	name     string
-	provider gains.ChatProvider
+	provider ai.ChatProvider
 	prompt   PromptFunc
 	routes   map[string]Step
-	chatOpts []gains.Option
+	chatOpts []ai.Option
 }
 
 // NewClassifierRouter creates a router that uses LLM classification.
@@ -147,10 +147,10 @@ type ClassifierRouter struct {
 // For more reliable classification, use WithClassifierSchema() option.
 func NewClassifierRouter(
 	name string,
-	provider gains.ChatProvider,
+	provider ai.ChatProvider,
 	prompt PromptFunc,
 	routes map[string]Step,
-	opts ...gains.Option,
+	opts ...ai.Option,
 ) *ClassifierRouter {
 	return &ClassifierRouter{
 		name:     name,
@@ -161,10 +161,10 @@ func NewClassifierRouter(
 	}
 }
 
-// ClassifierSchema returns a gains.Option that enforces structured output
+// ClassifierSchema returns a ai.Option that enforces structured output
 // for classification. Use with providers that support JSON schema (OpenAI, Anthropic).
 // Note: May not work with streaming on all providers.
-func ClassifierSchema(routes map[string]Step) gains.Option {
+func ClassifierSchema(routes map[string]Step) ai.Option {
 	routeKeys := make([]any, 0, len(routes))
 	for key := range routes {
 		routeKeys = append(routeKeys, key)
@@ -182,7 +182,7 @@ func ClassifierSchema(routes map[string]Step) gains.Option {
 	}
 	schemaJSON, _ := json.Marshal(schemaMap)
 
-	return gains.WithResponseSchema(gains.ResponseSchema{
+	return ai.WithResponseSchema(ai.ResponseSchema{
 		Name:        "classification",
 		Description: "Classification result",
 		Schema:      schemaJSON,
@@ -203,7 +203,7 @@ func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option
 	}
 
 	// Merge chat options
-	chatOpts := make([]gains.Option, 0, len(c.chatOpts)+len(options.ChatOptions))
+	chatOpts := make([]ai.Option, 0, len(c.chatOpts)+len(options.ChatOptions))
 	chatOpts = append(chatOpts, c.chatOpts...)
 	chatOpts = append(chatOpts, options.ChatOptions...)
 
@@ -259,7 +259,7 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 		emit(ch, Event{Type: EventStepStart, StepName: c.name})
 
 		// Merge chat options
-		chatOpts := make([]gains.Option, 0, len(c.chatOpts)+len(options.ChatOptions))
+		chatOpts := make([]ai.Option, 0, len(c.chatOpts)+len(options.ChatOptions))
 		chatOpts = append(chatOpts, c.chatOpts...)
 		chatOpts = append(chatOpts, options.ChatOptions...)
 
