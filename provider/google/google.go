@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 
 	"github.com/spetersoncode/gains"
 	"google.golang.org/genai"
@@ -276,8 +279,10 @@ func convertMessages(messages []gains.Message) []*genai.Content {
 
 		var parts []*genai.Part
 
-		// Handle text content
-		if msg.Content != "" {
+		// Handle multimodal content
+		if msg.HasParts() {
+			parts = convertPartsToGoogleParts(msg.Parts)
+		} else if msg.Content != "" {
 			parts = append(parts, &genai.Part{Text: msg.Content})
 		}
 
@@ -317,6 +322,110 @@ func convertMessages(messages []gains.Message) []*genai.Content {
 	}
 
 	return contents
+}
+
+func convertPartsToGoogleParts(parts []gains.ContentPart) []*genai.Part {
+	var result []*genai.Part
+	for _, part := range parts {
+		switch part.Type {
+		case gains.ContentPartTypeText:
+			result = append(result, &genai.Part{Text: part.Text})
+		case gains.ContentPartTypeImage:
+			if part.Base64 != "" {
+				// Decode base64 to bytes
+				data, err := base64.StdEncoding.DecodeString(part.Base64)
+				if err == nil {
+					mimeType := part.MimeType
+					if mimeType == "" {
+						mimeType = "image/jpeg" // Default
+					}
+					result = append(result, &genai.Part{
+						InlineData: &genai.Blob{
+							Data:     data,
+							MIMEType: mimeType,
+						},
+					})
+				}
+			} else if part.ImageURL != "" {
+				// Google supports GCS URIs directly
+				if strings.HasPrefix(part.ImageURL, "gs://") {
+					mimeType := part.MimeType
+					if mimeType == "" {
+						mimeType = inferMimeTypeFromURL(part.ImageURL)
+					}
+					result = append(result, &genai.Part{
+						FileData: &genai.FileData{
+							FileURI:  part.ImageURL,
+							MIMEType: mimeType,
+						},
+					})
+				} else {
+					// HTTP/HTTPS URLs need to be fetched and converted to inline data
+					data, mimeType, err := fetchImageFromURL(part.ImageURL)
+					if err == nil {
+						if part.MimeType != "" {
+							mimeType = part.MimeType
+						}
+						result = append(result, &genai.Part{
+							InlineData: &genai.Blob{
+								Data:     data,
+								MIMEType: mimeType,
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+	return result
+}
+
+func fetchImageFromURL(url string) ([]byte, string, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	// Set User-Agent header - many servers (including Wikipedia) require this
+	req.Header.Set("User-Agent", "gains/1.0")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch image: status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Get MIME type from Content-Type header or infer from URL
+	mimeType := resp.Header.Get("Content-Type")
+	if mimeType == "" || mimeType == "application/octet-stream" {
+		mimeType = inferMimeTypeFromURL(url)
+	}
+
+	return data, mimeType, nil
+}
+
+func inferMimeTypeFromURL(url string) string {
+	lower := strings.ToLower(url)
+	switch {
+	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
+		return "image/jpeg"
+	case strings.HasSuffix(lower, ".png"):
+		return "image/png"
+	case strings.HasSuffix(lower, ".gif"):
+		return "image/gif"
+	case strings.HasSuffix(lower, ".webp"):
+		return "image/webp"
+	default:
+		return "image/jpeg" // Default fallback
+	}
 }
 
 func convertTools(tools []gains.Tool) []*genai.Tool {
