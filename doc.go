@@ -4,6 +4,14 @@
 // code once and switch between Anthropic (Claude), OpenAI (GPT), and Google (Gemini)
 // with minimal changes.
 //
+// # Import Convention
+//
+// We recommend importing with the "ai" alias for cleaner code:
+//
+//	import ai "github.com/spetersoncode/gains"
+//
+// All examples in this documentation use this convention.
+//
 // # Core Interfaces
 //
 // The library defines three main provider interfaces:
@@ -28,8 +36,8 @@
 //	    log.Fatal(err)
 //	}
 //
-//	messages := []gains.Message{
-//	    {Role: gains.RoleUser, Content: "What is the capital of France?"},
+//	messages := []ai.Message{
+//	    {Role: ai.RoleUser, Content: "What is the capital of France?"},
 //	}
 //
 //	resp, err := c.Chat(ctx, messages)
@@ -59,16 +67,16 @@
 // Customize requests with functional options:
 //
 //	resp, err := c.Chat(ctx, messages,
-//	    gains.WithModel(models.ClaudeOpus45),
-//	    gains.WithMaxTokens(1000),
-//	    gains.WithTemperature(0.7),
+//	    ai.WithModel(models.ClaudeOpus45),
+//	    ai.WithMaxTokens(1000),
+//	    ai.WithTemperature(0.7),
 //	)
 //
 // # Tool Calling
 //
 // Define tools that the model can invoke:
 //
-//	tools := []gains.Tool{
+//	tools := []ai.Tool{
 //	    {
 //	        Name:        "get_weather",
 //	        Description: "Get current weather for a location",
@@ -82,7 +90,7 @@
 //	    },
 //	}
 //
-//	resp, err := c.Chat(ctx, messages, gains.WithTools(tools))
+//	resp, err := c.Chat(ctx, messages, ai.WithTools(tools))
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -96,23 +104,23 @@
 //
 // Request JSON responses with schema validation:
 //
-//	schema := &gains.ResponseSchema{
+//	schema := &ai.ResponseSchema{
 //	    Name:   "answer",
 //	    Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}}}`),
 //	}
 //
-//	resp, err := c.Chat(ctx, messages, gains.WithResponseSchema(schema))
+//	resp, err := c.Chat(ctx, messages, ai.WithResponseSchema(schema))
 //
 // # Multimodal Messages
 //
 // Send images alongside text:
 //
-//	messages := []gains.Message{
+//	messages := []ai.Message{
 //	    {
-//	        Role: gains.RoleUser,
-//	        Parts: []gains.ContentPart{
-//	            gains.NewTextPart("What's in this image?"),
-//	            gains.NewImageURLPart("https://example.com/image.jpg"),
+//	        Role: ai.RoleUser,
+//	        Parts: []ai.ContentPart{
+//	            ai.NewTextPart("What's in this image?"),
+//	            ai.NewImageURLPart("https://example.com/image.jpg"),
 //	        },
 //	    },
 //	}

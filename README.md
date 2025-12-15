@@ -4,7 +4,7 @@
 
 # gains
 
-**Go AI Native Scaffold** - A production-ready, Go-idiomatic generative AI library.
+**Go AI Native Scaffold** - A Go-idiomatic generative AI library. Under active development and not yet stable.
 
 gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Inspired by langchain and langgraph, but built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
 
@@ -24,6 +24,19 @@ gains provides a unified interface for building AI applications across Anthropic
 go get github.com/spetersoncode/gains
 ```
 
+## Import Convention
+
+We recommend importing with the `ai` alias for cleaner, more readable code:
+
+```go
+import ai "github.com/spetersoncode/gains"
+
+// Now you can write:
+msg := ai.Message{Role: ai.RoleUser, Content: "Hello"}
+```
+
+All examples in this documentation use this convention.
+
 ## Quick Start
 
 ```go
@@ -33,7 +46,7 @@ import (
     "context"
     "fmt"
 
-    "github.com/spetersoncode/gains"
+    ai "github.com/spetersoncode/gains"
     "github.com/spetersoncode/gains/client"
     "github.com/spetersoncode/gains/models"
 )
@@ -44,9 +57,9 @@ func main() {
         Provider: client.ProviderAnthropic,
     })
 
-    resp, _ := c.Chat(ctx, []gains.Message{
-        {Role: gains.RoleUser, Content: "Hello!"},
-    }, gains.WithModel(models.ClaudeSonnet45))
+    resp, _ := c.Chat(ctx, []ai.Message{
+        {Role: ai.RoleUser, Content: "Hello!"},
+    }, ai.WithModel(models.ClaudeSonnet45))
 
     fmt.Println(resp.Content)
 }
@@ -97,7 +110,7 @@ for event := range stream {
 Define tools and let the model invoke them:
 
 ```go
-tools := []gains.Tool{{
+tools := []ai.Tool{{
     Name:        "get_weather",
     Description: "Get current weather for a location",
     Parameters: map[string]any{
@@ -109,7 +122,7 @@ tools := []gains.Tool{{
     },
 }}
 
-resp, _ := c.Chat(ctx, messages, gains.WithTools(tools))
+resp, _ := c.Chat(ctx, messages, ai.WithTools(tools))
 
 for _, call := range resp.ToolCalls {
     fmt.Printf("Tool: %s, Args: %s\n", call.Name, call.Arguments)
@@ -125,11 +138,11 @@ import "github.com/spetersoncode/gains/agent"
 
 // Create a tool registry
 registry := agent.NewRegistry()
-registry.MustRegister(gains.Tool{
+registry.MustRegister(ai.Tool{
     Name:        "search",
     Description: "Search the web",
     Parameters:  searchParams,
-}, func(ctx context.Context, args string) (string, error) {
+}, func(ctx context.Context, call ai.ToolCall) (string, error) {
     // Execute search...
     return results, nil
 })
@@ -153,7 +166,7 @@ a := agent.New(provider, registry)
 
 result, _ := a.Run(ctx, messages,
     agent.WithApprovalRequired("delete_file", "send_email"),
-    agent.WithApprover(func(ctx context.Context, call gains.ToolCall) (bool, string) {
+    agent.WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
         fmt.Printf("Allow %s? [y/n]: ", call.Name)
         // Get user input...
         return approved, "" // Return approval and optional rejection reason
@@ -208,7 +221,7 @@ fmt.Printf("Dimensions: %d\n", len(resp.Embeddings[0]))
 
 ```go
 resp, _ := c.GenerateImage(ctx, "A sunset over mountains",
-    gains.WithImageSize(gains.ImageSize1024x1024),
+    ai.WithImageSize(ai.ImageSize1024x1024),
 )
 fmt.Println(resp.Images[0].URL)
 ```
@@ -219,11 +232,11 @@ Force JSON output or use schema validation:
 
 ```go
 // Simple JSON mode
-resp, _ := c.Chat(ctx, messages, gains.WithJSONMode())
+resp, _ := c.Chat(ctx, messages, ai.WithJSONMode())
 
 // With schema validation
 resp, _ := c.Chat(ctx, messages,
-    gains.WithResponseSchema(gains.ResponseSchema{
+    ai.WithResponseSchema(ai.ResponseSchema{
         Name:   "result",
         Schema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"},"score":{"type":"number"}}}`),
     }),
@@ -238,24 +251,24 @@ The `models` package provides type-safe model selection with pricing info:
 import "github.com/spetersoncode/gains/models"
 
 // Auto-updating aliases (recommended)
-gains.WithModel(models.ClaudeSonnet45)    // Anthropic
-gains.WithModel(models.GPT52)             // OpenAI
-gains.WithModel(models.Gemini25Flash)     // Google
+ai.WithModel(models.ClaudeSonnet45)    // Anthropic
+ai.WithModel(models.GPT52)             // OpenAI
+ai.WithModel(models.Gemini25Flash)     // Google
 
 // Pinned versions for production stability
-gains.WithModel(models.ClaudeSonnet45_20250929)
-gains.WithModel(models.Gemini3Pro)
+ai.WithModel(models.ClaudeSonnet45_20250929)
+ai.WithModel(models.Gemini3Pro)
 ```
 
 ## Request Options
 
 ```go
 resp, _ := c.Chat(ctx, messages,
-    gains.WithModel(models.ClaudeOpus45),
-    gains.WithMaxTokens(4096),
-    gains.WithTemperature(0.7),
-    gains.WithTools(tools),
-    gains.WithToolChoice(gains.ToolChoiceAuto),
+    ai.WithModel(models.ClaudeOpus45),
+    ai.WithMaxTokens(4096),
+    ai.WithTemperature(0.7),
+    ai.WithTools(tools),
+    ai.WithToolChoice(ai.ToolChoiceAuto),
 )
 ```
 
