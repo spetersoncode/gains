@@ -72,6 +72,11 @@ func main() {
 		demoChatStreaming(ctx, anthropicClient, openaiClient, googleClient)
 	}
 
+	// Demo: Vision/Image Input
+	if askYesNo("Demo vision/image input?") {
+		demoVisionInput(ctx, anthropicClient, openaiClient, googleClient)
+	}
+
 	// Demo: Image Generation
 	if hasOpenAI || hasGoogle {
 		if askYesNo("Demo image generation?") {
@@ -143,6 +148,55 @@ func streamChat(ctx context.Context, client gains.ChatProvider, messages []gains
 				event.Response.Usage.OutputTokens)
 		}
 	}
+}
+
+func demoVisionInput(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+	fmt.Println("\n┌─────────────────────────────────────────┐")
+	fmt.Println("│         Vision/Image Input Demo         │")
+	fmt.Println("└─────────────────────────────────────────┘")
+
+	// Use a public domain image URL (Wikipedia commons)
+	imageURL := "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png"
+
+	messages := []gains.Message{
+		{
+			Role: gains.RoleUser,
+			Parts: []gains.ContentPart{
+				gains.NewTextPart("Describe this image in one sentence. What do you see?"),
+				gains.NewImageURLPart(imageURL),
+			},
+		},
+	}
+
+	fmt.Printf("Image URL: %s\n", imageURL)
+	fmt.Println("Question: Describe this image in one sentence. What do you see?")
+	fmt.Println()
+
+	if anthropicClient != nil {
+		fmt.Println("=== Anthropic (Claude) ===")
+		demoVisionWithProvider(ctx, anthropicClient, messages)
+	}
+
+	if openaiClient != nil {
+		fmt.Println("\n=== OpenAI (GPT-4) ===")
+		demoVisionWithProvider(ctx, openaiClient, messages)
+	}
+
+	if googleClient != nil {
+		fmt.Println("\n=== Google (Gemini) ===")
+		demoVisionWithProvider(ctx, googleClient, messages)
+	}
+}
+
+func demoVisionWithProvider(ctx context.Context, client gains.ChatProvider, messages []gains.Message) {
+	resp, err := client.Chat(ctx, messages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Response: %s\n", resp.Content)
+	fmt.Printf("[Tokens: %d in, %d out]\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }
 
 func demoImageGeneration(ctx context.Context, openaiClient *openai.Client, googleClient *google.Client) {
