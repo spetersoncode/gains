@@ -7,12 +7,19 @@ const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
 	RoleSystem    Role = "system"
+	RoleTool      Role = "tool"
 )
 
 // Message represents a single message in a conversation.
 type Message struct {
 	Role    Role
 	Content string
+	// ToolCalls contains tool invocation requests from an assistant message.
+	// Only populated when Role is RoleAssistant and the model wants to use tools.
+	ToolCalls []ToolCall
+	// ToolResults contains results from tool executions.
+	// Only populated when Role is RoleTool.
+	ToolResults []ToolResult
 }
 
 // Response represents a complete response from a chat provider.
@@ -20,6 +27,9 @@ type Response struct {
 	Content      string
 	FinishReason string
 	Usage        Usage
+	// ToolCalls contains any tool invocation requests from the model.
+	// Check if len(ToolCalls) > 0 to determine if tools should be executed.
+	ToolCalls []ToolCall
 }
 
 // Usage contains token usage information for a request.

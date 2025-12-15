@@ -2,9 +2,11 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 	"github.com/spetersoncode/gains"
 )
 
@@ -58,6 +60,12 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	if options.Temperature != nil {
 		params.Temperature = openai.Float(*options.Temperature)
 	}
+	if len(options.Tools) > 0 {
+		params.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" {
+			params.ToolChoice = convertToolChoice(options.ToolChoice)
+		}
+	}
 
 	resp, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -71,6 +79,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 			InputTokens:  int(resp.Usage.PromptTokens),
 			OutputTokens: int(resp.Usage.CompletionTokens),
 		},
+		ToolCalls: extractToolCalls(resp.Choices[0].Message),
 	}, nil
 }
 
@@ -94,6 +103,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	}
 	if options.Temperature != nil {
 		params.Temperature = openai.Float(*options.Temperature)
+	}
+	if len(options.Tools) > 0 {
+		params.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" {
+			params.ToolChoice = convertToolChoice(options.ToolChoice)
+		}
 	}
 
 	stream := c.client.Chat.Completions.NewStreaming(ctx, params)
@@ -130,6 +145,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 					InputTokens:  int(acc.Usage.PromptTokens),
 					OutputTokens: int(acc.Usage.CompletionTokens),
 				},
+				ToolCalls: extractToolCallsFromAccumulator(completion.Message.ToolCalls),
 			},
 		}
 	}()
@@ -204,17 +220,111 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 }
 
 func convertMessages(messages []gains.Message) []openai.ChatCompletionMessageParamUnion {
-	result := make([]openai.ChatCompletionMessageParamUnion, len(messages))
-	for i, msg := range messages {
+	var result []openai.ChatCompletionMessageParamUnion
+	for _, msg := range messages {
 		switch msg.Role {
 		case gains.RoleUser:
-			result[i] = openai.UserMessage(msg.Content)
+			result = append(result, openai.UserMessage(msg.Content))
 		case gains.RoleAssistant:
-			result[i] = openai.AssistantMessage(msg.Content)
+			if len(msg.ToolCalls) > 0 {
+				// Assistant message with tool calls
+				toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(msg.ToolCalls))
+				for i, tc := range msg.ToolCalls {
+					toolCalls[i] = openai.ChatCompletionMessageToolCallParam{
+						ID: tc.ID,
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      tc.Name,
+							Arguments: tc.Arguments,
+						},
+					}
+				}
+				assistantMsg := openai.ChatCompletionAssistantMessageParam{
+					ToolCalls: toolCalls,
+				}
+				result = append(result, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: &assistantMsg,
+				})
+			} else {
+				result = append(result, openai.AssistantMessage(msg.Content))
+			}
 		case gains.RoleSystem:
-			result[i] = openai.SystemMessage(msg.Content)
+			result = append(result, openai.SystemMessage(msg.Content))
+		case gains.RoleTool:
+			// Tool result messages - one message per tool result
+			for _, tr := range msg.ToolResults {
+				result = append(result, openai.ToolMessage(tr.Content, tr.ToolCallID))
+			}
 		default:
-			result[i] = openai.UserMessage(msg.Content)
+			result = append(result, openai.UserMessage(msg.Content))
+		}
+	}
+	return result
+}
+
+func convertTools(tools []gains.Tool) []openai.ChatCompletionToolParam {
+	if len(tools) == 0 {
+		return nil
+	}
+	result := make([]openai.ChatCompletionToolParam, len(tools))
+	for i, t := range tools {
+		// Parse JSON schema to map for FunctionParameters
+		var params shared.FunctionParameters
+		if len(t.Parameters) > 0 {
+			json.Unmarshal(t.Parameters, &params)
+		}
+		result[i] = openai.ChatCompletionToolParam{
+			Function: shared.FunctionDefinitionParam{
+				Name:        t.Name,
+				Description: openai.String(t.Description),
+				Parameters:  params,
+			},
+		}
+	}
+	return result
+}
+
+func convertToolChoice(choice gains.ToolChoice) openai.ChatCompletionToolChoiceOptionUnionParam {
+	switch choice {
+	case gains.ToolChoiceNone:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String("none"),
+		}
+	case gains.ToolChoiceRequired:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String("required"),
+		}
+	default:
+		return openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String("auto"),
+		}
+	}
+}
+
+func extractToolCalls(msg openai.ChatCompletionMessage) []gains.ToolCall {
+	if len(msg.ToolCalls) == 0 {
+		return nil
+	}
+	result := make([]gains.ToolCall, len(msg.ToolCalls))
+	for i, tc := range msg.ToolCalls {
+		result[i] = gains.ToolCall{
+			ID:        tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
+		}
+	}
+	return result
+}
+
+func extractToolCallsFromAccumulator(toolCalls []openai.ChatCompletionMessageToolCall) []gains.ToolCall {
+	if len(toolCalls) == 0 {
+		return nil
+	}
+	result := make([]gains.ToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		result[i] = gains.ToolCall{
+			ID:        tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
 		}
 	}
 	return result

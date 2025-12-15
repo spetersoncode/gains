@@ -5,6 +5,8 @@ type Options struct {
 	Model       string
 	MaxTokens   int
 	Temperature *float64
+	Tools       []Tool
+	ToolChoice  ToolChoice
 }
 
 // Option is a functional option for configuring chat requests.
@@ -28,6 +30,20 @@ func WithMaxTokens(n int) Option {
 func WithTemperature(t float64) Option {
 	return func(o *Options) {
 		o.Temperature = &t
+	}
+}
+
+// WithTools sets the tools available to the model.
+func WithTools(tools []Tool) Option {
+	return func(o *Options) {
+		o.Tools = tools
+	}
+}
+
+// WithToolChoice controls how the model uses tools.
+func WithToolChoice(choice ToolChoice) Option {
+	return func(o *Options) {
+		o.ToolChoice = choice
 	}
 }
 

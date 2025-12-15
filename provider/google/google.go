@@ -3,9 +3,11 @@ package google
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 
-	"google.golang.org/genai"
 	"github.com/spetersoncode/gains"
+	"google.golang.org/genai"
 )
 
 const DefaultModel = "gemini-2.0-flash"
@@ -64,6 +66,12 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		temp := float32(*options.Temperature)
 		config.Temperature = &temp
 	}
+	if len(options.Tools) > 0 {
+		config.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" {
+			config.ToolConfig = convertToolChoice(options.ToolChoice)
+		}
+	}
 
 	resp, err := c.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
@@ -71,12 +79,14 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	content := ""
+	var toolCalls []gains.ToolCall
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 		for _, part := range resp.Candidates[0].Content.Parts {
 			if part.Text != "" {
 				content += part.Text
 			}
 		}
+		toolCalls = extractToolCalls(resp.Candidates[0].Content.Parts)
 	}
 
 	finishReason := ""
@@ -94,6 +104,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		Content:      content,
 		FinishReason: finishReason,
 		Usage:        usage,
+		ToolCalls:    toolCalls,
 	}, nil
 }
 
@@ -115,6 +126,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		temp := float32(*options.Temperature)
 		config.Temperature = &temp
 	}
+	if len(options.Tools) > 0 {
+		config.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" {
+			config.ToolConfig = convertToolChoice(options.ToolChoice)
+		}
+	}
 
 	ch := make(chan gains.StreamEvent)
 
@@ -124,10 +141,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		var fullContent string
 		var finishReason string
 		var usage gains.Usage
+		var allParts []*genai.Part
 
 		for resp := range c.client.Models.GenerateContentStream(ctx, model, contents, config) {
 			if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 				for _, part := range resp.Candidates[0].Content.Parts {
+					allParts = append(allParts, part)
 					if part.Text != "" {
 						ch <- gains.StreamEvent{Delta: part.Text}
 						fullContent += part.Text
@@ -148,6 +167,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 				Content:      fullContent,
 				FinishReason: finishReason,
 				Usage:        usage,
+				ToolCalls:    extractToolCalls(allParts),
 			},
 		}
 	}()
@@ -233,17 +253,188 @@ func convertMessages(messages []gains.Message) []*genai.Content {
 			// Gemini handles system prompts differently - prepend to first user message
 			// For simplicity, treat as user message with context
 			role = "user"
+		case gains.RoleTool:
+			// Tool results are sent as user messages with FunctionResponse parts
+			role = "user"
 		}
 
-		contents = append(contents, &genai.Content{
-			Role: role,
-			Parts: []*genai.Part{
-				{Text: msg.Content},
-			},
-		})
+		var parts []*genai.Part
+
+		// Handle text content
+		if msg.Content != "" {
+			parts = append(parts, &genai.Part{Text: msg.Content})
+		}
+
+		// Handle tool calls (assistant messages)
+		for _, tc := range msg.ToolCalls {
+			var args map[string]any
+			json.Unmarshal([]byte(tc.Arguments), &args)
+			parts = append(parts, &genai.Part{
+				FunctionCall: &genai.FunctionCall{
+					Name: tc.Name,
+					Args: args,
+				},
+			})
+		}
+
+		// Handle tool results
+		for _, tr := range msg.ToolResults {
+			// Parse the content as JSON if possible, otherwise wrap as text
+			var result map[string]any
+			if err := json.Unmarshal([]byte(tr.Content), &result); err != nil {
+				result = map[string]any{"result": tr.Content}
+			}
+			parts = append(parts, &genai.Part{
+				FunctionResponse: &genai.FunctionResponse{
+					Name:     tr.ToolCallID, // Google uses the function name, but we store ID; handle in extractToolCalls
+					Response: result,
+				},
+			})
+		}
+
+		if len(parts) > 0 {
+			contents = append(contents, &genai.Content{
+				Role:  role,
+				Parts: parts,
+			})
+		}
 	}
 
 	return contents
+}
+
+func convertTools(tools []gains.Tool) []*genai.Tool {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	funcs := make([]*genai.FunctionDeclaration, len(tools))
+	for i, t := range tools {
+		funcs[i] = &genai.FunctionDeclaration{
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  convertJSONSchemaToGenaiSchema(t.Parameters),
+		}
+	}
+
+	return []*genai.Tool{{FunctionDeclarations: funcs}}
+}
+
+func convertJSONSchemaToGenaiSchema(schemaJSON json.RawMessage) *genai.Schema {
+	if len(schemaJSON) == 0 {
+		return nil
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+		return nil
+	}
+
+	return convertSchemaObject(schema)
+}
+
+func convertSchemaObject(schema map[string]any) *genai.Schema {
+	if schema == nil {
+		return nil
+	}
+
+	result := &genai.Schema{}
+
+	// Handle type
+	if typeVal, ok := schema["type"].(string); ok {
+		switch typeVal {
+		case "string":
+			result.Type = genai.TypeString
+		case "number":
+			result.Type = genai.TypeNumber
+		case "integer":
+			result.Type = genai.TypeInteger
+		case "boolean":
+			result.Type = genai.TypeBoolean
+		case "array":
+			result.Type = genai.TypeArray
+		case "object":
+			result.Type = genai.TypeObject
+		}
+	}
+
+	// Handle description
+	if desc, ok := schema["description"].(string); ok {
+		result.Description = desc
+	}
+
+	// Handle enum
+	if enumVal, ok := schema["enum"].([]any); ok {
+		for _, e := range enumVal {
+			if s, ok := e.(string); ok {
+				result.Enum = append(result.Enum, s)
+			}
+		}
+	}
+
+	// Handle properties (for objects)
+	if props, ok := schema["properties"].(map[string]any); ok {
+		result.Properties = make(map[string]*genai.Schema)
+		for name, propSchema := range props {
+			if propMap, ok := propSchema.(map[string]any); ok {
+				result.Properties[name] = convertSchemaObject(propMap)
+			}
+		}
+	}
+
+	// Handle required fields
+	if required, ok := schema["required"].([]any); ok {
+		for _, r := range required {
+			if s, ok := r.(string); ok {
+				result.Required = append(result.Required, s)
+			}
+		}
+	}
+
+	// Handle array items
+	if items, ok := schema["items"].(map[string]any); ok {
+		result.Items = convertSchemaObject(items)
+	}
+
+	return result
+}
+
+func convertToolChoice(choice gains.ToolChoice) *genai.ToolConfig {
+	switch choice {
+	case gains.ToolChoiceNone:
+		return &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: genai.FunctionCallingConfigModeNone,
+			},
+		}
+	case gains.ToolChoiceRequired:
+		return &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: genai.FunctionCallingConfigModeAny,
+			},
+		}
+	default:
+		return &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: genai.FunctionCallingConfigModeAuto,
+			},
+		}
+	}
+}
+
+func extractToolCalls(parts []*genai.Part) []gains.ToolCall {
+	var calls []gains.ToolCall
+	for i, part := range parts {
+		if part.FunctionCall != nil {
+			args, _ := json.Marshal(part.FunctionCall.Args)
+			calls = append(calls, gains.ToolCall{
+				ID:        fmt.Sprintf("call_%d_%s", i, part.FunctionCall.Name),
+				Name:      part.FunctionCall.Name,
+				Arguments: string(args),
+			})
+		}
+	}
+	return calls
 }
 
 var _ gains.ChatProvider = (*Client)(nil)

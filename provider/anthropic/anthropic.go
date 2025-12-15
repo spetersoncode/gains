@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -64,6 +65,12 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	if options.Temperature != nil {
 		params.Temperature = anthropic.Float(*options.Temperature)
 	}
+	if len(options.Tools) > 0 {
+		params.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
+			params.ToolChoice = convertToolChoice(options.ToolChoice)
+		}
+	}
 
 	resp, err := c.client.Messages.New(ctx, params)
 	if err != nil {
@@ -84,6 +91,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 			InputTokens:  int(resp.Usage.InputTokens),
 			OutputTokens: int(resp.Usage.OutputTokens),
 		},
+		ToolCalls: extractToolCalls(resp.Content),
 	}, nil
 }
 
@@ -111,6 +119,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	}
 	if options.Temperature != nil {
 		params.Temperature = anthropic.Float(*options.Temperature)
+	}
+	if len(options.Tools) > 0 {
+		params.Tools = convertTools(options.Tools)
+		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
+			params.ToolChoice = convertToolChoice(options.ToolChoice)
+		}
 	}
 
 	stream := c.client.Messages.NewStreaming(ctx, params)
@@ -156,6 +170,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 					InputTokens:  int(acc.Usage.InputTokens),
 					OutputTokens: int(acc.Usage.OutputTokens),
 				},
+				ToolCalls: extractToolCalls(acc.Content),
 			},
 		}
 	}()
@@ -174,13 +189,111 @@ func convertMessages(messages []gains.Message) ([]anthropic.MessageParam, []anth
 		case gains.RoleUser:
 			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
 		case gains.RoleAssistant:
-			result = append(result, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
+			if len(msg.ToolCalls) > 0 {
+				// Assistant message with tool calls
+				var blocks []anthropic.ContentBlockParamUnion
+				if msg.Content != "" {
+					blocks = append(blocks, anthropic.NewTextBlock(msg.Content))
+				}
+				for _, tc := range msg.ToolCalls {
+					var input any
+					json.Unmarshal([]byte(tc.Arguments), &input)
+					blocks = append(blocks, anthropic.NewToolUseBlock(tc.ID, input, tc.Name))
+				}
+				result = append(result, anthropic.MessageParam{
+					Role:    anthropic.MessageParamRoleAssistant,
+					Content: blocks,
+				})
+			} else {
+				result = append(result, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
+			}
+		case gains.RoleTool:
+			// Tool results are sent as user messages with tool_result blocks
+			var blocks []anthropic.ContentBlockParamUnion
+			for _, tr := range msg.ToolResults {
+				blocks = append(blocks, anthropic.NewToolResultBlock(tr.ToolCallID, tr.Content, tr.IsError))
+			}
+			result = append(result, anthropic.MessageParam{
+				Role:    anthropic.MessageParamRoleUser,
+				Content: blocks,
+			})
 		default:
 			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
 		}
 	}
 
 	return result, system
+}
+
+func convertTools(tools []gains.Tool) []anthropic.ToolUnionParam {
+	if len(tools) == 0 {
+		return nil
+	}
+	result := make([]anthropic.ToolUnionParam, len(tools))
+	for i, t := range tools {
+		// Parse the JSON Schema to get the input schema
+		var schema map[string]interface{}
+		if len(t.Parameters) > 0 {
+			json.Unmarshal(t.Parameters, &schema)
+		}
+
+		// Extract required as []string
+		var required []string
+		if reqVal, ok := schema["required"].([]interface{}); ok {
+			for _, r := range reqVal {
+				if s, ok := r.(string); ok {
+					required = append(required, s)
+				}
+			}
+		}
+
+		inputSchema := anthropic.ToolInputSchemaParam{
+			Properties: schema["properties"],
+			Required:   required,
+		}
+
+		toolParam := anthropic.ToolParam{
+			Name:        t.Name,
+			Description: anthropic.String(t.Description),
+			InputSchema: inputSchema,
+		}
+
+		result[i] = anthropic.ToolUnionParam{
+			OfTool: &toolParam,
+		}
+	}
+	return result
+}
+
+func convertToolChoice(choice gains.ToolChoice) anthropic.ToolChoiceUnionParam {
+	switch choice {
+	case gains.ToolChoiceNone:
+		return anthropic.ToolChoiceUnionParam{
+			OfNone: &anthropic.ToolChoiceNoneParam{},
+		}
+	case gains.ToolChoiceRequired:
+		return anthropic.ToolChoiceUnionParam{
+			OfAny: &anthropic.ToolChoiceAnyParam{},
+		}
+	default:
+		return anthropic.ToolChoiceUnionParam{
+			OfAuto: &anthropic.ToolChoiceAutoParam{},
+		}
+	}
+}
+
+func extractToolCalls(content []anthropic.ContentBlockUnion) []gains.ToolCall {
+	var calls []gains.ToolCall
+	for _, block := range content {
+		if block.Type == "tool_use" {
+			calls = append(calls, gains.ToolCall{
+				ID:        block.ID,
+				Name:      block.Name,
+				Arguments: string(block.Input),
+			})
+		}
+	}
+	return calls
 }
 
 var _ gains.ChatProvider = (*Client)(nil)
