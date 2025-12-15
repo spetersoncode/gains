@@ -1,12 +1,38 @@
 package gains
 
+import "encoding/json"
+
+// ResponseFormat specifies how the model should format its response.
+type ResponseFormat string
+
+const (
+	// ResponseFormatText is the default text response format.
+	ResponseFormatText ResponseFormat = "text"
+	// ResponseFormatJSON forces the model to output valid JSON.
+	ResponseFormatJSON ResponseFormat = "json"
+)
+
+// ResponseSchema defines a JSON schema for structured output.
+type ResponseSchema struct {
+	// Name is a descriptive name for the schema (required by some providers).
+	Name string
+	// Description explains what this schema represents (optional).
+	Description string
+	// Schema is the JSON Schema definition.
+	Schema json.RawMessage
+	// Strict enables strict schema enforcement (OpenAI only, defaults to true).
+	Strict bool
+}
+
 // Options contains configuration for a chat request.
 type Options struct {
-	Model       string
-	MaxTokens   int
-	Temperature *float64
-	Tools       []Tool
-	ToolChoice  ToolChoice
+	Model          string
+	MaxTokens      int
+	Temperature    *float64
+	Tools          []Tool
+	ToolChoice     ToolChoice
+	ResponseFormat ResponseFormat
+	ResponseSchema *ResponseSchema
 }
 
 // Option is a functional option for configuring chat requests.
@@ -44,6 +70,23 @@ func WithTools(tools []Tool) Option {
 func WithToolChoice(choice ToolChoice) Option {
 	return func(o *Options) {
 		o.ToolChoice = choice
+	}
+}
+
+// WithJSONMode forces the model to output valid JSON.
+// Note: For Anthropic, this uses a tool-based approach since native JSON mode is not available.
+func WithJSONMode() Option {
+	return func(o *Options) {
+		o.ResponseFormat = ResponseFormatJSON
+	}
+}
+
+// WithResponseSchema sets a JSON schema for structured output.
+// This automatically enables JSON mode.
+func WithResponseSchema(schema ResponseSchema) Option {
+	return func(o *Options) {
+		o.ResponseFormat = ResponseFormatJSON
+		o.ResponseSchema = &schema
 	}
 }
 

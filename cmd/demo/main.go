@@ -84,6 +84,11 @@ func main() {
 		demoToolCalling(ctx, anthropicClient, openaiClient, googleClient)
 	}
 
+	// Demo: JSON Mode / Structured Output
+	if askYesNo("Demo JSON mode / structured output?") {
+		demoJSONMode(ctx, anthropicClient, openaiClient, googleClient)
+	}
+
 	fmt.Println("\n✨ Demo complete!")
 }
 
@@ -277,4 +282,92 @@ func demoToolWithProvider(ctx context.Context, client gains.ChatProvider, messag
 
 	fmt.Printf("Final response: %s\n", finalResp.Content)
 	fmt.Printf("[Tokens: %d in, %d out]\n", finalResp.Usage.InputTokens, finalResp.Usage.OutputTokens)
+}
+
+func demoJSONMode(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+	fmt.Println("\n┌─────────────────────────────────────────┐")
+	fmt.Println("│      JSON Mode / Structured Output      │")
+	fmt.Println("└─────────────────────────────────────────┘")
+
+	// Define a schema for structured output
+	schema := gains.ResponseSchema{
+		Name:        "book_info",
+		Description: "Information about a book",
+		Schema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"description": "The book title"
+				},
+				"author": {
+					"type": "string",
+					"description": "The author's name"
+				},
+				"year": {
+					"type": "integer",
+					"description": "Publication year"
+				},
+				"genres": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "List of genres"
+				}
+			},
+			"required": ["title", "author", "year", "genres"]
+		}`),
+	}
+
+	messages := []gains.Message{
+		{Role: gains.RoleUser, Content: "Give me information about the book '1984' by George Orwell."},
+	}
+
+	fmt.Println("User: Give me information about the book '1984' by George Orwell.")
+	fmt.Println("Schema: book_info (title, author, year, genres)")
+	fmt.Println()
+
+	if anthropicClient != nil {
+		fmt.Println("=== Anthropic (Claude) - Tool-based JSON ===")
+		demoJSONWithProvider(ctx, anthropicClient, messages, schema)
+	}
+
+	if openaiClient != nil {
+		fmt.Println("\n=== OpenAI (GPT-4) - Native JSON Schema ===")
+		demoJSONWithProvider(ctx, openaiClient, messages, schema)
+	}
+
+	if googleClient != nil {
+		fmt.Println("\n=== Google (Gemini) - Native JSON ===")
+		demoJSONWithProvider(ctx, googleClient, messages, schema)
+	}
+}
+
+func demoJSONWithProvider(ctx context.Context, client gains.ChatProvider, messages []gains.Message, schema gains.ResponseSchema) {
+	resp, err := client.Chat(ctx, messages, gains.WithResponseSchema(schema))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	fmt.Println("Raw JSON response:")
+	fmt.Println(resp.Content)
+
+	// Parse and display structured data
+	var book struct {
+		Title  string   `json:"title"`
+		Author string   `json:"author"`
+		Year   int      `json:"year"`
+		Genres []string `json:"genres"`
+	}
+	if err := json.Unmarshal([]byte(resp.Content), &book); err != nil {
+		fmt.Fprintf(os.Stderr, "Parse error: %v\n", err)
+		return
+	}
+
+	fmt.Println("\nParsed data:")
+	fmt.Printf("  Title:  %s\n", book.Title)
+	fmt.Printf("  Author: %s\n", book.Author)
+	fmt.Printf("  Year:   %d\n", book.Year)
+	fmt.Printf("  Genres: %v\n", book.Genres)
+	fmt.Printf("[Tokens: %d in, %d out]\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }

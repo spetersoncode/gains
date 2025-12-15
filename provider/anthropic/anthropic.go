@@ -11,6 +11,9 @@ import (
 
 const DefaultModel = "claude-sonnet-4-20250514"
 
+// jsonResponseToolName is the name of the synthetic tool used for JSON mode.
+const jsonResponseToolName = "__gains_json_response__"
+
 // Client wraps the Anthropic SDK to implement gains.ChatProvider.
 type Client struct {
 	client *anthropic.Client
@@ -65,7 +68,20 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	if options.Temperature != nil {
 		params.Temperature = anthropic.Float(*options.Temperature)
 	}
-	if len(options.Tools) > 0 {
+
+	// Check if JSON mode is requested
+	useJSONTool := options.ResponseFormat == gains.ResponseFormatJSON || options.ResponseSchema != nil
+
+	if useJSONTool {
+		jsonTool, jsonToolChoice := buildAnthropicJSONTool(options)
+		// Merge with user tools if present
+		if len(options.Tools) > 0 {
+			params.Tools = append(convertTools(options.Tools), jsonTool)
+		} else {
+			params.Tools = []anthropic.ToolUnionParam{jsonTool}
+		}
+		params.ToolChoice = jsonToolChoice
+	} else if len(options.Tools) > 0 {
 		params.Tools = convertTools(options.Tools)
 		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
 			params.ToolChoice = convertToolChoice(options.ToolChoice)
@@ -78,9 +94,22 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	content := ""
+	var toolCalls []gains.ToolCall
 	for _, block := range resp.Content {
 		if block.Type == "text" {
 			content += block.Text
+		} else if block.Type == "tool_use" {
+			if useJSONTool && block.Name == jsonResponseToolName {
+				// Extract tool input as the JSON response
+				content = string(block.Input)
+			} else {
+				// Regular tool call
+				toolCalls = append(toolCalls, gains.ToolCall{
+					ID:        block.ID,
+					Name:      block.Name,
+					Arguments: string(block.Input),
+				})
+			}
 		}
 	}
 
@@ -91,7 +120,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 			InputTokens:  int(resp.Usage.InputTokens),
 			OutputTokens: int(resp.Usage.OutputTokens),
 		},
-		ToolCalls: extractToolCalls(resp.Content),
+		ToolCalls: toolCalls,
 	}, nil
 }
 
@@ -120,7 +149,20 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	if options.Temperature != nil {
 		params.Temperature = anthropic.Float(*options.Temperature)
 	}
-	if len(options.Tools) > 0 {
+
+	// Check if JSON mode is requested
+	useJSONTool := options.ResponseFormat == gains.ResponseFormatJSON || options.ResponseSchema != nil
+
+	if useJSONTool {
+		jsonTool, jsonToolChoice := buildAnthropicJSONTool(options)
+		// Merge with user tools if present
+		if len(options.Tools) > 0 {
+			params.Tools = append(convertTools(options.Tools), jsonTool)
+		} else {
+			params.Tools = []anthropic.ToolUnionParam{jsonTool}
+		}
+		params.ToolChoice = jsonToolChoice
+	} else if len(options.Tools) > 0 {
 		params.Tools = convertTools(options.Tools)
 		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
 			params.ToolChoice = convertToolChoice(options.ToolChoice)
@@ -155,9 +197,22 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 
 		// Send final event with complete response
 		content := ""
+		var toolCalls []gains.ToolCall
 		for _, block := range acc.Content {
 			if block.Type == "text" {
 				content += block.Text
+			} else if block.Type == "tool_use" {
+				if useJSONTool && block.Name == jsonResponseToolName {
+					// Extract tool input as the JSON response
+					content = string(block.Input)
+				} else {
+					// Regular tool call
+					toolCalls = append(toolCalls, gains.ToolCall{
+						ID:        block.ID,
+						Name:      block.Name,
+						Arguments: string(block.Input),
+					})
+				}
 			}
 		}
 
@@ -170,7 +225,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 					InputTokens:  int(acc.Usage.InputTokens),
 					OutputTokens: int(acc.Usage.OutputTokens),
 				},
-				ToolCalls: extractToolCalls(acc.Content),
+				ToolCalls: toolCalls,
 			},
 		}
 	}()
@@ -294,6 +349,55 @@ func extractToolCalls(content []anthropic.ContentBlockUnion) []gains.ToolCall {
 		}
 	}
 	return calls
+}
+
+func buildAnthropicJSONTool(options *gains.Options) (anthropic.ToolUnionParam, anthropic.ToolChoiceUnionParam) {
+	var schema map[string]any
+	if options.ResponseSchema != nil && len(options.ResponseSchema.Schema) > 0 {
+		json.Unmarshal(options.ResponseSchema.Schema, &schema)
+	} else {
+		// Generic object schema for basic JSON mode
+		schema = map[string]any{
+			"type":                 "object",
+			"additionalProperties": true,
+		}
+	}
+
+	description := "Output the response as structured JSON"
+	if options.ResponseSchema != nil && options.ResponseSchema.Description != "" {
+		description = options.ResponseSchema.Description
+	}
+
+	// Extract required fields
+	var required []string
+	if reqVal, ok := schema["required"].([]any); ok {
+		for _, r := range reqVal {
+			if s, ok := r.(string); ok {
+				required = append(required, s)
+			}
+		}
+	}
+
+	inputSchema := anthropic.ToolInputSchemaParam{
+		Properties: schema["properties"],
+		Required:   required,
+	}
+
+	tool := anthropic.ToolUnionParam{
+		OfTool: &anthropic.ToolParam{
+			Name:        jsonResponseToolName,
+			Description: anthropic.String(description),
+			InputSchema: inputSchema,
+		},
+	}
+
+	toolChoice := anthropic.ToolChoiceUnionParam{
+		OfTool: &anthropic.ToolChoiceToolParam{
+			Name: jsonResponseToolName,
+		},
+	}
+
+	return tool, toolChoice
 }
 
 var _ gains.ChatProvider = (*Client)(nil)
