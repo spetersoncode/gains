@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,12 +15,12 @@ func TestMessageStore_Append(t *testing.T) {
 
 	assert.Equal(t, 0, ms.Len())
 
-	ms.Append(gains.Message{Role: gains.RoleUser, Content: "Hello"})
+	ms.Append(ai.Message{Role: ai.RoleUser, Content: "Hello"})
 	assert.Equal(t, 1, ms.Len())
 
 	ms.Append(
-		gains.Message{Role: gains.RoleAssistant, Content: "Hi there"},
-		gains.Message{Role: gains.RoleUser, Content: "How are you?"},
+		ai.Message{Role: ai.RoleAssistant, Content: "Hi there"},
+		ai.Message{Role: ai.RoleUser, Content: "How are you?"},
 	)
 	assert.Equal(t, 3, ms.Len())
 }
@@ -29,8 +29,8 @@ func TestMessageStore_Messages(t *testing.T) {
 	ms := NewMessageStore(nil)
 
 	ms.Append(
-		gains.Message{Role: gains.RoleUser, Content: "Hello"},
-		gains.Message{Role: gains.RoleAssistant, Content: "Hi"},
+		ai.Message{Role: ai.RoleUser, Content: "Hello"},
+		ai.Message{Role: ai.RoleAssistant, Content: "Hi"},
 	)
 
 	messages := ms.Messages()
@@ -48,8 +48,8 @@ func TestMessageStore_Clear(t *testing.T) {
 	ms := NewMessageStore(nil)
 
 	ms.Append(
-		gains.Message{Role: gains.RoleUser, Content: "Hello"},
-		gains.Message{Role: gains.RoleAssistant, Content: "Hi"},
+		ai.Message{Role: ai.RoleUser, Content: "Hello"},
+		ai.Message{Role: ai.RoleAssistant, Content: "Hi"},
 	)
 
 	ms.Clear()
@@ -61,8 +61,8 @@ func TestMessageStore_Clone(t *testing.T) {
 	ms := NewMessageStore(nil)
 
 	ms.Append(
-		gains.Message{Role: gains.RoleUser, Content: "Hello"},
-		gains.Message{Role: gains.RoleAssistant, Content: "Hi"},
+		ai.Message{Role: ai.RoleUser, Content: "Hello"},
+		ai.Message{Role: ai.RoleAssistant, Content: "Hi"},
 	)
 
 	clone := ms.Clone()
@@ -72,7 +72,7 @@ func TestMessageStore_Clone(t *testing.T) {
 	assert.Equal(t, "Hello", clone.Messages()[0].Content)
 
 	// Modifying original doesn't affect clone
-	ms.Append(gains.Message{Role: gains.RoleUser, Content: "New"})
+	ms.Append(ai.Message{Role: ai.RoleUser, Content: "New"})
 	assert.Equal(t, 3, ms.Len())
 	assert.Equal(t, 2, clone.Len())
 
@@ -85,10 +85,10 @@ func TestMessageStore_Last(t *testing.T) {
 	ms := NewMessageStore(nil)
 
 	ms.Append(
-		gains.Message{Role: gains.RoleUser, Content: "1"},
-		gains.Message{Role: gains.RoleAssistant, Content: "2"},
-		gains.Message{Role: gains.RoleUser, Content: "3"},
-		gains.Message{Role: gains.RoleAssistant, Content: "4"},
+		ai.Message{Role: ai.RoleUser, Content: "1"},
+		ai.Message{Role: ai.RoleAssistant, Content: "2"},
+		ai.Message{Role: ai.RoleUser, Content: "3"},
+		ai.Message{Role: ai.RoleAssistant, Content: "4"},
 	)
 
 	// Get last 2
@@ -107,9 +107,9 @@ func TestMessageStore_Last(t *testing.T) {
 }
 
 func TestMessageStore_NewFrom(t *testing.T) {
-	initial := []gains.Message{
-		{Role: gains.RoleUser, Content: "Hello"},
-		{Role: gains.RoleAssistant, Content: "Hi"},
+	initial := []ai.Message{
+		{Role: ai.RoleUser, Content: "Hello"},
+		{Role: ai.RoleAssistant, Content: "Hi"},
 	}
 
 	ms := NewMessageStoreFrom(initial, nil)
@@ -129,8 +129,8 @@ func TestMessageStore_SyncReload(t *testing.T) {
 	// Create and sync
 	ms1 := NewMessageStore(adapter)
 	ms1.Append(
-		gains.Message{Role: gains.RoleUser, Content: "Hello"},
-		gains.Message{Role: gains.RoleAssistant, Content: "Hi there"},
+		ai.Message{Role: ai.RoleUser, Content: "Hello"},
+		ai.Message{Role: ai.RoleAssistant, Content: "Hi there"},
 	)
 	require.NoError(t, ms1.Sync(ctx, "conversation"))
 
@@ -140,9 +140,9 @@ func TestMessageStore_SyncReload(t *testing.T) {
 
 	assert.Equal(t, 2, ms2.Len())
 	messages := ms2.Messages()
-	assert.Equal(t, gains.RoleUser, messages[0].Role)
+	assert.Equal(t, ai.RoleUser, messages[0].Role)
 	assert.Equal(t, "Hello", messages[0].Content)
-	assert.Equal(t, gains.RoleAssistant, messages[1].Role)
+	assert.Equal(t, ai.RoleAssistant, messages[1].Role)
 	assert.Equal(t, "Hi there", messages[1].Content)
 }
 
@@ -163,7 +163,7 @@ func TestMessageStore_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			ms.Append(gains.Message{Role: gains.RoleUser, Content: "msg"})
+			ms.Append(ai.Message{Role: ai.RoleUser, Content: "msg"})
 		}(i)
 	}
 

@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // MessageStore manages conversation history with persistence support.
 type MessageStore struct {
 	mu       sync.RWMutex
-	messages []gains.Message
+	messages []ai.Message
 	adapter  Adapter
 }
 
@@ -22,32 +22,32 @@ func NewMessageStore(adapter Adapter) *MessageStore {
 		adapter = NewMemoryAdapter()
 	}
 	return &MessageStore{
-		messages: make([]gains.Message, 0),
+		messages: make([]ai.Message, 0),
 		adapter:  adapter,
 	}
 }
 
 // NewMessageStoreFrom creates a MessageStore initialized with existing messages.
-func NewMessageStoreFrom(messages []gains.Message, adapter Adapter) *MessageStore {
+func NewMessageStoreFrom(messages []ai.Message, adapter Adapter) *MessageStore {
 	ms := NewMessageStore(adapter)
 	if len(messages) > 0 {
-		ms.messages = make([]gains.Message, len(messages))
+		ms.messages = make([]ai.Message, len(messages))
 		copy(ms.messages, messages)
 	}
 	return ms
 }
 
 // Messages returns a copy of all messages.
-func (m *MessageStore) Messages() []gains.Message {
+func (m *MessageStore) Messages() []ai.Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	result := make([]gains.Message, len(m.messages))
+	result := make([]ai.Message, len(m.messages))
 	copy(result, m.messages)
 	return result
 }
 
 // Append adds messages to the store.
-func (m *MessageStore) Append(msgs ...gains.Message) {
+func (m *MessageStore) Append(msgs ...ai.Message) {
 	if len(msgs) == 0 {
 		return
 	}
@@ -67,7 +67,7 @@ func (m *MessageStore) Len() int {
 func (m *MessageStore) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.messages = make([]gains.Message, 0)
+	m.messages = make([]ai.Message, 0)
 }
 
 // Clone creates a deep copy of the MessageStore.
@@ -77,14 +77,14 @@ func (m *MessageStore) Clone() *MessageStore {
 
 	clone := NewMessageStore(nil)
 	if len(m.messages) > 0 {
-		clone.messages = make([]gains.Message, len(m.messages))
+		clone.messages = make([]ai.Message, len(m.messages))
 		copy(clone.messages, m.messages)
 	}
 	return clone
 }
 
 // Last returns the last n messages. If n > Len(), returns all messages.
-func (m *MessageStore) Last(n int) []gains.Message {
+func (m *MessageStore) Last(n int) []ai.Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -97,7 +97,7 @@ func (m *MessageStore) Last(n int) []gains.Message {
 		start = 0
 	}
 
-	result := make([]gains.Message, len(m.messages)-start)
+	result := make([]ai.Message, len(m.messages)-start)
 	copy(result, m.messages[start:])
 	return result
 }
@@ -124,7 +124,7 @@ func (m *MessageStore) Reload(ctx context.Context, key string) error {
 		return ErrKeyNotFound
 	}
 
-	var messages []gains.Message
+	var messages []ai.Message
 	if err := json.Unmarshal(raw, &messages); err != nil {
 		return &SerializationError{Key: key, Err: err}
 	}
