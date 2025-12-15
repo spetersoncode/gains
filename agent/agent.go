@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 )
 
 // Agent orchestrates autonomous tool-calling conversations.
@@ -28,9 +29,8 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 	eventCh := a.RunStream(ctx, messages, opts...)
 
 	result := &Result{
-		Messages: make([]gains.Message, len(messages)),
+		History: store.NewMessageStoreFrom(messages, nil),
 	}
-	copy(result.Messages, messages)
 
 	var totalUsage gains.Usage
 	var lastResponse *gains.Response
@@ -44,11 +44,11 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 		case EventStepStart:
 			// Commit pending messages from previous step
 			if pendingAssistantMsg != nil {
-				result.Messages = append(result.Messages, *pendingAssistantMsg)
+				result.History.Append(*pendingAssistantMsg)
 				pendingAssistantMsg = nil
 			}
 			if len(pendingToolResults) > 0 {
-				result.Messages = append(result.Messages, gains.NewToolResultMessage(pendingToolResults...))
+				result.History.Append(gains.NewToolResultMessage(pendingToolResults...))
 				pendingToolResults = nil
 			}
 
@@ -87,10 +87,10 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 
 	// Commit any remaining messages
 	if pendingAssistantMsg != nil {
-		result.Messages = append(result.Messages, *pendingAssistantMsg)
+		result.History.Append(*pendingAssistantMsg)
 	}
 	if len(pendingToolResults) > 0 {
-		result.Messages = append(result.Messages, gains.NewToolResultMessage(pendingToolResults...))
+		result.History.Append(gains.NewToolResultMessage(pendingToolResults...))
 	}
 
 	result.TotalUsage = totalUsage
@@ -124,8 +124,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 	chatOpts := append([]gains.Option{gains.WithTools(a.registry.Tools())}, options.ChatOptions...)
 
 	// Copy messages to avoid mutating the original
-	history := make([]gains.Message, len(messages))
-	copy(history, messages)
+	history := store.NewMessageStoreFrom(messages, nil)
 
 	step := 0
 
@@ -141,7 +140,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 		a.emit(eventCh, Event{Type: EventStepStart, Step: step})
 
 		// Execute chat call with streaming
-		response, err := a.executeStep(ctx, history, chatOpts, step, eventCh)
+		response, err := a.executeStep(ctx, history.Messages(), chatOpts, step, eventCh)
 		if err != nil {
 			a.emit(eventCh, Event{Type: EventError, Step: step, Error: err})
 			return
@@ -165,14 +164,14 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 		toolResults, allRejected := a.processToolCalls(ctx, response.ToolCalls, options, step, eventCh)
 
 		// Append assistant message with tool calls to history
-		history = append(history, gains.Message{
+		history.Append(gains.Message{
 			Role:      gains.RoleAssistant,
 			Content:   response.Content,
 			ToolCalls: response.ToolCalls,
 		})
 
 		// Append tool results to history
-		history = append(history, gains.NewToolResultMessage(toolResults...))
+		history.Append(gains.NewToolResultMessage(toolResults...))
 
 		// If all tools were rejected, stop
 		if allRejected {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 )
 
 // EventType identifies the kind of event occurring during agent execution.
@@ -102,8 +103,8 @@ type Result struct {
 	// Response is the final response from the model.
 	Response *gains.Response
 
-	// Messages contains the complete conversation history.
-	Messages []gains.Message
+	// History contains the complete conversation history.
+	History *store.MessageStore
 
 	// Steps is the number of iterations completed.
 	Steps int
@@ -116,4 +117,13 @@ type Result struct {
 
 	// Error contains any error that caused termination (if applicable).
 	Error error
+}
+
+// Messages returns the conversation history as a slice.
+// This is a convenience method for accessing the history.
+func (r *Result) Messages() []gains.Message {
+	if r.History == nil {
+		return nil
+	}
+	return r.History.Messages()
 }

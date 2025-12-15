@@ -317,7 +317,7 @@ func TestAgent_Run_WithToolCalls(t *testing.T) {
 	assert.Contains(t, result.Response.Content, "72°F")
 
 	// Verify conversation history includes tool results
-	assert.True(t, len(result.Messages) > 1)
+	assert.True(t, len(result.Messages()) > 1)
 }
 
 func TestAgent_Run_MaxSteps(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 )
 
 // EventType identifies the kind of event occurring during workflow execution.
@@ -118,7 +119,7 @@ type Result struct {
 	WorkflowName string
 
 	// State contains the final state after execution.
-	State *State
+	State *store.Store
 
 	// Output is the primary output from the workflow.
 	Output any

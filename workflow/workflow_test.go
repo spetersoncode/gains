@@ -9,130 +9,13 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// --- State Tests ---
-
-func TestState_GetSet(t *testing.T) {
-	s := NewState()
-
-	s.Set("key1", "value1")
-	s.Set("key2", 42)
-	s.Set("key3", true)
-
-	v1, ok := s.Get("key1")
-	assert.True(t, ok)
-	assert.Equal(t, "value1", v1)
-
-	v2, ok := s.Get("key2")
-	assert.True(t, ok)
-	assert.Equal(t, 42, v2)
-
-	_, ok = s.Get("nonexistent")
-	assert.False(t, ok)
-}
-
-func TestState_TypedGetters(t *testing.T) {
-	s := NewState()
-	s.Set("str", "hello")
-	s.Set("num", 123)
-	s.Set("bool", true)
-	s.Set("wrong", 3.14)
-
-	assert.Equal(t, "hello", s.GetString("str"))
-	assert.Equal(t, "", s.GetString("num"))
-	assert.Equal(t, "", s.GetString("nonexistent"))
-
-	assert.Equal(t, 123, s.GetInt("num"))
-	assert.Equal(t, 0, s.GetInt("str"))
-	assert.Equal(t, 0, s.GetInt("nonexistent"))
-
-	assert.Equal(t, true, s.GetBool("bool"))
-	assert.Equal(t, false, s.GetBool("str"))
-	assert.Equal(t, false, s.GetBool("nonexistent"))
-}
-
-func TestState_Delete(t *testing.T) {
-	s := NewState()
-	s.Set("key", "value")
-	assert.True(t, s.Has("key"))
-
-	s.Delete("key")
-	assert.False(t, s.Has("key"))
-}
-
-func TestState_Clone(t *testing.T) {
-	s := NewState()
-	s.Set("key1", "value1")
-	s.Set("key2", "value2")
-
-	clone := s.Clone()
-
-	// Verify clone has same values
-	assert.Equal(t, "value1", clone.GetString("key1"))
-	assert.Equal(t, "value2", clone.GetString("key2"))
-
-	// Modify original, verify clone unchanged
-	s.Set("key1", "modified")
-	assert.Equal(t, "value1", clone.GetString("key1"))
-}
-
-func TestState_Merge(t *testing.T) {
-	s1 := NewState()
-	s1.Set("key1", "value1")
-	s1.Set("shared", "from_s1")
-
-	s2 := NewState()
-	s2.Set("key2", "value2")
-	s2.Set("shared", "from_s2")
-
-	s1.Merge(s2)
-
-	assert.Equal(t, "value1", s1.GetString("key1"))
-	assert.Equal(t, "value2", s1.GetString("key2"))
-	assert.Equal(t, "from_s2", s1.GetString("shared")) // s2 overwrites
-}
-
-func TestState_Concurrent(t *testing.T) {
-	s := NewState()
-	var wg sync.WaitGroup
-
-	// Concurrent writes
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			s.Set("key", n)
-		}(i)
-	}
-
-	// Concurrent reads
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.Get("key")
-		}()
-	}
-
-	wg.Wait()
-	// Just verify no race conditions occurred
-	assert.True(t, s.Has("key"))
-}
-
-func TestNewStateFrom(t *testing.T) {
-	data := map[string]any{
-		"key1": "value1",
-		"key2": 42,
-	}
-
-	s := NewStateFrom(data)
-
-	assert.Equal(t, "value1", s.GetString("key1"))
-	assert.Equal(t, 42, s.GetInt("key2"))
-}
+// Note: State tests have been moved to the store package.
+// These workflow tests now use store.Store directly.
 
 // --- Mock Provider ---
 
@@ -225,13 +108,13 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 
 func TestFuncStep_Run(t *testing.T) {
 	executed := false
-	step := NewFuncStep("test", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("test", func(ctx context.Context, state *store.Store) error {
 		executed = true
 		state.Set("result", "done")
 		return nil
 	})
 
-	state := NewState()
+	state := store.New(nil)
 	result, err := step.Run(context.Background(), state)
 
 	require.NoError(t, err)
@@ -242,21 +125,21 @@ func TestFuncStep_Run(t *testing.T) {
 
 func TestFuncStep_RunError(t *testing.T) {
 	expectedErr := errors.New("test error")
-	step := NewFuncStep("test", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("test", func(ctx context.Context, state *store.Store) error {
 		return expectedErr
 	})
 
-	_, err := step.Run(context.Background(), NewState())
+	_, err := step.Run(context.Background(), store.New(nil))
 	assert.ErrorIs(t, err, expectedErr)
 }
 
 func TestFuncStep_RunStream(t *testing.T) {
-	step := NewFuncStep("test", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("test", func(ctx context.Context, state *store.Store) error {
 		state.Set("result", "done")
 		return nil
 	})
 
-	state := NewState()
+	state := store.New(nil)
 	events := step.RunStream(context.Background(), state)
 
 	var eventTypes []EventType
@@ -276,7 +159,7 @@ func TestPromptStep_Run(t *testing.T) {
 	}
 
 	step := NewPromptStep("prompt", provider,
-		func(s *State) []gains.Message {
+		func(s *store.Store) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleUser, Content: s.GetString("input")},
 			}
@@ -284,7 +167,7 @@ func TestPromptStep_Run(t *testing.T) {
 		"output",
 	)
 
-	state := NewStateFrom(map[string]any{"input": "Hi"})
+	state := store.NewFrom(map[string]any{"input": "Hi"})
 	result, err := step.Run(context.Background(), state)
 
 	require.NoError(t, err)
@@ -300,13 +183,13 @@ func TestPromptStep_RunStream(t *testing.T) {
 	}
 
 	step := NewPromptStep("prompt", provider,
-		func(s *State) []gains.Message {
+		func(s *store.Store) []gains.Message {
 			return []gains.Message{{Role: gains.RoleUser, Content: "Hi"}}
 		},
 		"output",
 	)
 
-	state := NewState()
+	state := store.New(nil)
 	events := step.RunStream(context.Background(), state)
 
 	var deltas string
@@ -330,13 +213,13 @@ func TestPromptStep_RunStream(t *testing.T) {
 func TestChain_Run(t *testing.T) {
 	var order []string
 
-	step1 := NewFuncStep("step1", func(ctx context.Context, state *State) error {
+	step1 := NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 		order = append(order, "step1")
 		state.Set("step1_done", true)
 		return nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, state *State) error {
+	step2 := NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 		order = append(order, "step2")
 		// Verify step1 ran first
 		assert.True(t, state.GetBool("step1_done"))
@@ -344,7 +227,7 @@ func TestChain_Run(t *testing.T) {
 	})
 
 	chain := NewChain("test-chain", step1, step2)
-	state := NewState()
+	state := store.New(nil)
 
 	result, err := chain.Run(context.Background(), state)
 
@@ -356,22 +239,22 @@ func TestChain_Run(t *testing.T) {
 func TestChain_RunWithError(t *testing.T) {
 	expectedErr := errors.New("step2 error")
 
-	step1 := NewFuncStep("step1", func(ctx context.Context, state *State) error {
+	step1 := NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 		return nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, state *State) error {
+	step2 := NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 		return expectedErr
 	})
 
-	step3 := NewFuncStep("step3", func(ctx context.Context, state *State) error {
+	step3 := NewFuncStep("step3", func(ctx context.Context, state *store.Store) error {
 		t.Fatal("step3 should not be reached")
 		return nil
 	})
 
 	chain := NewChain("test-chain", step1, step2, step3)
 
-	_, err := chain.Run(context.Background(), NewState())
+	_, err := chain.Run(context.Background(), store.New(nil))
 
 	var stepErr *StepError
 	require.ErrorAs(t, err, &stepErr)
@@ -381,15 +264,15 @@ func TestChain_RunWithError(t *testing.T) {
 
 func TestChain_RunStream(t *testing.T) {
 	chain := NewChain("test-chain",
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
 	)
 
-	events := chain.RunStream(context.Background(), NewState())
+	events := chain.RunStream(context.Background(), store.New(nil))
 
 	var eventTypes []EventType
 	for event := range events {
@@ -406,7 +289,7 @@ func TestChain_RunStream(t *testing.T) {
 }
 
 func TestChain_Timeout(t *testing.T) {
-	slowStep := NewFuncStep("slow", func(ctx context.Context, state *State) error {
+	slowStep := NewFuncStep("slow", func(ctx context.Context, state *store.Store) error {
 		select {
 		case <-time.After(1 * time.Second):
 			return nil
@@ -420,7 +303,7 @@ func TestChain_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := chain.Run(ctx, NewState())
+	_, err := chain.Run(ctx, store.New(nil))
 	assert.Error(t, err)
 }
 
@@ -430,17 +313,17 @@ func TestParallel_Run(t *testing.T) {
 	var count atomic.Int32
 
 	steps := []Step{
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			count.Add(1)
 			state.Set("step1", "done")
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			count.Add(1)
 			state.Set("step2", "done")
 			return nil
 		}),
-		NewFuncStep("step3", func(ctx context.Context, state *State) error {
+		NewFuncStep("step3", func(ctx context.Context, state *store.Store) error {
 			count.Add(1)
 			state.Set("step3", "done")
 			return nil
@@ -448,7 +331,7 @@ func TestParallel_Run(t *testing.T) {
 	}
 
 	parallel := NewParallel("test-parallel", steps, nil)
-	state := NewState()
+	state := store.New(nil)
 
 	result, err := parallel.Run(context.Background(), state)
 
@@ -464,23 +347,23 @@ func TestParallel_Run(t *testing.T) {
 
 func TestParallel_RunWithAggregator(t *testing.T) {
 	steps := []Step{
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			state.Set("value", 1)
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			state.Set("value", 2)
 			return nil
 		}),
 	}
 
-	aggregator := func(state *State, results map[string]*StepResult) error {
+	aggregator := func(state *store.Store, results map[string]*StepResult) error {
 		state.Set("aggregated", len(results))
 		return nil
 	}
 
 	parallel := NewParallel("test-parallel", steps, aggregator)
-	state := NewState()
+	state := store.New(nil)
 
 	_, err := parallel.Run(context.Background(), state)
 
@@ -490,17 +373,17 @@ func TestParallel_RunWithAggregator(t *testing.T) {
 
 func TestParallel_RunWithError(t *testing.T) {
 	steps := []Step{
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			return errors.New("step2 error")
 		}),
 	}
 
 	parallel := NewParallel("test-parallel", steps, nil)
 
-	_, err := parallel.Run(context.Background(), NewState())
+	_, err := parallel.Run(context.Background(), store.New(nil))
 
 	var parallelErr *ParallelError
 	require.ErrorAs(t, err, &parallelErr)
@@ -513,7 +396,7 @@ func TestParallel_MaxConcurrency(t *testing.T) {
 
 	steps := make([]Step, 5)
 	for i := 0; i < 5; i++ {
-		steps[i] = NewFuncStep("step", func(ctx context.Context, state *State) error {
+		steps[i] = NewFuncStep("step", func(ctx context.Context, state *store.Store) error {
 			current := concurrent.Add(1)
 			for {
 				max := maxConcurrent.Load()
@@ -533,7 +416,7 @@ func TestParallel_MaxConcurrency(t *testing.T) {
 
 	parallel := NewParallel("test-parallel", steps, nil)
 
-	_, err := parallel.Run(context.Background(), NewState(), WithMaxConcurrency(2))
+	_, err := parallel.Run(context.Background(), store.New(nil), WithMaxConcurrency(2))
 
 	require.NoError(t, err)
 	assert.LessOrEqual(t, maxConcurrent.Load(), int32(2))
@@ -541,16 +424,16 @@ func TestParallel_MaxConcurrency(t *testing.T) {
 
 func TestParallel_RunStream(t *testing.T) {
 	steps := []Step{
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
 	}
 
 	parallel := NewParallel("test-parallel", steps, nil)
-	events := parallel.RunStream(context.Background(), NewState())
+	events := parallel.RunStream(context.Background(), store.New(nil))
 
 	var hasStart, hasComplete bool
 	var stepCompletes int
@@ -574,12 +457,12 @@ func TestParallel_RunStream(t *testing.T) {
 // --- Router Tests ---
 
 func TestRouter_Run(t *testing.T) {
-	step1 := NewFuncStep("high", func(ctx context.Context, state *State) error {
+	step1 := NewFuncStep("high", func(ctx context.Context, state *store.Store) error {
 		state.Set("route_taken", "high")
 		return nil
 	})
 
-	step2 := NewFuncStep("low", func(ctx context.Context, state *State) error {
+	step2 := NewFuncStep("low", func(ctx context.Context, state *store.Store) error {
 		state.Set("route_taken", "low")
 		return nil
 	})
@@ -588,14 +471,14 @@ func TestRouter_Run(t *testing.T) {
 		[]Route{
 			{
 				Name: "high-priority",
-				Condition: func(ctx context.Context, s *State) bool {
+				Condition: func(ctx context.Context, s *store.Store) bool {
 					return s.GetString("priority") == "high"
 				},
 				Step: step1,
 			},
 			{
 				Name: "low-priority",
-				Condition: func(ctx context.Context, s *State) bool {
+				Condition: func(ctx context.Context, s *store.Store) bool {
 					return s.GetString("priority") == "low"
 				},
 				Step: step2,
@@ -605,7 +488,7 @@ func TestRouter_Run(t *testing.T) {
 	)
 
 	t.Run("takes high priority route", func(t *testing.T) {
-		state := NewStateFrom(map[string]any{"priority": "high"})
+		state := store.NewFrom(map[string]any{"priority": "high"})
 		_, err := router.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, "high", state.GetString("route_taken"))
@@ -613,7 +496,7 @@ func TestRouter_Run(t *testing.T) {
 	})
 
 	t.Run("takes low priority route", func(t *testing.T) {
-		state := NewStateFrom(map[string]any{"priority": "low"})
+		state := store.NewFrom(map[string]any{"priority": "low"})
 		_, err := router.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, "low", state.GetString("route_taken"))
@@ -622,7 +505,7 @@ func TestRouter_Run(t *testing.T) {
 }
 
 func TestRouter_DefaultRoute(t *testing.T) {
-	defaultStep := NewFuncStep("default", func(ctx context.Context, state *State) error {
+	defaultStep := NewFuncStep("default", func(ctx context.Context, state *store.Store) error {
 		state.Set("route_taken", "default")
 		return nil
 	})
@@ -631,10 +514,10 @@ func TestRouter_DefaultRoute(t *testing.T) {
 		[]Route{
 			{
 				Name: "specific",
-				Condition: func(ctx context.Context, s *State) bool {
+				Condition: func(ctx context.Context, s *store.Store) bool {
 					return s.GetString("match") == "yes"
 				},
-				Step: NewFuncStep("specific", func(ctx context.Context, state *State) error {
+				Step: NewFuncStep("specific", func(ctx context.Context, state *store.Store) error {
 					return nil
 				}),
 			},
@@ -642,7 +525,7 @@ func TestRouter_DefaultRoute(t *testing.T) {
 		defaultStep,
 	)
 
-	state := NewStateFrom(map[string]any{"match": "no"})
+	state := store.NewFrom(map[string]any{"match": "no"})
 	_, err := router.Run(context.Background(), state)
 
 	require.NoError(t, err)
@@ -654,10 +537,10 @@ func TestRouter_NoMatch(t *testing.T) {
 		[]Route{
 			{
 				Name: "never-match",
-				Condition: func(ctx context.Context, s *State) bool {
+				Condition: func(ctx context.Context, s *store.Store) bool {
 					return false
 				},
-				Step: NewFuncStep("step", func(ctx context.Context, state *State) error {
+				Step: NewFuncStep("step", func(ctx context.Context, state *store.Store) error {
 					return nil
 				}),
 			},
@@ -665,12 +548,12 @@ func TestRouter_NoMatch(t *testing.T) {
 		nil,
 	)
 
-	_, err := router.Run(context.Background(), NewState())
+	_, err := router.Run(context.Background(), store.New(nil))
 	assert.ErrorIs(t, err, ErrNoRouteMatched)
 }
 
 func TestRouter_RunStream(t *testing.T) {
-	step := NewFuncStep("target", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("target", func(ctx context.Context, state *store.Store) error {
 		return nil
 	})
 
@@ -678,7 +561,7 @@ func TestRouter_RunStream(t *testing.T) {
 		[]Route{
 			{
 				Name: "always",
-				Condition: func(ctx context.Context, s *State) bool {
+				Condition: func(ctx context.Context, s *store.Store) bool {
 					return true
 				},
 				Step: step,
@@ -687,7 +570,7 @@ func TestRouter_RunStream(t *testing.T) {
 		nil,
 	)
 
-	events := router.RunStream(context.Background(), NewState())
+	events := router.RunStream(context.Background(), store.New(nil))
 
 	var hasRouteSelected bool
 	var selectedRoute string
@@ -707,18 +590,18 @@ func TestClassifierRouter_Run(t *testing.T) {
 		responses: []mockResponse{{content: "billing"}},
 	}
 
-	billingStep := NewFuncStep("billing", func(ctx context.Context, state *State) error {
+	billingStep := NewFuncStep("billing", func(ctx context.Context, state *store.Store) error {
 		state.Set("handled_by", "billing")
 		return nil
 	})
 
-	technicalStep := NewFuncStep("technical", func(ctx context.Context, state *State) error {
+	technicalStep := NewFuncStep("technical", func(ctx context.Context, state *store.Store) error {
 		state.Set("handled_by", "technical")
 		return nil
 	})
 
 	router := NewClassifierRouter("classifier", provider,
-		func(s *State) []gains.Message {
+		func(s *store.Store) []gains.Message {
 			return []gains.Message{
 				{Role: gains.RoleSystem, Content: "Classify as: billing, technical"},
 				{Role: gains.RoleUser, Content: s.GetString("ticket")},
@@ -730,7 +613,7 @@ func TestClassifierRouter_Run(t *testing.T) {
 		},
 	)
 
-	state := NewStateFrom(map[string]any{"ticket": "I have a billing question"})
+	state := store.NewFrom(map[string]any{"ticket": "I have a billing question"})
 	_, err := router.Run(context.Background(), state)
 
 	require.NoError(t, err)
@@ -744,17 +627,17 @@ func TestClassifierRouter_UnknownClassification(t *testing.T) {
 	}
 
 	router := NewClassifierRouter("classifier", provider,
-		func(s *State) []gains.Message {
+		func(s *store.Store) []gains.Message {
 			return []gains.Message{{Role: gains.RoleUser, Content: "test"}}
 		},
 		map[string]Step{
-			"known": NewFuncStep("known", func(ctx context.Context, state *State) error {
+			"known": NewFuncStep("known", func(ctx context.Context, state *store.Store) error {
 				return nil
 			}),
 		},
 	)
 
-	_, err := router.Run(context.Background(), NewState())
+	_, err := router.Run(context.Background(), store.New(nil))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown classification")
 }
@@ -763,18 +646,18 @@ func TestClassifierRouter_UnknownClassification(t *testing.T) {
 
 func TestWorkflow_Run(t *testing.T) {
 	chain := NewChain("inner",
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			state.Set("step1", "done")
 			return nil
 		}),
-		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 			state.Set("step2", "done")
 			return nil
 		}),
 	)
 
 	wf := New("test-workflow", chain)
-	result, err := wf.Run(context.Background(), NewState())
+	result, err := wf.Run(context.Background(), store.New(nil))
 
 	require.NoError(t, err)
 	assert.Equal(t, "test-workflow", result.WorkflowName)
@@ -784,7 +667,7 @@ func TestWorkflow_Run(t *testing.T) {
 }
 
 func TestWorkflow_RunWithNilState(t *testing.T) {
-	step := NewFuncStep("step", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("step", func(ctx context.Context, state *store.Store) error {
 		state.Set("key", "value")
 		return nil
 	})
@@ -798,12 +681,12 @@ func TestWorkflow_RunWithNilState(t *testing.T) {
 }
 
 func TestWorkflow_RunWithError(t *testing.T) {
-	step := NewFuncStep("failing", func(ctx context.Context, state *State) error {
+	step := NewFuncStep("failing", func(ctx context.Context, state *store.Store) error {
 		return errors.New("intentional error")
 	})
 
 	wf := New("test-workflow", step)
-	result, err := wf.Run(context.Background(), NewState())
+	result, err := wf.Run(context.Background(), store.New(nil))
 
 	assert.Error(t, err)
 	assert.Equal(t, TerminationError, result.Termination)
@@ -812,13 +695,13 @@ func TestWorkflow_RunWithError(t *testing.T) {
 
 func TestWorkflow_RunStream(t *testing.T) {
 	chain := NewChain("inner",
-		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 			return nil
 		}),
 	)
 
 	wf := New("test-workflow", chain)
-	events := wf.RunStream(context.Background(), NewState())
+	events := wf.RunStream(context.Background(), store.New(nil))
 
 	var eventTypes []EventType
 	for event := range events {
@@ -834,11 +717,11 @@ func TestWorkflow_RunStream(t *testing.T) {
 func TestNestedWorkflows(t *testing.T) {
 	// Create an inner chain
 	innerChain := NewChain("inner-chain",
-		NewFuncStep("inner-step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("inner-step1", func(ctx context.Context, state *store.Store) error {
 			state.Set("inner1", "done")
 			return nil
 		}),
-		NewFuncStep("inner-step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("inner-step2", func(ctx context.Context, state *store.Store) error {
 			state.Set("inner2", "done")
 			return nil
 		}),
@@ -846,12 +729,12 @@ func TestNestedWorkflows(t *testing.T) {
 
 	// Create outer chain that contains inner chain
 	outerChain := NewChain("outer-chain",
-		NewFuncStep("outer-step1", func(ctx context.Context, state *State) error {
+		NewFuncStep("outer-step1", func(ctx context.Context, state *store.Store) error {
 			state.Set("outer1", "done")
 			return nil
 		}),
 		innerChain, // Chain implements Step, so it can be nested
-		NewFuncStep("outer-step2", func(ctx context.Context, state *State) error {
+		NewFuncStep("outer-step2", func(ctx context.Context, state *store.Store) error {
 			// Verify inner steps ran
 			assert.Equal(t, "done", state.GetString("inner1"))
 			assert.Equal(t, "done", state.GetString("inner2"))
@@ -861,7 +744,7 @@ func TestNestedWorkflows(t *testing.T) {
 	)
 
 	wf := New("nested-workflow", outerChain)
-	result, err := wf.Run(context.Background(), NewState())
+	result, err := wf.Run(context.Background(), store.New(nil))
 
 	require.NoError(t, err)
 	assert.Equal(t, "done", result.State.GetString("outer1"))
@@ -896,16 +779,16 @@ func TestApplyOptions_Custom(t *testing.T) {
 }
 
 func TestContinueOnError(t *testing.T) {
-	step1 := NewFuncStep("step1", func(ctx context.Context, state *State) error {
+	step1 := NewFuncStep("step1", func(ctx context.Context, state *store.Store) error {
 		state.Set("step1", "done")
 		return nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, state *State) error {
+	step2 := NewFuncStep("step2", func(ctx context.Context, state *store.Store) error {
 		return errors.New("step2 error")
 	})
 
-	step3 := NewFuncStep("step3", func(ctx context.Context, state *State) error {
+	step3 := NewFuncStep("step3", func(ctx context.Context, state *store.Store) error {
 		state.Set("step3", "done")
 		return nil
 	})
@@ -913,14 +796,14 @@ func TestContinueOnError(t *testing.T) {
 	chain := NewChain("test-chain", step1, step2, step3)
 
 	t.Run("without continue on error", func(t *testing.T) {
-		state := NewState()
+		state := store.New(nil)
 		_, err := chain.Run(context.Background(), state)
 		assert.Error(t, err)
 		assert.False(t, state.Has("step3"))
 	})
 
 	t.Run("with continue on error", func(t *testing.T) {
-		state := NewState()
+		state := store.New(nil)
 		_, err := chain.Run(context.Background(), state,
 			WithContinueOnError(true),
 			WithErrorHandler(func(ctx context.Context, stepName string, err error) error {

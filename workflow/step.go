@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 )
 
 // Step represents a single unit of work in a workflow.
@@ -13,14 +14,14 @@ type Step interface {
 	Name() string
 
 	// Run executes the step and returns the result.
-	Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error)
+	Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error)
 
 	// RunStream executes the step and returns a channel of events.
-	RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event
+	RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event
 }
 
 // StepFunc is a function signature for simple step implementations.
-type StepFunc func(ctx context.Context, state *State) error
+type StepFunc func(ctx context.Context, state *store.Store) error
 
 // FuncStep wraps a function as a Step.
 type FuncStep struct {
@@ -37,7 +38,7 @@ func NewFuncStep(name string, fn StepFunc) *FuncStep {
 func (f *FuncStep) Name() string { return f.name }
 
 // Run executes the function.
-func (f *FuncStep) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (f *FuncStep) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
 	err := f.fn(ctx, state)
 	if err != nil {
 		return nil, err
@@ -48,7 +49,7 @@ func (f *FuncStep) Run(ctx context.Context, state *State, opts ...Option) (*Step
 }
 
 // RunStream executes the function and emits events.
-func (f *FuncStep) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (f *FuncStep) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
 	ch := make(chan Event, 10)
 	go func() {
 		defer close(ch)
@@ -70,7 +71,7 @@ func (f *FuncStep) RunStream(ctx context.Context, state *State, opts ...Option) 
 }
 
 // PromptFunc generates messages from state for an LLM call.
-type PromptFunc func(state *State) []gains.Message
+type PromptFunc func(state *store.Store) []gains.Message
 
 // PromptStep makes a single LLM call with a dynamic prompt.
 type PromptStep struct {
@@ -98,7 +99,7 @@ func NewPromptStep(name string, provider gains.ChatProvider, prompt PromptFunc, 
 func (p *PromptStep) Name() string { return p.name }
 
 // Run executes the LLM call.
-func (p *PromptStep) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (p *PromptStep) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
 	options := ApplyOptions(opts...)
 
 	// Merge chat options
@@ -125,7 +126,7 @@ func (p *PromptStep) Run(ctx context.Context, state *State, opts ...Option) (*St
 }
 
 // RunStream executes the LLM call with streaming.
-func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (p *PromptStep) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {

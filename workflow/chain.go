@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/store"
 )
 
 // Chain executes steps sequentially, passing state between them.
@@ -21,7 +22,7 @@ func NewChain(name string, steps ...Step) *Chain {
 func (c *Chain) Name() string { return c.name }
 
 // Run executes steps sequentially.
-func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (c *Chain) Run(ctx context.Context, state *store.Store, opts ...Option) (*StepResult, error) {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -72,7 +73,7 @@ func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepRes
 }
 
 // RunStream executes steps sequentially and emits events.
-func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (c *Chain) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {

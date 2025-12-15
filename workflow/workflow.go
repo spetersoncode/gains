@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+
+	"github.com/spetersoncode/gains/store"
 )
 
 // Workflow is the top-level orchestrator that wraps a root step.
@@ -20,9 +22,9 @@ func New(name string, root Step) *Workflow {
 func (w *Workflow) Name() string { return w.name }
 
 // Run executes the workflow synchronously.
-func (w *Workflow) Run(ctx context.Context, state *State, opts ...Option) (*Result, error) {
+func (w *Workflow) Run(ctx context.Context, state *store.Store, opts ...Option) (*Result, error) {
 	if state == nil {
-		state = NewState()
+		state = store.New(nil)
 	}
 
 	stepResult, err := w.root.Run(ctx, state, opts...)
@@ -51,9 +53,9 @@ func (w *Workflow) Run(ctx context.Context, state *State, opts ...Option) (*Resu
 }
 
 // RunStream executes the workflow and returns an event channel.
-func (w *Workflow) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (w *Workflow) RunStream(ctx context.Context, state *store.Store, opts ...Option) <-chan Event {
 	if state == nil {
-		state = NewState()
+		state = store.New(nil)
 	}
 
 	return w.root.RunStream(ctx, state, opts...)
