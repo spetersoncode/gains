@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // jsonResponseToolName is the name of the synthetic tool used for JSON mode.
 const jsonResponseToolName = "__gains_json_response__"
 
-func convertTools(tools []gains.Tool) []anthropic.ToolUnionParam {
+func convertTools(tools []ai.Tool) []anthropic.ToolUnionParam {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -50,13 +50,13 @@ func convertTools(tools []gains.Tool) []anthropic.ToolUnionParam {
 	return result
 }
 
-func convertToolChoice(choice gains.ToolChoice) anthropic.ToolChoiceUnionParam {
+func convertToolChoice(choice ai.ToolChoice) anthropic.ToolChoiceUnionParam {
 	switch choice {
-	case gains.ToolChoiceNone:
+	case ai.ToolChoiceNone:
 		return anthropic.ToolChoiceUnionParam{
 			OfNone: &anthropic.ToolChoiceNoneParam{},
 		}
-	case gains.ToolChoiceRequired:
+	case ai.ToolChoiceRequired:
 		return anthropic.ToolChoiceUnionParam{
 			OfAny: &anthropic.ToolChoiceAnyParam{},
 		}
@@ -67,11 +67,11 @@ func convertToolChoice(choice gains.ToolChoice) anthropic.ToolChoiceUnionParam {
 	}
 }
 
-func extractToolCalls(content []anthropic.ContentBlockUnion) []gains.ToolCall {
-	var calls []gains.ToolCall
+func extractToolCalls(content []anthropic.ContentBlockUnion) []ai.ToolCall {
+	var calls []ai.ToolCall
 	for _, block := range content {
 		if block.Type == "tool_use" {
-			calls = append(calls, gains.ToolCall{
+			calls = append(calls, ai.ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: string(block.Input),
@@ -81,7 +81,7 @@ func extractToolCalls(content []anthropic.ContentBlockUnion) []gains.ToolCall {
 	return calls
 }
 
-func buildAnthropicJSONTool(options *gains.Options) (anthropic.ToolUnionParam, anthropic.ToolChoiceUnionParam) {
+func buildAnthropicJSONTool(options *ai.Options) (anthropic.ToolUnionParam, anthropic.ToolChoiceUnionParam) {
 	var schema map[string]any
 	if options.ResponseSchema != nil && len(options.ResponseSchema.Schema) > 0 {
 		json.Unmarshal(options.ResponseSchema.Schema, &schema)

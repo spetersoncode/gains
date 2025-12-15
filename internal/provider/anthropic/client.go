@@ -5,10 +5,10 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
-// Client wraps the Anthropic SDK to implement gains.ChatProvider.
+// Client wraps the Anthropic SDK to implement ai.ChatProvider.
 type Client struct {
 	client *anthropic.Client
 	model  ChatModel
@@ -38,8 +38,8 @@ func WithModel(model ChatModel) ClientOption {
 }
 
 // Chat sends a conversation and returns a complete response.
-func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -64,7 +64,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	// Check if JSON mode is requested
-	useJSONTool := options.ResponseFormat == gains.ResponseFormatJSON || options.ResponseSchema != nil
+	useJSONTool := options.ResponseFormat == ai.ResponseFormatJSON || options.ResponseSchema != nil
 
 	if useJSONTool {
 		jsonTool, jsonToolChoice := buildAnthropicJSONTool(options)
@@ -77,7 +77,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		params.ToolChoice = jsonToolChoice
 	} else if len(options.Tools) > 0 {
 		params.Tools = convertTools(options.Tools)
-		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
+		if options.ToolChoice != "" && options.ToolChoice != ai.ToolChoiceNone {
 			params.ToolChoice = convertToolChoice(options.ToolChoice)
 		}
 	}
@@ -88,7 +88,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	content := ""
-	var toolCalls []gains.ToolCall
+	var toolCalls []ai.ToolCall
 	for _, block := range resp.Content {
 		if block.Type == "text" {
 			content += block.Text
@@ -98,7 +98,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 				content = string(block.Input)
 			} else {
 				// Regular tool call
-				toolCalls = append(toolCalls, gains.ToolCall{
+				toolCalls = append(toolCalls, ai.ToolCall{
 					ID:        block.ID,
 					Name:      block.Name,
 					Arguments: string(block.Input),
@@ -107,10 +107,10 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		}
 	}
 
-	return &gains.Response{
+	return &ai.Response{
 		Content:      content,
 		FinishReason: string(resp.StopReason),
-		Usage: gains.Usage{
+		Usage: ai.Usage{
 			InputTokens:  int(resp.Usage.InputTokens),
 			OutputTokens: int(resp.Usage.OutputTokens),
 		},
@@ -119,8 +119,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 }
 
 // ChatStream sends a conversation and returns a channel of streaming events.
-func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -145,7 +145,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	}
 
 	// Check if JSON mode is requested
-	useJSONTool := options.ResponseFormat == gains.ResponseFormatJSON || options.ResponseSchema != nil
+	useJSONTool := options.ResponseFormat == ai.ResponseFormatJSON || options.ResponseSchema != nil
 
 	if useJSONTool {
 		jsonTool, jsonToolChoice := buildAnthropicJSONTool(options)
@@ -158,13 +158,13 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		params.ToolChoice = jsonToolChoice
 	} else if len(options.Tools) > 0 {
 		params.Tools = convertTools(options.Tools)
-		if options.ToolChoice != "" && options.ToolChoice != gains.ToolChoiceNone {
+		if options.ToolChoice != "" && options.ToolChoice != ai.ToolChoiceNone {
 			params.ToolChoice = convertToolChoice(options.ToolChoice)
 		}
 	}
 
 	stream := c.client.Messages.NewStreaming(ctx, params)
-	ch := make(chan gains.StreamEvent)
+	ch := make(chan ai.StreamEvent)
 
 	go func() {
 		defer close(ch)
@@ -177,7 +177,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 			if event.Type == "content_block_delta" {
 				delta := event.AsContentBlockDelta()
 				if textDelta := delta.Delta.AsTextDelta(); textDelta.Type == "text_delta" {
-					ch <- gains.StreamEvent{
+					ch <- ai.StreamEvent{
 						Delta: textDelta.Text,
 					}
 				}
@@ -185,13 +185,13 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		}
 
 		if err := stream.Err(); err != nil {
-			ch <- gains.StreamEvent{Err: err}
+			ch <- ai.StreamEvent{Err: err}
 			return
 		}
 
 		// Send final event with complete response
 		content := ""
-		var toolCalls []gains.ToolCall
+		var toolCalls []ai.ToolCall
 		for _, block := range acc.Content {
 			if block.Type == "text" {
 				content += block.Text
@@ -201,7 +201,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 					content = string(block.Input)
 				} else {
 					// Regular tool call
-					toolCalls = append(toolCalls, gains.ToolCall{
+					toolCalls = append(toolCalls, ai.ToolCall{
 						ID:        block.ID,
 						Name:      block.Name,
 						Arguments: string(block.Input),
@@ -210,12 +210,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 			}
 		}
 
-		ch <- gains.StreamEvent{
+		ch <- ai.StreamEvent{
 			Done: true,
-			Response: &gains.Response{
+			Response: &ai.Response{
 				Content:      content,
 				FinishReason: string(acc.StopReason),
-				Usage: gains.Usage{
+				Usage: ai.Usage{
 					InputTokens:  int(acc.Usage.InputTokens),
 					OutputTokens: int(acc.Usage.OutputTokens),
 				},
@@ -227,4 +227,4 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	return ch, nil
 }
 
-var _ gains.ChatProvider = (*Client)(nil)
+var _ ai.ChatProvider = (*Client)(nil)
