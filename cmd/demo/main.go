@@ -11,9 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/provider/anthropic"
-	"github.com/spetersoncode/gains/provider/google"
-	"github.com/spetersoncode/gains/provider/openai"
+	"github.com/spetersoncode/gains/client"
 )
 
 var reader = bufio.NewReader(os.Stdin)
@@ -28,77 +26,114 @@ func main() {
 	fmt.Println()
 
 	// Check available providers
-	hasAnthropic := os.Getenv("ANTHROPIC_API_KEY") != ""
-	hasOpenAI := os.Getenv("OPENAI_API_KEY") != ""
-	hasGoogle := os.Getenv("GOOGLE_API_KEY") != ""
+	providers := []struct {
+		name   client.ProviderName
+		envKey string
+		label  string
+	}{
+		{client.ProviderAnthropic, "ANTHROPIC_API_KEY", "Anthropic (Claude)"},
+		{client.ProviderOpenAI, "OPENAI_API_KEY", "OpenAI (GPT-4)"},
+		{client.ProviderGoogle, "GOOGLE_API_KEY", "Google (Gemini)"},
+	}
+
+	var available []struct {
+		name   client.ProviderName
+		apiKey string
+		label  string
+	}
 
 	fmt.Println("Available providers:")
-	if hasAnthropic {
-		fmt.Println("  ✓ Anthropic (Claude)")
+	for _, p := range providers {
+		if key := os.Getenv(p.envKey); key != "" {
+			fmt.Printf("  [%d] %s\n", len(available)+1, p.label)
+			available = append(available, struct {
+				name   client.ProviderName
+				apiKey string
+				label  string
+			}{p.name, key, p.label})
+		}
 	}
-	if hasOpenAI {
-		fmt.Println("  ✓ OpenAI (GPT-4)")
-	}
-	if hasGoogle {
-		fmt.Println("  ✓ Google (Gemini)")
-	}
-	if !hasAnthropic && !hasOpenAI && !hasGoogle {
+
+	if len(available) == 0 {
 		fmt.Println("  ✗ No API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.")
 		return
 	}
 	fmt.Println()
 
-	// Initialize clients
-	var anthropicClient *anthropic.Client
-	var openaiClient *openai.Client
-	var googleClient *google.Client
-
-	if hasAnthropic {
-		anthropicClient = anthropic.New(os.Getenv("ANTHROPIC_API_KEY"))
-	}
-	if hasOpenAI {
-		openaiClient = openai.New(os.Getenv("OPENAI_API_KEY"))
-	}
-	if hasGoogle {
-		var err error
-		googleClient, err = google.New(ctx, os.Getenv("GOOGLE_API_KEY"))
-		if err != nil {
-			fmt.Printf("Warning: Failed to initialize Google client: %v\n", err)
-			hasGoogle = false
+	// Let user select provider
+	var selected int
+	if len(available) == 1 {
+		selected = 0
+		fmt.Printf("Using %s (only available provider)\n", available[0].label)
+	} else {
+		fmt.Printf("Select provider [1-%d]: ", len(available))
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(answer)
+		fmt.Sscanf(answer, "%d", &selected)
+		selected-- // Convert to 0-indexed
+		if selected < 0 || selected >= len(available) {
+			selected = 0
 		}
+		fmt.Printf("Using %s\n", available[selected].label)
 	}
+	fmt.Println()
+
+	// Create unified client
+	c, err := client.New(ctx, client.Config{
+		Provider: available[selected].name,
+		APIKey:   available[selected].apiKey,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
+		return
+	}
+
+	// Show supported features
+	fmt.Println("Supported features:")
+	fmt.Printf("  Chat:       ✓\n")
+	if c.SupportsFeature(client.FeatureImage) {
+		fmt.Printf("  Images:     ✓\n")
+	} else {
+		fmt.Printf("  Images:     ✗\n")
+	}
+	if c.SupportsFeature(client.FeatureEmbedding) {
+		fmt.Printf("  Embeddings: ✓\n")
+	} else {
+		fmt.Printf("  Embeddings: ✗\n")
+	}
+	fmt.Println()
 
 	// Demo: Chat Streaming
 	if askYesNo("Demo chat streaming?") {
-		demoChatStreaming(ctx, anthropicClient, openaiClient, googleClient)
+		demoChatStreaming(ctx, c)
 	}
 
 	// Demo: Vision/Image Input
 	if askYesNo("Demo vision/image input?") {
-		demoVisionInput(ctx, anthropicClient, openaiClient, googleClient)
+		demoVisionInput(ctx, c)
 	}
 
 	// Demo: Image Generation
-	if hasOpenAI || hasGoogle {
+	if c.SupportsFeature(client.FeatureImage) {
 		if askYesNo("Demo image generation?") {
-			demoImageGeneration(ctx, openaiClient, googleClient)
+			demoImageGeneration(ctx, c)
 		}
 	}
 
 	// Demo: Tool Calling
 	if askYesNo("Demo tool/function calling?") {
-		demoToolCalling(ctx, anthropicClient, openaiClient, googleClient)
+		demoToolCalling(ctx, c)
 	}
 
 	// Demo: JSON Mode / Structured Output
 	if askYesNo("Demo JSON mode / structured output?") {
-		demoJSONMode(ctx, anthropicClient, openaiClient, googleClient)
+		demoJSONMode(ctx, c)
 	}
 
 	// Demo: Embeddings
-	if hasOpenAI || hasGoogle {
+	if c.SupportsFeature(client.FeatureEmbedding) {
 		if askYesNo("Demo embeddings?") {
-			demoEmbeddings(ctx, openaiClient, googleClient)
+			demoEmbeddings(ctx, c)
 		}
 	}
 
@@ -112,7 +147,7 @@ func askYesNo(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-func demoChatStreaming(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+func demoChatStreaming(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│          Chat Streaming Demo            │")
 	fmt.Println("└─────────────────────────────────────────┘")
@@ -121,29 +156,13 @@ func demoChatStreaming(ctx context.Context, anthropicClient *anthropic.Client, o
 		{Role: gains.RoleUser, Content: "Say hello in 3 different languages, one per line."},
 	}
 
-	if anthropicClient != nil {
-		fmt.Println("\n=== Anthropic (Claude) ===")
-		streamChat(ctx, anthropicClient, messages)
-	}
-
-	if openaiClient != nil {
-		fmt.Println("\n=== OpenAI (GPT-4) ===")
-		streamChat(ctx, openaiClient, messages)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (Gemini) ===")
-		streamChat(ctx, googleClient, messages)
-	}
-}
-
-func streamChat(ctx context.Context, client gains.ChatProvider, messages []gains.Message) {
-	stream, err := client.ChatStream(ctx, messages)
+	stream, err := c.ChatStream(ctx, messages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
 	}
 
+	fmt.Printf("\n%s:\n", c.Provider())
 	for event := range stream {
 		if event.Err != nil {
 			fmt.Fprintf(os.Stderr, "Stream error: %v\n", event.Err)
@@ -158,12 +177,12 @@ func streamChat(ctx context.Context, client gains.ChatProvider, messages []gains
 	}
 }
 
-func demoVisionInput(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+func demoVisionInput(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│         Vision/Image Input Demo         │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	// Use a public domain image URL (Wikipedia commons)
+	// Use a public domain image URL
 	imageURL := "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png"
 
 	messages := []gains.Message{
@@ -180,24 +199,7 @@ func demoVisionInput(ctx context.Context, anthropicClient *anthropic.Client, ope
 	fmt.Println("Question: Describe this image in one sentence. What do you see?")
 	fmt.Println()
 
-	if anthropicClient != nil {
-		fmt.Println("=== Anthropic (Claude) ===")
-		demoVisionWithProvider(ctx, anthropicClient, messages)
-	}
-
-	if openaiClient != nil {
-		fmt.Println("\n=== OpenAI (GPT-4) ===")
-		demoVisionWithProvider(ctx, openaiClient, messages)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (Gemini) ===")
-		demoVisionWithProvider(ctx, googleClient, messages)
-	}
-}
-
-func demoVisionWithProvider(ctx context.Context, client gains.ChatProvider, messages []gains.Message) {
-	resp, err := client.Chat(ctx, messages)
+	resp, err := c.Chat(ctx, messages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -207,27 +209,15 @@ func demoVisionWithProvider(ctx context.Context, client gains.ChatProvider, mess
 	fmt.Printf("[Tokens: %d in, %d out]\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }
 
-func demoImageGeneration(ctx context.Context, openaiClient *openai.Client, googleClient *google.Client) {
+func demoImageGeneration(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│         Image Generation Demo           │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	prompt := "A serene mountain landscape at sunset with a calm lake reflection"
-	fmt.Printf("Prompt: %q\n", prompt)
+	fmt.Printf("Prompt: %q\n\n", prompt)
 
-	if openaiClient != nil {
-		fmt.Println("\n=== OpenAI (DALL-E 3) ===")
-		generateImage(ctx, openaiClient, prompt)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (Imagen) ===")
-		generateImage(ctx, googleClient, prompt)
-	}
-}
-
-func generateImage(ctx context.Context, client gains.ImageProvider, prompt string) {
-	resp, err := client.GenerateImage(ctx, prompt,
+	resp, err := c.GenerateImage(ctx, prompt,
 		gains.WithImageSize(gains.ImageSize1024x1024),
 	)
 	if err != nil {
@@ -249,7 +239,7 @@ func generateImage(ctx context.Context, client gains.ImageProvider, prompt strin
 	}
 }
 
-func demoToolCalling(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+func demoToolCalling(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│          Tool Calling Demo              │")
 	fmt.Println("└─────────────────────────────────────────┘")
@@ -285,25 +275,8 @@ func demoToolCalling(ctx context.Context, anthropicClient *anthropic.Client, ope
 	fmt.Println("Tools available: get_weather(location, unit)")
 	fmt.Println()
 
-	if anthropicClient != nil {
-		fmt.Println("=== Anthropic (Claude) ===")
-		demoToolWithProvider(ctx, anthropicClient, messages, tools)
-	}
-
-	if openaiClient != nil {
-		fmt.Println("\n=== OpenAI (GPT-4) ===")
-		demoToolWithProvider(ctx, openaiClient, messages, tools)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (Gemini) ===")
-		demoToolWithProvider(ctx, googleClient, messages, tools)
-	}
-}
-
-func demoToolWithProvider(ctx context.Context, client gains.ChatProvider, messages []gains.Message, tools []gains.Tool) {
 	// First call: model should request tool use
-	resp, err := client.Chat(ctx, messages, gains.WithTools(tools))
+	resp, err := c.Chat(ctx, messages, gains.WithTools(tools))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -336,7 +309,7 @@ func demoToolWithProvider(ctx context.Context, client gains.ChatProvider, messag
 	)
 
 	// Second call: model should use the tool result
-	finalResp, err := client.Chat(ctx, messages, gains.WithTools(tools))
+	finalResp, err := c.Chat(ctx, messages, gains.WithTools(tools))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -346,7 +319,7 @@ func demoToolWithProvider(ctx context.Context, client gains.ChatProvider, messag
 	fmt.Printf("[Tokens: %d in, %d out]\n", finalResp.Usage.InputTokens, finalResp.Usage.OutputTokens)
 }
 
-func demoJSONMode(ctx context.Context, anthropicClient *anthropic.Client, openaiClient *openai.Client, googleClient *google.Client) {
+func demoJSONMode(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│      JSON Mode / Structured Output      │")
 	fmt.Println("└─────────────────────────────────────────┘")
@@ -388,24 +361,7 @@ func demoJSONMode(ctx context.Context, anthropicClient *anthropic.Client, openai
 	fmt.Println("Schema: book_info (title, author, year, genres)")
 	fmt.Println()
 
-	if anthropicClient != nil {
-		fmt.Println("=== Anthropic (Claude) - Tool-based JSON ===")
-		demoJSONWithProvider(ctx, anthropicClient, messages, schema)
-	}
-
-	if openaiClient != nil {
-		fmt.Println("\n=== OpenAI (GPT-4) - Native JSON Schema ===")
-		demoJSONWithProvider(ctx, openaiClient, messages, schema)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (Gemini) - Native JSON ===")
-		demoJSONWithProvider(ctx, googleClient, messages, schema)
-	}
-}
-
-func demoJSONWithProvider(ctx context.Context, client gains.ChatProvider, messages []gains.Message, schema gains.ResponseSchema) {
-	resp, err := client.Chat(ctx, messages, gains.WithResponseSchema(schema))
+	resp, err := c.Chat(ctx, messages, gains.WithResponseSchema(schema))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -434,7 +390,7 @@ func demoJSONWithProvider(ctx context.Context, client gains.ChatProvider, messag
 	fmt.Printf("[Tokens: %d in, %d out]\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }
 
-func demoEmbeddings(ctx context.Context, openaiClient *openai.Client, googleClient *google.Client) {
+func demoEmbeddings(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│            Embeddings Demo              │")
 	fmt.Println("└─────────────────────────────────────────┘")
@@ -451,24 +407,7 @@ func demoEmbeddings(ctx context.Context, openaiClient *openai.Client, googleClie
 	}
 	fmt.Println()
 
-	if openaiClient != nil {
-		fmt.Println("=== OpenAI (text-embedding-3-small) ===")
-		generateEmbeddings(ctx, openaiClient, texts)
-	}
-
-	if googleClient != nil {
-		fmt.Println("\n=== Google (text-embedding-004) ===")
-		generateEmbeddingsGoogle(ctx, googleClient, texts)
-	}
-
-	// Show similarity comparison
-	fmt.Println("\n--- Similarity Analysis ---")
-	fmt.Println("Text 1 and 2 are semantically similar (both about a fox)")
-	fmt.Println("Text 3 is semantically different (about weather)")
-}
-
-func generateEmbeddings(ctx context.Context, client gains.EmbeddingProvider, texts []string) {
-	resp, err := client.Embed(ctx, texts)
+	resp, err := c.Embed(ctx, texts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
@@ -483,33 +422,13 @@ func generateEmbeddings(ctx context.Context, client gains.EmbeddingProvider, tex
 		fmt.Printf("[Tokens: %d]\n", resp.Usage.InputTokens)
 	}
 
-	// Calculate cosine similarity between first two texts
-	if len(resp.Embeddings) >= 2 {
+	// Calculate cosine similarity between texts
+	if len(resp.Embeddings) >= 3 {
 		sim12 := cosineSimilarity(resp.Embeddings[0], resp.Embeddings[1])
 		sim13 := cosineSimilarity(resp.Embeddings[0], resp.Embeddings[2])
-		fmt.Printf("Similarity(1,2): %.4f  Similarity(1,3): %.4f\n", sim12, sim13)
-	}
-}
-
-func generateEmbeddingsGoogle(ctx context.Context, client *google.Client, texts []string) {
-	resp, err := client.Embed(ctx, texts,
-		gains.WithEmbeddingTaskType(gains.EmbeddingTaskTypeSemanticSimilarity),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-
-	for i, emb := range resp.Embeddings {
-		fmt.Printf("Text %d: %d dimensions (first 5: [%.4f, %.4f, %.4f, %.4f, %.4f]...)\n",
-			i+1, len(emb), emb[0], emb[1], emb[2], emb[3], emb[4])
-	}
-
-	// Calculate cosine similarity between first two texts
-	if len(resp.Embeddings) >= 2 {
-		sim12 := cosineSimilarity(resp.Embeddings[0], resp.Embeddings[1])
-		sim13 := cosineSimilarity(resp.Embeddings[0], resp.Embeddings[2])
-		fmt.Printf("Similarity(1,2): %.4f  Similarity(1,3): %.4f\n", sim12, sim13)
+		fmt.Printf("\nSimilarity(1,2): %.4f  Similarity(1,3): %.4f\n", sim12, sim13)
+		fmt.Println("Text 1 and 2 are semantically similar (both about a fox)")
+		fmt.Println("Text 3 is semantically different (about weather)")
 	}
 }
 
