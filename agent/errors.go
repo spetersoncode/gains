@@ -19,6 +19,7 @@ type ErrToolNotFound struct {
 	Name string
 }
 
+// Error returns a formatted error message including the tool name.
 func (e *ErrToolNotFound) Error() string {
 	return fmt.Sprintf("agent: tool not found: %s", e.Name)
 }
@@ -29,10 +30,12 @@ type ErrToolExecution struct {
 	Err  error
 }
 
+// Error returns a formatted error message including the tool name and cause.
 func (e *ErrToolExecution) Error() string {
 	return fmt.Sprintf("agent: tool %s execution failed: %v", e.Name, e.Err)
 }
 
+// Unwrap returns the underlying error for use with errors.Is and errors.As.
 func (e *ErrToolExecution) Unwrap() error {
 	return e.Err
 }
@@ -42,6 +45,7 @@ type ErrToolAlreadyRegistered struct {
 	Name string
 }
 
+// Error returns a formatted error message including the duplicate tool name.
 func (e *ErrToolAlreadyRegistered) Error() string {
 	return fmt.Sprintf("agent: tool already registered: %s", e.Name)
 }

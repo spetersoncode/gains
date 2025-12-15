@@ -1,4 +1,3 @@
-// Package client provides a unified client for accessing all AI provider capabilities.
 package client
 
 import (
@@ -79,6 +78,7 @@ type ErrFeatureNotSupported struct {
 	Feature  string
 }
 
+// Error returns a formatted error message including the provider and feature names.
 func (e *ErrFeatureNotSupported) Error() string {
 	return fmt.Sprintf("%s provider does not support %s", e.Provider, e.Feature)
 }
@@ -88,6 +88,7 @@ type ErrInvalidProvider struct {
 	Provider string
 }
 
+// Error returns a formatted error message listing valid provider names.
 func (e *ErrInvalidProvider) Error() string {
 	return fmt.Sprintf("unknown provider: %q (valid providers: anthropic, openai, google)", e.Provider)
 }

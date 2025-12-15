@@ -15,10 +15,12 @@ type ImageError struct {
 	Err error  // underlying error
 }
 
+// Error returns a formatted error message describing the image processing failure.
 func (e *ImageError) Error() string {
 	return fmt.Sprintf("image %s error for %s: %v", e.Op, e.URL, e.Err)
 }
 
+// Unwrap returns the underlying error for use with errors.Is and errors.As.
 func (e *ImageError) Unwrap() error {
 	return e.Err
 }

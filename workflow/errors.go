@@ -26,10 +26,12 @@ type StepError struct {
 	Err      error
 }
 
+// Error returns a formatted error message including the step name.
 func (e *StepError) Error() string {
 	return fmt.Sprintf("workflow: step %q failed: %v", e.StepName, e.Err)
 }
 
+// Unwrap returns the underlying error for use with errors.Is and errors.As.
 func (e *StepError) Unwrap() error {
 	return e.Err
 }
@@ -39,6 +41,7 @@ type ParallelError struct {
 	Errors map[string]error
 }
 
+// Error returns a formatted message summarizing the parallel execution failures.
 func (e *ParallelError) Error() string {
 	if len(e.Errors) == 0 {
 		return "workflow: parallel execution failed"
