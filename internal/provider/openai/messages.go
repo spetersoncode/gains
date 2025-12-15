@@ -8,14 +8,14 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
-func convertMessages(messages []gains.Message) ([]openai.ChatCompletionMessageParamUnion, error) {
+func convertMessages(messages []ai.Message) ([]openai.ChatCompletionMessageParamUnion, error) {
 	var result []openai.ChatCompletionMessageParamUnion
 	for _, msg := range messages {
 		switch msg.Role {
-		case gains.RoleUser:
+		case ai.RoleUser:
 			if msg.HasParts() {
 				contentParts, err := convertPartsToOpenAIParts(msg.Parts)
 				if err != nil {
@@ -31,7 +31,7 @@ func convertMessages(messages []gains.Message) ([]openai.ChatCompletionMessagePa
 			} else {
 				result = append(result, openai.UserMessage(msg.Content))
 			}
-		case gains.RoleAssistant:
+		case ai.RoleAssistant:
 			if len(msg.ToolCalls) > 0 {
 				// Assistant message with tool calls
 				toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(msg.ToolCalls))
@@ -53,9 +53,9 @@ func convertMessages(messages []gains.Message) ([]openai.ChatCompletionMessagePa
 			} else {
 				result = append(result, openai.AssistantMessage(msg.Content))
 			}
-		case gains.RoleSystem:
+		case ai.RoleSystem:
 			result = append(result, openai.SystemMessage(msg.Content))
-		case gains.RoleTool:
+		case ai.RoleTool:
 			// Tool result messages - one message per tool result
 			for _, tr := range msg.ToolResults {
 				result = append(result, openai.ToolMessage(tr.Content, tr.ToolCallID))
@@ -67,13 +67,13 @@ func convertMessages(messages []gains.Message) ([]openai.ChatCompletionMessagePa
 	return result, nil
 }
 
-func convertPartsToOpenAIParts(parts []gains.ContentPart) ([]openai.ChatCompletionContentPartUnionParam, error) {
+func convertPartsToOpenAIParts(parts []ai.ContentPart) ([]openai.ChatCompletionContentPartUnionParam, error) {
 	var result []openai.ChatCompletionContentPartUnionParam
 	for _, part := range parts {
 		switch part.Type {
-		case gains.ContentPartTypeText:
+		case ai.ContentPartTypeText:
 			result = append(result, openai.TextContentPart(part.Text))
-		case gains.ContentPartTypeImage:
+		case ai.ContentPartTypeImage:
 			var imageURL string
 			if part.Base64 != "" {
 				// Convert to data URI format
@@ -88,7 +88,7 @@ func convertPartsToOpenAIParts(parts []gains.ContentPart) ([]openai.ChatCompleti
 				if strings.HasPrefix(part.ImageURL, "http://") || strings.HasPrefix(part.ImageURL, "https://") {
 					data, mimeType, err := fetchImageFromURL(part.ImageURL)
 					if err != nil {
-						return nil, &gains.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
+						return nil, &ai.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
 					}
 					if part.MimeType != "" {
 						mimeType = part.MimeType

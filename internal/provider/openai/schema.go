@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 
 	"github.com/openai/openai-go"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
-func buildOpenAISchemaFormat(schema *gains.ResponseSchema) openai.ChatCompletionNewParamsResponseFormatUnion {
+func buildOpenAISchemaFormat(schema *ai.ResponseSchema) openai.ChatCompletionNewParamsResponseFormatUnion {
 	var schemaMap map[string]any
 	json.Unmarshal(schema.Schema, &schemaMap)
 

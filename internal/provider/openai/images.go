@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/openai/openai-go"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // GenerateImage generates images from a text prompt using DALL-E.
-func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains.ImageOption) (*gains.ImageResponse, error) {
-	options := gains.ApplyImageOptions(opts...)
+func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.ImageOption) (*ai.ImageResponse, error) {
+	options := ai.ApplyImageOptions(opts...)
 
 	// Determine model
 	model := DefaultImageModel
@@ -26,7 +26,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	// Apply size (default: 1024x1024)
 	size := options.Size
 	if size == "" {
-		size = gains.ImageSize1024x1024
+		size = ai.ImageSize1024x1024
 	}
 	params.Size = openai.ImageGenerateParamsSize(size)
 
@@ -50,7 +50,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	// Apply format
 	format := options.Format
 	if format == "" {
-		format = gains.ImageFormatURL
+		format = ai.ImageFormatURL
 	}
 	params.ResponseFormat = openai.ImageGenerateParamsResponseFormat(format)
 
@@ -61,14 +61,14 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	}
 
 	// Convert response
-	images := make([]gains.GeneratedImage, len(resp.Data))
+	images := make([]ai.GeneratedImage, len(resp.Data))
 	for i, img := range resp.Data {
-		images[i] = gains.GeneratedImage{
+		images[i] = ai.GeneratedImage{
 			URL:           img.URL,
 			Base64:        img.B64JSON,
 			RevisedPrompt: img.RevisedPrompt,
 		}
 	}
 
-	return &gains.ImageResponse{Images: images}, nil
+	return &ai.ImageResponse{Images: images}, nil
 }

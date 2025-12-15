@@ -5,10 +5,10 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
-func convertTools(tools []gains.Tool) []openai.ChatCompletionToolParam {
+func convertTools(tools []ai.Tool) []openai.ChatCompletionToolParam {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -30,13 +30,13 @@ func convertTools(tools []gains.Tool) []openai.ChatCompletionToolParam {
 	return result
 }
 
-func convertToolChoice(choice gains.ToolChoice) openai.ChatCompletionToolChoiceOptionUnionParam {
+func convertToolChoice(choice ai.ToolChoice) openai.ChatCompletionToolChoiceOptionUnionParam {
 	switch choice {
-	case gains.ToolChoiceNone:
+	case ai.ToolChoiceNone:
 		return openai.ChatCompletionToolChoiceOptionUnionParam{
 			OfAuto: openai.String("none"),
 		}
-	case gains.ToolChoiceRequired:
+	case ai.ToolChoiceRequired:
 		return openai.ChatCompletionToolChoiceOptionUnionParam{
 			OfAuto: openai.String("required"),
 		}
@@ -47,13 +47,13 @@ func convertToolChoice(choice gains.ToolChoice) openai.ChatCompletionToolChoiceO
 	}
 }
 
-func extractToolCalls(msg openai.ChatCompletionMessage) []gains.ToolCall {
+func extractToolCalls(msg openai.ChatCompletionMessage) []ai.ToolCall {
 	if len(msg.ToolCalls) == 0 {
 		return nil
 	}
-	result := make([]gains.ToolCall, len(msg.ToolCalls))
+	result := make([]ai.ToolCall, len(msg.ToolCalls))
 	for i, tc := range msg.ToolCalls {
-		result[i] = gains.ToolCall{
+		result[i] = ai.ToolCall{
 			ID:        tc.ID,
 			Name:      tc.Function.Name,
 			Arguments: tc.Function.Arguments,
@@ -62,13 +62,13 @@ func extractToolCalls(msg openai.ChatCompletionMessage) []gains.ToolCall {
 	return result
 }
 
-func extractToolCallsFromAccumulator(toolCalls []openai.ChatCompletionMessageToolCall) []gains.ToolCall {
+func extractToolCallsFromAccumulator(toolCalls []openai.ChatCompletionMessageToolCall) []ai.ToolCall {
 	if len(toolCalls) == 0 {
 		return nil
 	}
-	result := make([]gains.ToolCall, len(toolCalls))
+	result := make([]ai.ToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
-		result[i] = gains.ToolCall{
+		result[i] = ai.ToolCall{
 			ID:        tc.ID,
 			Name:      tc.Function.Name,
 			Arguments: tc.Function.Arguments,

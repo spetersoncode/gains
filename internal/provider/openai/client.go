@@ -5,10 +5,10 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
-// Client wraps the OpenAI SDK to implement gains.ChatProvider.
+// Client wraps the OpenAI SDK to implement ai.ChatProvider.
 type Client struct {
 	client *openai.Client
 	model  ChatModel
@@ -38,8 +38,8 @@ func WithModel(model ChatModel) ClientOption {
 }
 
 // Chat sends a conversation and returns a complete response.
-func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -70,7 +70,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	// Handle JSON mode / response schema
 	if options.ResponseSchema != nil {
 		params.ResponseFormat = buildOpenAISchemaFormat(options.ResponseSchema)
-	} else if options.ResponseFormat == gains.ResponseFormatJSON {
+	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &openai.ResponseFormatJSONObjectParam{
 				Type: "json_object",
@@ -83,10 +83,10 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		return nil, err
 	}
 
-	return &gains.Response{
+	return &ai.Response{
 		Content:      resp.Choices[0].Message.Content,
 		FinishReason: string(resp.Choices[0].FinishReason),
-		Usage: gains.Usage{
+		Usage: ai.Usage{
 			InputTokens:  int(resp.Usage.PromptTokens),
 			OutputTokens: int(resp.Usage.CompletionTokens),
 		},
@@ -95,8 +95,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 }
 
 // ChatStream sends a conversation and returns a channel of streaming events.
-func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -130,7 +130,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	// Handle JSON mode / response schema
 	if options.ResponseSchema != nil {
 		params.ResponseFormat = buildOpenAISchemaFormat(options.ResponseSchema)
-	} else if options.ResponseFormat == gains.ResponseFormatJSON {
+	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &openai.ResponseFormatJSONObjectParam{
 				Type: "json_object",
@@ -139,7 +139,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	}
 
 	stream := c.client.Chat.Completions.NewStreaming(ctx, params)
-	ch := make(chan gains.StreamEvent)
+	ch := make(chan ai.StreamEvent)
 
 	go func() {
 		defer close(ch)
@@ -150,25 +150,25 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 			acc.AddChunk(chunk)
 
 			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-				ch <- gains.StreamEvent{
+				ch <- ai.StreamEvent{
 					Delta: chunk.Choices[0].Delta.Content,
 				}
 			}
 		}
 
 		if err := stream.Err(); err != nil {
-			ch <- gains.StreamEvent{Err: err}
+			ch <- ai.StreamEvent{Err: err}
 			return
 		}
 
 		// Send final event with complete response
 		completion := acc.Choices[0]
-		ch <- gains.StreamEvent{
+		ch <- ai.StreamEvent{
 			Done: true,
-			Response: &gains.Response{
+			Response: &ai.Response{
 				Content:      completion.Message.Content,
 				FinishReason: string(completion.FinishReason),
-				Usage: gains.Usage{
+				Usage: ai.Usage{
 					InputTokens:  int(acc.Usage.PromptTokens),
 					OutputTokens: int(acc.Usage.CompletionTokens),
 				},
@@ -180,6 +180,6 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	return ch, nil
 }
 
-var _ gains.ChatProvider = (*Client)(nil)
-var _ gains.ImageProvider = (*Client)(nil)
-var _ gains.EmbeddingProvider = (*Client)(nil)
+var _ ai.ChatProvider = (*Client)(nil)
+var _ ai.ImageProvider = (*Client)(nil)
+var _ ai.EmbeddingProvider = (*Client)(nil)
