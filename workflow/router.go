@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -142,7 +143,8 @@ type ClassifierRouter struct {
 }
 
 // NewClassifierRouter creates a router that uses LLM classification.
-// The LLM response should match one of the route keys.
+// The LLM response should match one of the route keys (case-insensitive).
+// For more reliable classification, use WithClassifierSchema() option.
 func NewClassifierRouter(
 	name string,
 	provider gains.ChatProvider,
@@ -157,6 +159,34 @@ func NewClassifierRouter(
 		routes:   routes,
 		chatOpts: opts,
 	}
+}
+
+// ClassifierSchema returns a gains.Option that enforces structured output
+// for classification. Use with providers that support JSON schema (OpenAI, Anthropic).
+// Note: May not work with streaming on all providers.
+func ClassifierSchema(routes map[string]Step) gains.Option {
+	routeKeys := make([]any, 0, len(routes))
+	for key := range routes {
+		routeKeys = append(routeKeys, key)
+	}
+
+	schemaMap := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"classification": map[string]any{
+				"type": "string",
+				"enum": routeKeys,
+			},
+		},
+		"required": []string{"classification"},
+	}
+	schemaJSON, _ := json.Marshal(schemaMap)
+
+	return gains.WithResponseSchema(gains.ResponseSchema{
+		Name:        "classification",
+		Description: "Classification result",
+		Schema:      schemaJSON,
+	})
 }
 
 // Name returns the router name.
@@ -184,19 +214,30 @@ func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option
 		return nil, &StepError{StepName: c.name, Err: err}
 	}
 
-	classification := strings.TrimSpace(resp.Content)
+	classification, err := extractClassification(resp.Content)
+	if err != nil {
+		return nil, &StepError{StepName: c.name, Err: err}
+	}
 	state.Set(c.name+"_classification", classification)
 
-	// Find matching route
-	selectedStep, ok := c.routes[classification]
-	if !ok {
+	// Find matching route (case-insensitive)
+	var selectedStep Step
+	var matchedRoute string
+	for routeName, step := range c.routes {
+		if strings.EqualFold(routeName, classification) {
+			selectedStep = step
+			matchedRoute = routeName
+			break
+		}
+	}
+	if selectedStep == nil {
 		return nil, &StepError{
 			StepName: c.name,
-			Err:      fmt.Errorf("unknown classification: %s", classification),
+			Err:      fmt.Errorf("unknown classification: %q", classification),
 		}
 	}
 
-	state.Set(c.name+"_route", classification)
+	state.Set(c.name+"_route", matchedRoute)
 
 	return selectedStep.Run(ctx, state, opts...)
 }
@@ -240,18 +281,32 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 				emit(ch, Event{Type: EventStreamDelta, StepName: c.name, Delta: event.Delta})
 			}
 			if event.Done && event.Response != nil {
-				classification = strings.TrimSpace(event.Response.Content)
+				var err error
+				classification, err = extractClassification(event.Response.Content)
+				if err != nil {
+					emit(ch, Event{Type: EventError, StepName: c.name, Error: err})
+					return
+				}
 			}
 		}
 
 		state.Set(c.name+"_classification", classification)
 
-		selectedStep, ok := c.routes[classification]
-		if !ok {
+		// Find matching route (case-insensitive)
+		var selectedStep Step
+		var matchedRoute string
+		for routeName, step := range c.routes {
+			if strings.EqualFold(routeName, classification) {
+				selectedStep = step
+				matchedRoute = routeName
+				break
+			}
+		}
+		if selectedStep == nil {
 			emit(ch, Event{
 				Type:     EventError,
 				StepName: c.name,
-				Error:    fmt.Errorf("unknown classification: %s", classification),
+				Error:    fmt.Errorf("unknown classification: %q", classification),
 			})
 			return
 		}
@@ -259,10 +314,10 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 		emit(ch, Event{
 			Type:      EventRouteSelected,
 			StepName:  c.name,
-			RouteName: classification,
+			RouteName: matchedRoute,
 		})
 
-		state.Set(c.name+"_route", classification)
+		state.Set(c.name+"_route", matchedRoute)
 
 		// Forward events from selected step
 		stepEvents := selectedStep.RunStream(ctx, state, opts...)
@@ -272,4 +327,29 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 	}()
 
 	return ch
+}
+
+// extractClassification parses the LLM response to get the classification.
+// Handles both JSON structured output and plain text responses.
+func extractClassification(content string) (string, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return "", fmt.Errorf("empty classification response")
+	}
+
+	// Try to parse as JSON first (structured output)
+	if strings.HasPrefix(content, "{") {
+		var result struct {
+			Classification string `json:"classification"`
+		}
+		if err := json.Unmarshal([]byte(content), &result); err == nil && result.Classification != "" {
+			return strings.ToLower(result.Classification), nil
+		}
+	}
+
+	// Fall back to plain text parsing
+	classification := strings.ToLower(content)
+	// Strip trailing punctuation that models sometimes add
+	classification = strings.TrimRight(classification, ".,!?;:")
+	return classification, nil
 }

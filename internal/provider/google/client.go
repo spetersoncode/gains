@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spetersoncode/gains"
 	"google.golang.org/genai"
@@ -158,8 +159,23 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 		var finishReason string
 		var usage gains.Usage
 		var allParts []*genai.Part
+		var iterCount int
 
-		for resp := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
+		for resp, err := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
+			iterCount++
+			if err != nil {
+				ch <- gains.StreamEvent{Err: fmt.Errorf("stream error at iteration %d: %w", iterCount, err)}
+				return
+			}
+
+			// Check for content filtering/blocking
+			if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
+				ch <- gains.StreamEvent{
+					Err: &BlockedError{Reason: string(resp.PromptFeedback.BlockReason)},
+				}
+				return
+			}
+
 			if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 				for _, part := range resp.Candidates[0].Content.Parts {
 					allParts = append(allParts, part)
@@ -175,6 +191,12 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 				usage.InputTokens = int(resp.UsageMetadata.PromptTokenCount)
 				usage.OutputTokens = int(resp.UsageMetadata.CandidatesTokenCount)
 			}
+		}
+
+		// Debug: if no iterations happened, something is wrong
+		if iterCount == 0 {
+			ch <- gains.StreamEvent{Err: fmt.Errorf("stream returned no data")}
+			return
 		}
 
 		ch <- gains.StreamEvent{

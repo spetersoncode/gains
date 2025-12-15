@@ -187,3 +187,12 @@ func inferMimeTypeFromURL(url string) string {
 		return "image/jpeg" // Default fallback
 	}
 }
+
+// BlockedError indicates the request was blocked by content filtering.
+type BlockedError struct {
+	Reason string
+}
+
+func (e *BlockedError) Error() string {
+	return fmt.Sprintf("request blocked: %s", e.Reason)
+}
