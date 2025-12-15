@@ -4,7 +4,7 @@
 
 # gains
 
-**Go AI Native Scaffold** - A Go-idiomatic generative AI library. Under active development and not yet stable.
+**Go AI Native Scaffold** - A Go-idiomatic generative AI library. Not yet production ready.
 
 gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Inspired by langchain and langgraph, but built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
 
