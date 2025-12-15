@@ -17,6 +17,7 @@ import (
 
 const DefaultModel = "gpt-4o"
 const DefaultImageModel = "dall-e-3"
+const DefaultEmbeddingModel = "text-embedding-3-small"
 
 // Client wraps the OpenAI SDK to implement gains.ChatProvider.
 type Client struct {
@@ -244,6 +245,54 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	}
 
 	return &gains.ImageResponse{Images: images}, nil
+}
+
+// Embed generates embeddings for the provided texts using OpenAI's embedding API.
+func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.EmbeddingOption) (*gains.EmbeddingResponse, error) {
+	if len(texts) == 0 {
+		return nil, fmt.Errorf("at least one text is required for embedding")
+	}
+
+	options := gains.ApplyEmbeddingOptions(opts...)
+
+	// Determine model
+	model := DefaultEmbeddingModel
+	if options.Model != "" {
+		model = options.Model
+	}
+
+	// Build request params
+	params := openai.EmbeddingNewParams{
+		Model: openai.EmbeddingModel(model),
+		Input: openai.EmbeddingNewParamsInputUnion{
+			OfArrayOfStrings: texts,
+		},
+	}
+
+	// Apply dimensions (only for text-embedding-3-* models)
+	if options.Dimensions > 0 {
+		params.Dimensions = openai.Int(int64(options.Dimensions))
+	}
+
+	// Make API call
+	resp, err := c.client.Embeddings.New(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert response - embeddings are returned in order
+	embeddings := make([][]float64, len(resp.Data))
+	for i, data := range resp.Data {
+		embeddings[i] = data.Embedding
+	}
+
+	return &gains.EmbeddingResponse{
+		Embeddings: embeddings,
+		Usage: gains.Usage{
+			InputTokens:  int(resp.Usage.PromptTokens),
+			OutputTokens: 0, // Embeddings don't have output tokens
+		},
+	}, nil
 }
 
 func convertMessages(messages []gains.Message) []openai.ChatCompletionMessageParamUnion {
@@ -519,3 +568,4 @@ func addAdditionalPropertiesFalse(schema map[string]any) {
 
 var _ gains.ChatProvider = (*Client)(nil)
 var _ gains.ImageProvider = (*Client)(nil)
+var _ gains.EmbeddingProvider = (*Client)(nil)
