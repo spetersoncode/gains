@@ -48,7 +48,7 @@ import (
 
     ai "github.com/spetersoncode/gains"
     "github.com/spetersoncode/gains/client"
-    "github.com/spetersoncode/gains/models"
+    "github.com/spetersoncode/gains/model"
 )
 
 func main() {
@@ -59,7 +59,7 @@ func main() {
 
     resp, _ := c.Chat(ctx, []ai.Message{
         {Role: ai.RoleUser, Content: "Hello!"},
-    }, ai.WithModel(models.ClaudeSonnet45))
+    }, ai.WithModel(model.ClaudeSonnet45))
 
     fmt.Println(resp.Content)
 }
@@ -252,26 +252,26 @@ resp, _ := c.Chat(ctx, messages,
 
 ## Models
 
-The `models` package provides type-safe model selection with pricing info:
+The `model` package provides type-safe model selection with pricing info:
 
 ```go
-import "github.com/spetersoncode/gains/models"
+import "github.com/spetersoncode/gains/model"
 
 // Auto-updating aliases (recommended)
-ai.WithModel(models.ClaudeSonnet45)    // Anthropic
-ai.WithModel(models.GPT52)             // OpenAI
-ai.WithModel(models.Gemini25Flash)     // Google
+ai.WithModel(model.ClaudeSonnet45)    // Anthropic
+ai.WithModel(model.GPT52)             // OpenAI
+ai.WithModel(model.Gemini25Flash)     // Google
 
 // Pinned versions for production stability
-ai.WithModel(models.ClaudeSonnet45_20250929)
-ai.WithModel(models.Gemini3Pro)
+ai.WithModel(model.ClaudeSonnet45_20250929)
+ai.WithModel(model.Gemini3Pro)
 ```
 
 ## Request Options
 
 ```go
 resp, _ := c.Chat(ctx, messages,
-    ai.WithModel(models.ClaudeOpus45),
+    ai.WithModel(model.ClaudeOpus45),
     ai.WithMaxTokens(4096),
     ai.WithTemperature(0.7),
     ai.WithTools(tools),

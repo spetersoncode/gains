@@ -1,4 +1,4 @@
-package models
+package model
 
 // EmbeddingModel represents an embedding model from any provider.
 type EmbeddingModel struct {

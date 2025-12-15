@@ -1,4 +1,4 @@
-// Package models provides model constants for all supported AI providers.
+// Package model provides model constants for all supported AI providers.
 //
 // This package exposes typed model constants with pricing information
 // without requiring users to import provider-specific packages. Use this
@@ -11,15 +11,15 @@
 //	import (
 //	    "github.com/spetersoncode/gains"
 //	    "github.com/spetersoncode/gains/client"
-//	    "github.com/spetersoncode/gains/models"
+//	    "github.com/spetersoncode/gains/model"
 //	)
 //
 //	c, _ := client.New(ctx, client.Config{
 //	    Provider:  client.ProviderOpenAI,
 //	    APIKey:    os.Getenv("OPENAI_API_KEY"),
-//	    ChatModel: models.GPT52,
+//	    ChatModel: model.GPT52,
 //	})
-//	resp, err := c.Chat(ctx, messages, gains.WithModel(models.ClaudeSonnet45))
+//	resp, err := c.Chat(ctx, messages, gains.WithModel(model.ClaudeSonnet45))
 //
 // # Image Models
 //
@@ -28,7 +28,7 @@
 //	c, _ := client.New(ctx, client.Config{
 //	    Provider:   client.ProviderOpenAI,
 //	    APIKey:     os.Getenv("OPENAI_API_KEY"),
-//	    ImageModel: models.GPTImage1,
+//	    ImageModel: model.GPTImage1,
 //	})
 //
 // # Embedding Models
@@ -38,14 +38,14 @@
 //	c, _ := client.New(ctx, client.Config{
 //	    Provider:       client.ProviderOpenAI,
 //	    APIKey:         os.Getenv("OPENAI_API_KEY"),
-//	    EmbeddingModel: models.TextEmbedding3Small,
+//	    EmbeddingModel: model.TextEmbedding3Small,
 //	})
 //
 // # Pricing Information
 //
 // All models include pricing methods for cost estimation:
 //
-//	pricing := models.GPT52.Pricing()
+//	pricing := model.GPT52.Pricing()
 //	inputCost := float64(inputTokens) / 1_000_000 * pricing.InputPerMillion
 //	outputCost := float64(outputTokens) / 1_000_000 * pricing.OutputPerMillion
 //
@@ -53,13 +53,13 @@
 //
 // Some pricing fields are provider-specific. Use helper methods to check availability:
 //
-//	pricing := models.GPT52.Pricing()
+//	pricing := model.GPT52.Pricing()
 //	if pricing.HasCachedPricing() {
 //	    // OpenAI models support cached input pricing
 //	    cachedCost := float64(cachedTokens) / 1_000_000 * pricing.CachedInputPerMillion
 //	}
 //
-//	pricing := models.Gemini3Pro.Pricing()
+//	pricing := model.Gemini3Pro.Pricing()
 //	if pricing.HasLongContextPricing() {
 //	    // Google models have tiered pricing for >200K token contexts
 //	    longInputCost := float64(tokens) / 1_000_000 * pricing.InputPerMillionLong
@@ -72,4 +72,4 @@
 //   - Anthropic: Claude models (chat only)
 //   - OpenAI: GPT and O-series models (chat, image, embedding)
 //   - Google: Gemini and Imagen models (chat, image, embedding)
-package models
+package model

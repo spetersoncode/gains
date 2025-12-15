@@ -1,4 +1,4 @@
-package models
+package model
 
 // ImageModel represents an image generation model from any provider.
 type ImageModel struct {

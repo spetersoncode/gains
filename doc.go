@@ -21,7 +21,7 @@
 //   - [ImageProvider]: Generate images from text prompts
 //
 // Use the [github.com/spetersoncode/gains/client] package as the entry point
-// for provider access, and the [github.com/spetersoncode/gains/models] package
+// for provider access, and the [github.com/spetersoncode/gains/model] package
 // for model selection.
 //
 // # Basic Usage
@@ -67,7 +67,7 @@
 // Customize requests with functional options:
 //
 //	resp, err := c.Chat(ctx, messages,
-//	    ai.WithModel(models.ClaudeOpus45),
+//	    ai.WithModel(model.ClaudeOpus45),
 //	    ai.WithMaxTokens(1000),
 //	    ai.WithTemperature(0.7),
 //	)

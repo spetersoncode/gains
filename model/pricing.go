@@ -1,4 +1,4 @@
-package models
+package model
 
 // ChatPricing contains pricing per million tokens (USD) for chat models.
 // Fields are zero if not applicable to a specific provider's model.

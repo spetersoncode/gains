@@ -1,4 +1,4 @@
-package models
+package model
 
 // Provider identifies which AI provider a model belongs to.
 type Provider string
