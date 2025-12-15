@@ -242,7 +242,15 @@ func convertMessages(messages []gains.Message) ([]anthropic.MessageParam, []anth
 		case gains.RoleSystem:
 			system = append(system, anthropic.TextBlockParam{Text: msg.Content})
 		case gains.RoleUser:
-			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+			if msg.HasParts() {
+				blocks := convertPartsToAnthropicBlocks(msg.Parts)
+				result = append(result, anthropic.MessageParam{
+					Role:    anthropic.MessageParamRoleUser,
+					Content: blocks,
+				})
+			} else {
+				result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+			}
 		case gains.RoleAssistant:
 			if len(msg.ToolCalls) > 0 {
 				// Assistant message with tool calls
@@ -278,6 +286,31 @@ func convertMessages(messages []gains.Message) ([]anthropic.MessageParam, []anth
 	}
 
 	return result, system
+}
+
+func convertPartsToAnthropicBlocks(parts []gains.ContentPart) []anthropic.ContentBlockParamUnion {
+	var blocks []anthropic.ContentBlockParamUnion
+	for _, part := range parts {
+		switch part.Type {
+		case gains.ContentPartTypeText:
+			blocks = append(blocks, anthropic.NewTextBlock(part.Text))
+		case gains.ContentPartTypeImage:
+			if part.ImageURL != "" {
+				// URL-based image
+				blocks = append(blocks, anthropic.NewImageBlock(anthropic.URLImageSourceParam{
+					URL: part.ImageURL,
+				}))
+			} else if part.Base64 != "" {
+				// Base64-encoded image
+				mediaType := part.MimeType
+				if mediaType == "" {
+					mediaType = "image/jpeg" // Default
+				}
+				blocks = append(blocks, anthropic.NewImageBlockBase64(mediaType, part.Base64))
+			}
+		}
+	}
+	return blocks
 }
 
 func convertTools(tools []gains.Tool) []anthropic.ToolUnionParam {
