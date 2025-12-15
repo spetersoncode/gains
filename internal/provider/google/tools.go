@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"google.golang.org/genai"
 )
 
-func convertTools(tools []gains.Tool) []*genai.Tool {
+func convertTools(tools []ai.Tool) []*genai.Tool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -25,15 +25,15 @@ func convertTools(tools []gains.Tool) []*genai.Tool {
 	return []*genai.Tool{{FunctionDeclarations: funcs}}
 }
 
-func convertToolChoice(choice gains.ToolChoice) *genai.ToolConfig {
+func convertToolChoice(choice ai.ToolChoice) *genai.ToolConfig {
 	switch choice {
-	case gains.ToolChoiceNone:
+	case ai.ToolChoiceNone:
 		return &genai.ToolConfig{
 			FunctionCallingConfig: &genai.FunctionCallingConfig{
 				Mode: genai.FunctionCallingConfigModeNone,
 			},
 		}
-	case gains.ToolChoiceRequired:
+	case ai.ToolChoiceRequired:
 		return &genai.ToolConfig{
 			FunctionCallingConfig: &genai.FunctionCallingConfig{
 				Mode: genai.FunctionCallingConfigModeAny,
@@ -48,12 +48,12 @@ func convertToolChoice(choice gains.ToolChoice) *genai.ToolConfig {
 	}
 }
 
-func extractToolCalls(parts []*genai.Part) []gains.ToolCall {
-	var calls []gains.ToolCall
+func extractToolCalls(parts []*genai.Part) []ai.ToolCall {
+	var calls []ai.ToolCall
 	for i, part := range parts {
 		if part.FunctionCall != nil {
 			args, _ := json.Marshal(part.FunctionCall.Args)
-			calls = append(calls, gains.ToolCall{
+			calls = append(calls, ai.ToolCall{
 				ID:        fmt.Sprintf("call_%d_%s", i, part.FunctionCall.Name),
 				Name:      part.FunctionCall.Name,
 				Arguments: string(args),

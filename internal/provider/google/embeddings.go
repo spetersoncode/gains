@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"google.golang.org/genai"
 )
 
 // Embed generates embeddings for the provided texts using Google's embedding API.
-func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.EmbeddingOption) (*gains.EmbeddingResponse, error) {
+func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.EmbeddingOption) (*ai.EmbeddingResponse, error) {
 	if len(texts) == 0 {
-		return nil, fmt.Errorf("%w: at least one text is required for embedding", gains.ErrEmptyInput)
+		return nil, fmt.Errorf("%w: at least one text is required for embedding", ai.ErrEmptyInput)
 	}
 
-	options := gains.ApplyEmbeddingOptions(opts...)
+	options := ai.ApplyEmbeddingOptions(opts...)
 
 	// Determine model
 	model := DefaultEmbeddingModel
@@ -60,9 +60,9 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 		}
 	}
 
-	return &gains.EmbeddingResponse{
+	return &ai.EmbeddingResponse{
 		Embeddings: embeddings,
-		Usage: gains.Usage{
+		Usage: ai.Usage{
 			// Google doesn't return token usage for embeddings
 			InputTokens:  0,
 			OutputTokens: 0,

@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"google.golang.org/genai"
 )
 
-// Client wraps the Google GenAI SDK to implement gains.ChatProvider.
+// Client wraps the Google GenAI SDK to implement ai.ChatProvider.
 type Client struct {
 	client *genai.Client
 	model  ChatModel
@@ -44,8 +44,8 @@ func WithModel(model ChatModel) ClientOption {
 }
 
 // Chat sends a conversation and returns a complete response.
-func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -75,7 +75,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	if options.ResponseSchema != nil {
 		config.ResponseMIMEType = "application/json"
 		config.ResponseSchema = convertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
-	} else if options.ResponseFormat == gains.ResponseFormatJSON {
+	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		config.ResponseMIMEType = "application/json"
 	}
 
@@ -85,7 +85,7 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 	}
 
 	content := ""
-	var toolCalls []gains.ToolCall
+	var toolCalls []ai.ToolCall
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 		for _, part := range resp.Candidates[0].Content.Parts {
 			if part.Text != "" {
@@ -100,13 +100,13 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 		finishReason = string(resp.Candidates[0].FinishReason)
 	}
 
-	usage := gains.Usage{}
+	usage := ai.Usage{}
 	if resp.UsageMetadata != nil {
 		usage.InputTokens = int(resp.UsageMetadata.PromptTokenCount)
 		usage.OutputTokens = int(resp.UsageMetadata.CandidatesTokenCount)
 	}
 
-	return &gains.Response{
+	return &ai.Response{
 		Content:      content,
 		FinishReason: finishReason,
 		Usage:        usage,
@@ -115,8 +115,8 @@ func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gai
 }
 
 // ChatStream sends a conversation and returns a channel of streaming events.
-func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	options := gains.ApplyOptions(opts...)
+func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+	options := ai.ApplyOptions(opts...)
 	model := c.model
 	if options.Model != nil {
 		model = ChatModel(options.Model.String())
@@ -146,31 +146,31 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	if options.ResponseSchema != nil {
 		config.ResponseMIMEType = "application/json"
 		config.ResponseSchema = convertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
-	} else if options.ResponseFormat == gains.ResponseFormatJSON {
+	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		config.ResponseMIMEType = "application/json"
 	}
 
-	ch := make(chan gains.StreamEvent)
+	ch := make(chan ai.StreamEvent)
 
 	go func() {
 		defer close(ch)
 
 		var fullContent string
 		var finishReason string
-		var usage gains.Usage
+		var usage ai.Usage
 		var allParts []*genai.Part
 		var iterCount int
 
 		for resp, err := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
 			iterCount++
 			if err != nil {
-				ch <- gains.StreamEvent{Err: fmt.Errorf("stream error at iteration %d: %w", iterCount, err)}
+				ch <- ai.StreamEvent{Err: fmt.Errorf("stream error at iteration %d: %w", iterCount, err)}
 				return
 			}
 
 			// Check for content filtering/blocking
 			if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
-				ch <- gains.StreamEvent{
+				ch <- ai.StreamEvent{
 					Err: &BlockedError{Reason: string(resp.PromptFeedback.BlockReason)},
 				}
 				return
@@ -180,7 +180,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 				for _, part := range resp.Candidates[0].Content.Parts {
 					allParts = append(allParts, part)
 					if part.Text != "" {
-						ch <- gains.StreamEvent{Delta: part.Text}
+						ch <- ai.StreamEvent{Delta: part.Text}
 						fullContent += part.Text
 					}
 				}
@@ -195,13 +195,13 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 
 		// Debug: if no iterations happened, something is wrong
 		if iterCount == 0 {
-			ch <- gains.StreamEvent{Err: fmt.Errorf("stream returned no data")}
+			ch <- ai.StreamEvent{Err: fmt.Errorf("stream returned no data")}
 			return
 		}
 
-		ch <- gains.StreamEvent{
+		ch <- ai.StreamEvent{
 			Done: true,
-			Response: &gains.Response{
+			Response: &ai.Response{
 				Content:      fullContent,
 				FinishReason: finishReason,
 				Usage:        usage,
@@ -213,6 +213,6 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	return ch, nil
 }
 
-var _ gains.ChatProvider = (*Client)(nil)
-var _ gains.ImageProvider = (*Client)(nil)
-var _ gains.EmbeddingProvider = (*Client)(nil)
+var _ ai.ChatProvider = (*Client)(nil)
+var _ ai.ImageProvider = (*Client)(nil)
+var _ ai.EmbeddingProvider = (*Client)(nil)

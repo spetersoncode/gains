@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"google.golang.org/genai"
 )
 
 // GenerateImage generates images from a text prompt using Imagen.
-func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains.ImageOption) (*gains.ImageResponse, error) {
-	options := gains.ApplyImageOptions(opts...)
+func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.ImageOption) (*ai.ImageResponse, error) {
+	options := ai.ApplyImageOptions(opts...)
 
 	// Determine model
 	model := DefaultImageModel
@@ -40,7 +40,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 	}
 
 	// Convert response
-	images := make([]gains.GeneratedImage, len(resp.GeneratedImages))
+	images := make([]ai.GeneratedImage, len(resp.GeneratedImages))
 	for i, img := range resp.GeneratedImages {
 		var b64 string
 
@@ -49,23 +49,23 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 			b64 = base64.StdEncoding.EncodeToString(img.Image.ImageBytes)
 		}
 
-		images[i] = gains.GeneratedImage{
+		images[i] = ai.GeneratedImage{
 			Base64: b64,
 			// Imagen doesn't provide URLs or revised prompts
 		}
 	}
 
-	return &gains.ImageResponse{Images: images}, nil
+	return &ai.ImageResponse{Images: images}, nil
 }
 
 // convertSizeToAspectRatio maps ImageSize to Imagen aspect ratio strings.
-func convertSizeToAspectRatio(size gains.ImageSize) string {
+func convertSizeToAspectRatio(size ai.ImageSize) string {
 	switch size {
-	case gains.ImageSize1024x1024:
+	case ai.ImageSize1024x1024:
 		return "1:1"
-	case gains.ImageSize1024x1792:
+	case ai.ImageSize1024x1792:
 		return "9:16" // Portrait
-	case gains.ImageSize1792x1024:
+	case ai.ImageSize1792x1024:
 		return "16:9" // Landscape
 	default:
 		return "1:1"

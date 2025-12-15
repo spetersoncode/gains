@@ -8,25 +8,25 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"google.golang.org/genai"
 )
 
-func convertMessages(messages []gains.Message) ([]*genai.Content, error) {
+func convertMessages(messages []ai.Message) ([]*genai.Content, error) {
 	var contents []*genai.Content
 
 	for _, msg := range messages {
 		role := "user"
 		switch msg.Role {
-		case gains.RoleUser:
+		case ai.RoleUser:
 			role = "user"
-		case gains.RoleAssistant:
+		case ai.RoleAssistant:
 			role = "model"
-		case gains.RoleSystem:
+		case ai.RoleSystem:
 			// Gemini handles system prompts differently - prepend to first user message
 			// For simplicity, treat as user message with context
 			role = "user"
-		case gains.RoleTool:
+		case ai.RoleTool:
 			// Tool results are sent as user messages with FunctionResponse parts
 			role = "user"
 		}
@@ -82,18 +82,18 @@ func convertMessages(messages []gains.Message) ([]*genai.Content, error) {
 	return contents, nil
 }
 
-func convertPartsToGoogleParts(parts []gains.ContentPart) ([]*genai.Part, error) {
+func convertPartsToGoogleParts(parts []ai.ContentPart) ([]*genai.Part, error) {
 	var result []*genai.Part
 	for _, part := range parts {
 		switch part.Type {
-		case gains.ContentPartTypeText:
+		case ai.ContentPartTypeText:
 			result = append(result, &genai.Part{Text: part.Text})
-		case gains.ContentPartTypeImage:
+		case ai.ContentPartTypeImage:
 			if part.Base64 != "" {
 				// Decode base64 to bytes
 				data, err := base64.StdEncoding.DecodeString(part.Base64)
 				if err != nil {
-					return nil, &gains.ImageError{Op: "decode", URL: "base64", Err: err}
+					return nil, &ai.ImageError{Op: "decode", URL: "base64", Err: err}
 				}
 				mimeType := part.MimeType
 				if mimeType == "" {
@@ -122,7 +122,7 @@ func convertPartsToGoogleParts(parts []gains.ContentPart) ([]*genai.Part, error)
 					// HTTP/HTTPS URLs need to be fetched and converted to inline data
 					data, mimeType, err := fetchImageFromURL(part.ImageURL)
 					if err != nil {
-						return nil, &gains.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
+						return nil, &ai.ImageError{Op: "fetch", URL: part.ImageURL, Err: err}
 					}
 					if part.MimeType != "" {
 						mimeType = part.MimeType
