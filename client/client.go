@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/provider/anthropic"
@@ -70,6 +71,9 @@ type Config struct {
 	// If nil, uses default retry configuration (10 retries with exponential backoff).
 	// Use retry.Disabled() to disable retries.
 	RetryConfig *retry.Config
+	// Events is an optional channel for receiving client operation events.
+	// Events are sent non-blocking; if the channel is full, events are dropped.
+	Events chan<- Event
 }
 
 // ErrFeatureNotSupported is returned when a feature is unavailable for the provider.
@@ -102,6 +106,7 @@ type Client struct {
 	imageModel     gains.Model
 	embeddingModel gains.Model
 	retryConfig    retry.Config
+	events         chan<- Event
 }
 
 // New creates a unified client with the given configuration.
@@ -178,23 +183,103 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		imageModel:     cfg.ImageModel,
 		embeddingModel: cfg.EmbeddingModel,
 		retryConfig:    retryConfig,
+		events:         cfg.Events,
 	}, nil
 }
 
 // Chat sends a conversation and returns a complete response.
 // Automatically retries on transient errors according to the client's retry configuration.
 func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
-	return retry.Do(ctx, c.retryConfig, func() (*gains.Response, error) {
+	start := time.Now()
+	emit(c.events, Event{
+		Type:      EventRequestStart,
+		Operation: "chat",
+		Provider:  c.provider,
+	})
+
+	// Create retry events channel if client events are enabled
+	var retryEvents chan retry.Event
+	if c.events != nil {
+		retryEvents = make(chan retry.Event, 10)
+		go c.forwardRetryEvents(retryEvents, "chat")
+	}
+
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.Response, error) {
 		return c.chatProvider.Chat(ctx, messages, opts...)
 	})
+
+	if retryEvents != nil {
+		close(retryEvents)
+	}
+
+	if err != nil {
+		emit(c.events, Event{
+			Type:      EventRequestError,
+			Operation: "chat",
+			Provider:  c.provider,
+			Duration:  time.Since(start),
+			Error:     err,
+		})
+		return nil, err
+	}
+
+	var usage *gains.Usage
+	if resp != nil {
+		usage = &resp.Usage
+	}
+	emit(c.events, Event{
+		Type:      EventRequestComplete,
+		Operation: "chat",
+		Provider:  c.provider,
+		Duration:  time.Since(start),
+		Usage:     usage,
+	})
+	return resp, nil
 }
 
 // ChatStream sends a conversation and returns a channel of streaming events.
 // Automatically retries on transient errors when establishing the stream connection.
 func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	return retry.DoStream(ctx, c.retryConfig, func() (<-chan gains.StreamEvent, error) {
+	start := time.Now()
+	emit(c.events, Event{
+		Type:      EventRequestStart,
+		Operation: "chat_stream",
+		Provider:  c.provider,
+	})
+
+	// Create retry events channel if client events are enabled
+	var retryEvents chan retry.Event
+	if c.events != nil {
+		retryEvents = make(chan retry.Event, 10)
+		go c.forwardRetryEvents(retryEvents, "chat_stream")
+	}
+
+	ch, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan gains.StreamEvent, error) {
 		return c.chatProvider.ChatStream(ctx, messages, opts...)
 	})
+
+	if retryEvents != nil {
+		close(retryEvents)
+	}
+
+	if err != nil {
+		emit(c.events, Event{
+			Type:      EventRequestError,
+			Operation: "chat_stream",
+			Provider:  c.provider,
+			Duration:  time.Since(start),
+			Error:     err,
+		})
+		return nil, err
+	}
+
+	emit(c.events, Event{
+		Type:      EventRequestComplete,
+		Operation: "chat_stream",
+		Provider:  c.provider,
+		Duration:  time.Since(start),
+	})
+	return ch, nil
 }
 
 // GenerateImage creates images from a text prompt.
@@ -208,14 +293,51 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 		}
 	}
 
+	start := time.Now()
+	emit(c.events, Event{
+		Type:      EventRequestStart,
+		Operation: "image",
+		Provider:  c.provider,
+	})
+
 	// Prepend default model if set
 	if c.imageModel != nil {
 		opts = append([]gains.ImageOption{gains.WithImageModel(c.imageModel)}, opts...)
 	}
 
-	return retry.Do(ctx, c.retryConfig, func() (*gains.ImageResponse, error) {
+	// Create retry events channel if client events are enabled
+	var retryEvents chan retry.Event
+	if c.events != nil {
+		retryEvents = make(chan retry.Event, 10)
+		go c.forwardRetryEvents(retryEvents, "image")
+	}
+
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.ImageResponse, error) {
 		return c.imageProvider.GenerateImage(ctx, prompt, opts...)
 	})
+
+	if retryEvents != nil {
+		close(retryEvents)
+	}
+
+	if err != nil {
+		emit(c.events, Event{
+			Type:      EventRequestError,
+			Operation: "image",
+			Provider:  c.provider,
+			Duration:  time.Since(start),
+			Error:     err,
+		})
+		return nil, err
+	}
+
+	emit(c.events, Event{
+		Type:      EventRequestComplete,
+		Operation: "image",
+		Provider:  c.provider,
+		Duration:  time.Since(start),
+	})
+	return resp, nil
 }
 
 // Embed generates embeddings for the provided texts.
@@ -229,14 +351,51 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 		}
 	}
 
+	start := time.Now()
+	emit(c.events, Event{
+		Type:      EventRequestStart,
+		Operation: "embed",
+		Provider:  c.provider,
+	})
+
 	// Prepend default model if set
 	if c.embeddingModel != nil {
 		opts = append([]gains.EmbeddingOption{gains.WithEmbeddingModel(c.embeddingModel)}, opts...)
 	}
 
-	return retry.Do(ctx, c.retryConfig, func() (*gains.EmbeddingResponse, error) {
+	// Create retry events channel if client events are enabled
+	var retryEvents chan retry.Event
+	if c.events != nil {
+		retryEvents = make(chan retry.Event, 10)
+		go c.forwardRetryEvents(retryEvents, "embed")
+	}
+
+	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*gains.EmbeddingResponse, error) {
 		return c.embedProvider.Embed(ctx, texts, opts...)
 	})
+
+	if retryEvents != nil {
+		close(retryEvents)
+	}
+
+	if err != nil {
+		emit(c.events, Event{
+			Type:      EventRequestError,
+			Operation: "embed",
+			Provider:  c.provider,
+			Duration:  time.Since(start),
+			Error:     err,
+		})
+		return nil, err
+	}
+
+	emit(c.events, Event{
+		Type:      EventRequestComplete,
+		Operation: "embed",
+		Provider:  c.provider,
+		Duration:  time.Since(start),
+	})
+	return resp, nil
 }
 
 // SupportsFeature returns true if the client's provider supports the given feature.
@@ -256,4 +415,18 @@ func (c *Client) SupportsFeature(f Feature) bool {
 // Provider returns the name of the underlying provider.
 func (c *Client) Provider() ProviderName {
 	return c.provider
+}
+
+// forwardRetryEvents reads from a retry events channel and forwards events
+// to the client's event channel as EventRetry events.
+func (c *Client) forwardRetryEvents(retryEvents <-chan retry.Event, operation string) {
+	for re := range retryEvents {
+		reCopy := re // Copy to avoid pointer issues
+		emit(c.events, Event{
+			Type:       EventRetry,
+			Operation:  operation,
+			Provider:   c.provider,
+			RetryEvent: &reCopy,
+		})
+	}
 }
