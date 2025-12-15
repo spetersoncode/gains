@@ -9,6 +9,7 @@ import (
 )
 
 const DefaultModel = "gpt-4o"
+const DefaultImageModel = "dall-e-3"
 
 // Client wraps the OpenAI SDK to implement gains.ChatProvider.
 type Client struct {
@@ -136,6 +137,72 @@ func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts 
 	return ch, nil
 }
 
+// GenerateImage generates images from a text prompt using DALL-E.
+func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains.ImageOption) (*gains.ImageResponse, error) {
+	options := gains.ApplyImageOptions(opts...)
+
+	// Determine model
+	model := DefaultImageModel
+	if options.Model != "" {
+		model = options.Model
+	}
+
+	// Build request params
+	params := openai.ImageGenerateParams{
+		Model:  openai.ImageModel(model),
+		Prompt: prompt,
+	}
+
+	// Apply size (default: 1024x1024)
+	size := options.Size
+	if size == "" {
+		size = gains.ImageSize1024x1024
+	}
+	params.Size = openai.ImageGenerateParamsSize(size)
+
+	// Apply count (DALL-E 3 only supports n=1)
+	n := options.Count
+	if n <= 0 {
+		n = 1
+	}
+	params.N = openai.Int(int64(n))
+
+	// Apply quality
+	if options.Quality != "" {
+		params.Quality = openai.ImageGenerateParamsQuality(options.Quality)
+	}
+
+	// Apply style
+	if options.Style != "" {
+		params.Style = openai.ImageGenerateParamsStyle(options.Style)
+	}
+
+	// Apply format
+	format := options.Format
+	if format == "" {
+		format = gains.ImageFormatURL
+	}
+	params.ResponseFormat = openai.ImageGenerateParamsResponseFormat(format)
+
+	// Make API call
+	resp, err := c.client.Images.Generate(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert response
+	images := make([]gains.GeneratedImage, len(resp.Data))
+	for i, img := range resp.Data {
+		images[i] = gains.GeneratedImage{
+			URL:           img.URL,
+			Base64:        img.B64JSON,
+			RevisedPrompt: img.RevisedPrompt,
+		}
+	}
+
+	return &gains.ImageResponse{Images: images}, nil
+}
+
 func convertMessages(messages []gains.Message) []openai.ChatCompletionMessageParamUnion {
 	result := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
@@ -154,3 +221,4 @@ func convertMessages(messages []gains.Message) []openai.ChatCompletionMessagePar
 }
 
 var _ gains.ChatProvider = (*Client)(nil)
+var _ gains.ImageProvider = (*Client)(nil)

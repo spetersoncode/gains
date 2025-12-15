@@ -29,7 +29,11 @@ func main() {
 	// OpenAI
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		fmt.Println("\n=== OpenAI ===")
-		testProvider(openai.New(key), ctx, prompt)
+		openaiClient := openai.New(key)
+		testProvider(openaiClient, ctx, prompt)
+
+		fmt.Println("\n=== OpenAI Image Generation ===")
+		testImageProvider(openaiClient, ctx)
 	}
 
 	// Google
@@ -40,6 +44,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Google client error: %v\n", err)
 		} else {
 			testProvider(googleClient, ctx, prompt)
+
+			fmt.Println("\n=== Google Image Generation ===")
+			testImageProvider(googleClient, ctx)
 		}
 	}
 }
@@ -61,6 +68,29 @@ func testProvider(client gains.ChatProvider, ctx context.Context, messages []gai
 			fmt.Printf("\n[Tokens: %d in, %d out]\n",
 				event.Response.Usage.InputTokens,
 				event.Response.Usage.OutputTokens)
+		}
+	}
+}
+
+func testImageProvider(client gains.ImageProvider, ctx context.Context) {
+	resp, err := client.GenerateImage(ctx, "A serene mountain landscape at sunset with a calm lake reflection",
+		gains.WithImageSize(gains.ImageSize1024x1024),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	for i, img := range resp.Images {
+		fmt.Printf("Image %d:\n", i+1)
+		if img.URL != "" {
+			fmt.Printf("  URL: %s\n", img.URL)
+		}
+		if img.Base64 != "" {
+			fmt.Printf("  Base64: %d bytes\n", len(img.Base64))
+		}
+		if img.RevisedPrompt != "" {
+			fmt.Printf("  Revised prompt: %s\n", img.RevisedPrompt)
 		}
 	}
 }
