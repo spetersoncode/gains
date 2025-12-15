@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	ai "github.com/spetersoncode/gains"
@@ -121,6 +122,37 @@ func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.tools)
+}
+
+// TypedHandler is a function that executes a tool call with typed arguments.
+type TypedHandler[T any] func(ctx context.Context, args T) (string, error)
+
+// RegisterFunc registers a tool with a typed handler that automatically
+// unmarshals the arguments JSON into the specified type T.
+// This provides a cleaner API compared to manually unmarshaling in each handler.
+func RegisterFunc[T any](r *Registry, name, description string, params json.RawMessage, fn TypedHandler[T]) error {
+	tool := ai.Tool{
+		Name:        name,
+		Description: description,
+		Parameters:  params,
+	}
+
+	handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
+		var args T
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return "", err
+		}
+		return fn(ctx, args)
+	}
+
+	return r.Register(tool, handler)
+}
+
+// MustRegisterFunc is like RegisterFunc but panics on error.
+func MustRegisterFunc[T any](r *Registry, name, description string, params json.RawMessage, fn TypedHandler[T]) {
+	if err := RegisterFunc(r, name, description, params, fn); err != nil {
+		panic(err)
+	}
 }
 
 // Execute runs the handler for a tool call and returns a ToolResult.

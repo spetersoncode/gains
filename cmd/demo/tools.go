@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -10,31 +9,28 @@ import (
 	"github.com/spetersoncode/gains/client"
 )
 
+// ToolWeatherArgs defines the parameters for the weather tool
+type ToolWeatherArgs struct {
+	Location string `json:"location"`
+	Unit     string `json:"unit"`
+}
+
 func demoToolCalling(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│          Tool Calling Demo              │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	// Define a weather tool
+	// Define a weather tool using struct-based schema generation
 	tools := []ai.Tool{
 		{
 			Name:        "get_weather",
 			Description: "Get the current weather for a location",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"location": {
-						"type": "string",
-						"description": "The city name, e.g. San Francisco"
-					},
-					"unit": {
-						"type": "string",
-						"enum": ["celsius", "fahrenheit"],
-						"description": "The temperature unit"
-					}
-				},
-				"required": ["location"]
-			}`),
+			Parameters: ai.SchemaFrom[ToolWeatherArgs]().
+				Desc("location", "The city name, e.g. San Francisco").
+				Required("location").
+				Desc("unit", "The temperature unit").
+				Enum("unit", "celsius", "fahrenheit").
+				Build(),
 		},
 	}
 

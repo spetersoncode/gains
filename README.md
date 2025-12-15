@@ -107,19 +107,21 @@ for event := range stream {
 
 ## Tool Calling
 
-Define tools and let the model invoke them:
+Define tools using struct-based schema generation:
 
 ```go
+type WeatherArgs struct {
+    Location string `json:"location"`
+    Unit     string `json:"unit"`
+}
+
 tools := []ai.Tool{{
     Name:        "get_weather",
     Description: "Get current weather for a location",
-    Parameters: map[string]any{
-        "type": "object",
-        "properties": map[string]any{
-            "location": map[string]any{"type": "string"},
-        },
-        "required": []string{"location"},
-    },
+    Parameters: ai.SchemaFrom[WeatherArgs]().
+        Desc("location", "The city name").Required("location").
+        Desc("unit", "Temperature unit").Enum("unit", "celsius", "fahrenheit").
+        Build(),
 }}
 
 resp, _ := c.Chat(ctx, messages, ai.WithTools(tools))
@@ -131,21 +133,26 @@ for _, call := range resp.ToolCalls {
 
 ## Agent Orchestration
 
-The agent package handles autonomous tool-calling loops:
+The agent package handles autonomous tool-calling loops with typed handlers:
 
 ```go
 import "github.com/spetersoncode/gains/agent"
 
-// Create a tool registry
+type SearchArgs struct {
+    Query string `json:"query"`
+}
+
+// Create a tool registry with typed handler
 registry := agent.NewRegistry()
-registry.MustRegister(ai.Tool{
-    Name:        "search",
-    Description: "Search the web",
-    Parameters:  searchParams,
-}, func(ctx context.Context, call ai.ToolCall) (string, error) {
-    // Execute search...
-    return results, nil
-})
+agent.MustRegisterFunc(registry, "search", "Search the web",
+    ai.SchemaFrom[SearchArgs]().
+        Desc("query", "Search query").Required("query").
+        Build(),
+    func(ctx context.Context, args SearchArgs) (string, error) {
+        // args.Query is already parsed
+        return results, nil
+    },
+)
 
 // Create and run agent
 a := agent.New(chatProvider, registry)
