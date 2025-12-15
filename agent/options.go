@@ -4,18 +4,18 @@ import (
 	"context"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // ApproverFunc is called when a tool call requires approval.
 // It returns true to approve the call, or false with a reason to reject it.
 // The rejection reason is sent back to the model as an error result.
-type ApproverFunc func(ctx context.Context, call gains.ToolCall) (approved bool, reason string)
+type ApproverFunc func(ctx context.Context, call ai.ToolCall) (approved bool, reason string)
 
 // StopFunc is a custom predicate to determine if the agent should stop.
 // It receives the current step number and the latest response.
 // Return true to stop the agent.
-type StopFunc func(step int, response *gains.Response) bool
+type StopFunc func(step int, response *ai.Response) bool
 
 // Options contains configuration for agent execution.
 type Options struct {
@@ -49,7 +49,7 @@ type Options struct {
 	StopPredicate StopFunc
 
 	// ChatOptions are passed through to the underlying ChatProvider.
-	ChatOptions []gains.Option
+	ChatOptions []ai.Option
 }
 
 // Option is a functional option for configuring agent execution.
@@ -115,30 +115,30 @@ func WithStopPredicate(fn StopFunc) Option {
 
 // WithChatOptions passes options through to the ChatProvider.
 // These options are applied to every chat call made by the agent.
-func WithChatOptions(opts ...gains.Option) Option {
+func WithChatOptions(opts ...ai.Option) Option {
 	return func(o *Options) {
 		o.ChatOptions = append(o.ChatOptions, opts...)
 	}
 }
 
 // WithModel is a convenience option to set the model for chat calls.
-func WithModel(model gains.Model) Option {
+func WithModel(model ai.Model) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithModel(model))
+		o.ChatOptions = append(o.ChatOptions, ai.WithModel(model))
 	}
 }
 
 // WithMaxTokens is a convenience option to set max tokens for chat calls.
 func WithMaxTokens(n int) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithMaxTokens(n))
+		o.ChatOptions = append(o.ChatOptions, ai.WithMaxTokens(n))
 	}
 }
 
 // WithTemperature is a convenience option to set temperature for chat calls.
 func WithTemperature(t float64) Option {
 	return func(o *Options) {
-		o.ChatOptions = append(o.ChatOptions, gains.WithTemperature(t))
+		o.ChatOptions = append(o.ChatOptions, ai.WithTemperature(t))
 	}
 }
 

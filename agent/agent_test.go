@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockProvider implements gains.ChatProvider for testing.
+// mockProvider implements ai.ChatProvider for testing.
 type mockProvider struct {
 	responses []mockResponse
 	callCount int
@@ -22,36 +22,36 @@ type mockProvider struct {
 
 type mockResponse struct {
 	content   string
-	toolCalls []gains.ToolCall
+	toolCalls []ai.ToolCall
 	err       error
 }
 
-func (m *mockProvider) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
+func (m *mockProvider) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
 	if m.callCount >= len(m.responses) {
-		return &gains.Response{Content: "No more responses"}, nil
+		return &ai.Response{Content: "No more responses"}, nil
 	}
 	resp := m.responses[m.callCount]
 	m.callCount++
 	if resp.err != nil {
 		return nil, resp.err
 	}
-	return &gains.Response{
+	return &ai.Response{
 		Content:   resp.content,
 		ToolCalls: resp.toolCalls,
-		Usage:     gains.Usage{InputTokens: 10, OutputTokens: 20},
+		Usage:     ai.Usage{InputTokens: 10, OutputTokens: 20},
 	}, nil
 }
 
-func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	ch := make(chan gains.StreamEvent)
+func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+	ch := make(chan ai.StreamEvent)
 
 	if m.callCount >= len(m.responses) {
 		go func() {
 			defer close(ch)
-			ch <- gains.StreamEvent{
+			ch <- ai.StreamEvent{
 				Delta: "No more responses",
 				Done:  true,
-				Response: &gains.Response{
+				Response: &ai.Response{
 					Content: "No more responses",
 				},
 			}
@@ -65,7 +65,7 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 	if resp.err != nil {
 		go func() {
 			defer close(ch)
-			ch <- gains.StreamEvent{Err: resp.err}
+			ch <- ai.StreamEvent{Err: resp.err}
 		}()
 		return ch, nil
 	}
@@ -76,17 +76,17 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 		for _, c := range resp.content {
 			select {
 			case <-ctx.Done():
-				ch <- gains.StreamEvent{Err: ctx.Err()}
+				ch <- ai.StreamEvent{Err: ctx.Err()}
 				return
-			case ch <- gains.StreamEvent{Delta: string(c)}:
+			case ch <- ai.StreamEvent{Delta: string(c)}:
 			}
 		}
-		ch <- gains.StreamEvent{
+		ch <- ai.StreamEvent{
 			Done: true,
-			Response: &gains.Response{
+			Response: &ai.Response{
 				Content:   resp.content,
 				ToolCalls: resp.toolCalls,
-				Usage:     gains.Usage{InputTokens: 10, OutputTokens: 20},
+				Usage:     ai.Usage{InputTokens: 10, OutputTokens: 20},
 			},
 		}
 	}()
@@ -99,8 +99,8 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []gains.Message,
 func TestRegistry_Register(t *testing.T) {
 	t.Run("registers tool successfully", func(t *testing.T) {
 		r := NewRegistry()
-		tool := gains.Tool{Name: "test_tool", Description: "A test tool"}
-		handler := func(ctx context.Context, call gains.ToolCall) (string, error) {
+		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
@@ -112,8 +112,8 @@ func TestRegistry_Register(t *testing.T) {
 
 	t.Run("returns error for duplicate registration", func(t *testing.T) {
 		r := NewRegistry()
-		tool := gains.Tool{Name: "test_tool", Description: "A test tool"}
-		handler := func(ctx context.Context, call gains.ToolCall) (string, error) {
+		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
@@ -130,8 +130,8 @@ func TestRegistry_Register(t *testing.T) {
 func TestRegistry_MustRegister(t *testing.T) {
 	t.Run("panics on duplicate registration", func(t *testing.T) {
 		r := NewRegistry()
-		tool := gains.Tool{Name: "test_tool", Description: "A test tool"}
-		handler := func(ctx context.Context, call gains.ToolCall) (string, error) {
+		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
@@ -145,8 +145,8 @@ func TestRegistry_MustRegister(t *testing.T) {
 
 func TestRegistry_Get(t *testing.T) {
 	r := NewRegistry()
-	tool := gains.Tool{Name: "test_tool", Description: "A test tool"}
-	handler := func(ctx context.Context, call gains.ToolCall) (string, error) {
+	tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+	handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 		return "result", nil
 	}
 	r.MustRegister(tool, handler)
@@ -166,8 +166,8 @@ func TestRegistry_Get(t *testing.T) {
 
 func TestRegistry_Tools(t *testing.T) {
 	r := NewRegistry()
-	r.MustRegister(gains.Tool{Name: "tool1"}, func(ctx context.Context, call gains.ToolCall) (string, error) { return "", nil })
-	r.MustRegister(gains.Tool{Name: "tool2"}, func(ctx context.Context, call gains.ToolCall) (string, error) { return "", nil })
+	r.MustRegister(ai.Tool{Name: "tool1"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "", nil })
+	r.MustRegister(ai.Tool{Name: "tool2"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "", nil })
 
 	tools := r.Tools()
 	assert.Len(t, tools, 2)
@@ -184,13 +184,13 @@ func TestRegistry_Execute(t *testing.T) {
 	t.Run("executes handler successfully", func(t *testing.T) {
 		r := NewRegistry()
 		r.MustRegister(
-			gains.Tool{Name: "test_tool"},
-			func(ctx context.Context, call gains.ToolCall) (string, error) {
+			ai.Tool{Name: "test_tool"},
+			func(ctx context.Context, call ai.ToolCall) (string, error) {
 				return "success: " + call.Arguments, nil
 			},
 		)
 
-		result, err := r.Execute(context.Background(), gains.ToolCall{
+		result, err := r.Execute(context.Background(), ai.ToolCall{
 			ID:        "call_1",
 			Name:      "test_tool",
 			Arguments: `{"key":"value"}`,
@@ -205,13 +205,13 @@ func TestRegistry_Execute(t *testing.T) {
 	t.Run("returns error result when handler fails", func(t *testing.T) {
 		r := NewRegistry()
 		r.MustRegister(
-			gains.Tool{Name: "failing_tool"},
-			func(ctx context.Context, call gains.ToolCall) (string, error) {
+			ai.Tool{Name: "failing_tool"},
+			func(ctx context.Context, call ai.ToolCall) (string, error) {
 				return "", errors.New("handler error")
 			},
 		)
 
-		result, err := r.Execute(context.Background(), gains.ToolCall{
+		result, err := r.Execute(context.Background(), ai.ToolCall{
 			ID:   "call_1",
 			Name: "failing_tool",
 		})
@@ -225,7 +225,7 @@ func TestRegistry_Execute(t *testing.T) {
 	t.Run("returns error for unknown tool", func(t *testing.T) {
 		r := NewRegistry()
 
-		_, err := r.Execute(context.Background(), gains.ToolCall{
+		_, err := r.Execute(context.Background(), ai.ToolCall{
 			ID:   "call_1",
 			Name: "unknown_tool",
 		})
@@ -274,8 +274,8 @@ func TestAgent_Run_SimpleConversation(t *testing.T) {
 	registry := NewRegistry()
 	agent := New(provider, registry)
 
-	result, err := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Hi"},
+	result, err := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Hi"},
 	})
 
 	require.NoError(t, err)
@@ -289,7 +289,7 @@ func TestAgent_Run_WithToolCalls(t *testing.T) {
 		responses: []mockResponse{
 			{
 				content: "Let me check the weather.",
-				toolCalls: []gains.ToolCall{
+				toolCalls: []ai.ToolCall{
 					{ID: "call_1", Name: "get_weather", Arguments: `{"location":"Tokyo"}`},
 				},
 			},
@@ -299,16 +299,16 @@ func TestAgent_Run_WithToolCalls(t *testing.T) {
 
 	registry := NewRegistry()
 	registry.MustRegister(
-		gains.Tool{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)},
-		func(ctx context.Context, call gains.ToolCall) (string, error) {
+		ai.Tool{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)},
+		func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return `{"temp": 72, "conditions": "sunny"}`, nil
 		},
 	)
 
 	agent := New(provider, registry)
 
-	result, err := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "What's the weather in Tokyo?"},
+	result, err := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "What's the weather in Tokyo?"},
 	})
 
 	require.NoError(t, err)
@@ -324,23 +324,23 @@ func TestAgent_Run_MaxSteps(t *testing.T) {
 	// Provider always returns tool calls, causing infinite loop
 	provider := &mockProvider{
 		responses: []mockResponse{
-			{content: "Step 1", toolCalls: []gains.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
-			{content: "Step 2", toolCalls: []gains.ToolCall{{ID: "c2", Name: "tool1", Arguments: "{}"}}},
-			{content: "Step 3", toolCalls: []gains.ToolCall{{ID: "c3", Name: "tool1", Arguments: "{}"}}},
+			{content: "Step 1", toolCalls: []ai.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
+			{content: "Step 2", toolCalls: []ai.ToolCall{{ID: "c2", Name: "tool1", Arguments: "{}"}}},
+			{content: "Step 3", toolCalls: []ai.ToolCall{{ID: "c3", Name: "tool1", Arguments: "{}"}}},
 			{content: "Step 4"},
 		},
 	}
 
 	registry := NewRegistry()
 	registry.MustRegister(
-		gains.Tool{Name: "tool1"},
-		func(ctx context.Context, call gains.ToolCall) (string, error) { return "ok", nil },
+		ai.Tool{Name: "tool1"},
+		func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil },
 	)
 
 	agent := New(provider, registry)
 
-	result, err := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Go"},
+	result, err := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Go"},
 	}, WithMaxSteps(2))
 
 	require.NoError(t, err)
@@ -354,14 +354,14 @@ func TestAgent_Run_MaxSteps(t *testing.T) {
 func TestAgent_Run_Timeout(t *testing.T) {
 	provider := &mockProvider{
 		responses: []mockResponse{
-			{content: "Processing...", toolCalls: []gains.ToolCall{{ID: "c1", Name: "slow_tool", Arguments: "{}"}}},
+			{content: "Processing...", toolCalls: []ai.ToolCall{{ID: "c1", Name: "slow_tool", Arguments: "{}"}}},
 		},
 	}
 
 	registry := NewRegistry()
 	registry.MustRegister(
-		gains.Tool{Name: "slow_tool"},
-		func(ctx context.Context, call gains.ToolCall) (string, error) {
+		ai.Tool{Name: "slow_tool"},
+		func(ctx context.Context, call ai.ToolCall) (string, error) {
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
@@ -373,8 +373,8 @@ func TestAgent_Run_Timeout(t *testing.T) {
 
 	agent := New(provider, registry)
 
-	result, _ := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Go"},
+	result, _ := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Go"},
 	}, WithTimeout(50*time.Millisecond))
 
 	assert.Equal(t, TerminationTimeout, result.Termination)
@@ -390,9 +390,9 @@ func TestAgent_Run_CustomStopPredicate(t *testing.T) {
 	registry := NewRegistry()
 	agent := New(provider, registry)
 
-	result, err := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Go"},
-	}, WithStopPredicate(func(step int, response *gains.Response) bool {
+	result, err := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Go"},
+	}, WithStopPredicate(func(step int, response *ai.Response) bool {
 		return response.Content == "Step 1"
 	}))
 
@@ -404,22 +404,22 @@ func TestAgent_Run_Approval(t *testing.T) {
 	t.Run("approved tool executes", func(t *testing.T) {
 		provider := &mockProvider{
 			responses: []mockResponse{
-				{content: "Calling tool", toolCalls: []gains.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
+				{content: "Calling tool", toolCalls: []ai.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
 				{content: "Done"},
 			},
 		}
 
 		registry := NewRegistry()
 		registry.MustRegister(
-			gains.Tool{Name: "tool1"},
-			func(ctx context.Context, call gains.ToolCall) (string, error) { return "result", nil },
+			ai.Tool{Name: "tool1"},
+			func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
 		)
 
 		agent := New(provider, registry)
 
-		result, err := agent.Run(context.Background(), []gains.Message{
-			{Role: gains.RoleUser, Content: "Go"},
-		}, WithApprover(func(ctx context.Context, call gains.ToolCall) (bool, string) {
+		result, err := agent.Run(context.Background(), []ai.Message{
+			{Role: ai.RoleUser, Content: "Go"},
+		}, WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
 			return true, ""
 		}))
 
@@ -431,21 +431,21 @@ func TestAgent_Run_Approval(t *testing.T) {
 	t.Run("rejected tool stops agent", func(t *testing.T) {
 		provider := &mockProvider{
 			responses: []mockResponse{
-				{content: "Calling tool", toolCalls: []gains.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
+				{content: "Calling tool", toolCalls: []ai.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
 			},
 		}
 
 		registry := NewRegistry()
 		registry.MustRegister(
-			gains.Tool{Name: "tool1"},
-			func(ctx context.Context, call gains.ToolCall) (string, error) { return "result", nil },
+			ai.Tool{Name: "tool1"},
+			func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
 		)
 
 		agent := New(provider, registry)
 
-		result, err := agent.Run(context.Background(), []gains.Message{
-			{Role: gains.RoleUser, Content: "Go"},
-		}, WithApprover(func(ctx context.Context, call gains.ToolCall) (bool, string) {
+		result, err := agent.Run(context.Background(), []ai.Message{
+			{Role: ai.RoleUser, Content: "Go"},
+		}, WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
 			return false, "Dangerous operation"
 		}))
 
@@ -457,22 +457,22 @@ func TestAgent_Run_Approval(t *testing.T) {
 		var approverCalled int32
 		provider := &mockProvider{
 			responses: []mockResponse{
-				{content: "Calling safe", toolCalls: []gains.ToolCall{{ID: "c1", Name: "safe_tool", Arguments: "{}"}}},
-				{content: "Calling dangerous", toolCalls: []gains.ToolCall{{ID: "c2", Name: "dangerous_tool", Arguments: "{}"}}},
+				{content: "Calling safe", toolCalls: []ai.ToolCall{{ID: "c1", Name: "safe_tool", Arguments: "{}"}}},
+				{content: "Calling dangerous", toolCalls: []ai.ToolCall{{ID: "c2", Name: "dangerous_tool", Arguments: "{}"}}},
 				{content: "Done"},
 			},
 		}
 
 		registry := NewRegistry()
-		registry.MustRegister(gains.Tool{Name: "safe_tool"}, func(ctx context.Context, call gains.ToolCall) (string, error) { return "ok", nil })
-		registry.MustRegister(gains.Tool{Name: "dangerous_tool"}, func(ctx context.Context, call gains.ToolCall) (string, error) { return "ok", nil })
+		registry.MustRegister(ai.Tool{Name: "safe_tool"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil })
+		registry.MustRegister(ai.Tool{Name: "dangerous_tool"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil })
 
 		agent := New(provider, registry)
 
-		result, err := agent.Run(context.Background(), []gains.Message{
-			{Role: gains.RoleUser, Content: "Go"},
+		result, err := agent.Run(context.Background(), []ai.Message{
+			{Role: ai.RoleUser, Content: "Go"},
 		},
-			WithApprover(func(ctx context.Context, call gains.ToolCall) (bool, string) {
+			WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
 				atomic.AddInt32(&approverCalled, 1)
 				return true, ""
 			}),
@@ -489,21 +489,21 @@ func TestAgent_Run_Approval(t *testing.T) {
 func TestAgent_RunStream_Events(t *testing.T) {
 	provider := &mockProvider{
 		responses: []mockResponse{
-			{content: "Calling tool", toolCalls: []gains.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
+			{content: "Calling tool", toolCalls: []ai.ToolCall{{ID: "c1", Name: "tool1", Arguments: "{}"}}},
 			{content: "Done"},
 		},
 	}
 
 	registry := NewRegistry()
 	registry.MustRegister(
-		gains.Tool{Name: "tool1"},
-		func(ctx context.Context, call gains.ToolCall) (string, error) { return "result", nil },
+		ai.Tool{Name: "tool1"},
+		func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
 	)
 
 	agent := New(provider, registry)
 
-	events := agent.RunStream(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Go"},
+	events := agent.RunStream(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Go"},
 	})
 
 	var eventTypes []EventType
@@ -530,7 +530,7 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 		responses: []mockResponse{
 			{
 				content: "Calling tools",
-				toolCalls: []gains.ToolCall{
+				toolCalls: []ai.ToolCall{
 					{ID: "c1", Name: "tool1", Arguments: "{}"},
 					{ID: "c2", Name: "tool2", Arguments: "{}"},
 					{ID: "c3", Name: "tool3", Arguments: "{}"},
@@ -544,8 +544,8 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 	for _, name := range []string{"tool1", "tool2", "tool3"} {
 		toolName := name
 		registry.MustRegister(
-			gains.Tool{Name: toolName},
-			func(ctx context.Context, call gains.ToolCall) (string, error) {
+			ai.Tool{Name: toolName},
+			func(ctx context.Context, call ai.ToolCall) (string, error) {
 				// Small delay to allow interleaving
 				time.Sleep(10 * time.Millisecond)
 				mu.Lock()
@@ -558,8 +558,8 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 
 	agent := New(provider, registry)
 
-	_, err := agent.Run(context.Background(), []gains.Message{
-		{Role: gains.RoleUser, Content: "Go"},
+	_, err := agent.Run(context.Background(), []ai.Message{
+		{Role: ai.RoleUser, Content: "Go"},
 	}, WithParallelToolCalls(true))
 
 	require.NoError(t, err)

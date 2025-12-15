@@ -5,18 +5,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/internal/store"
 )
 
 // Agent orchestrates autonomous tool-calling conversations.
 type Agent struct {
-	provider gains.ChatProvider
+	provider ai.ChatProvider
 	registry *Registry
 }
 
 // New creates a new Agent with the given provider and tool registry.
-func New(provider gains.ChatProvider, registry *Registry) *Agent {
+func New(provider ai.ChatProvider, registry *Registry) *Agent {
 	return &Agent{
 		provider: provider,
 		registry: registry,
@@ -25,17 +25,17 @@ func New(provider gains.ChatProvider, registry *Registry) *Agent {
 
 // Run executes the agent loop and returns the final result.
 // This is a blocking call that runs until the agent completes.
-func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Option) (*Result, error) {
+func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) (*Result, error) {
 	eventCh := a.RunStream(ctx, messages, opts...)
 
 	result := &Result{
 		history: store.NewMessageStoreFrom(messages, nil),
 	}
 
-	var totalUsage gains.Usage
-	var lastResponse *gains.Response
-	var pendingAssistantMsg *gains.Message
-	var pendingToolResults []gains.ToolResult
+	var totalUsage ai.Usage
+	var lastResponse *ai.Response
+	var pendingAssistantMsg *ai.Message
+	var pendingToolResults []ai.ToolResult
 
 	for event := range eventCh {
 		result.Steps = event.Step
@@ -48,7 +48,7 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 				pendingAssistantMsg = nil
 			}
 			if len(pendingToolResults) > 0 {
-				result.history.Append(gains.NewToolResultMessage(pendingToolResults...))
+				result.history.Append(ai.NewToolResultMessage(pendingToolResults...))
 				pendingToolResults = nil
 			}
 
@@ -59,8 +59,8 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 				totalUsage.OutputTokens += event.Response.Usage.OutputTokens
 
 				if len(event.Response.ToolCalls) > 0 {
-					pendingAssistantMsg = &gains.Message{
-						Role:      gains.RoleAssistant,
+					pendingAssistantMsg = &ai.Message{
+						Role:      ai.RoleAssistant,
 						Content:   event.Response.Content,
 						ToolCalls: event.Response.ToolCalls,
 					}
@@ -90,7 +90,7 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 		result.history.Append(*pendingAssistantMsg)
 	}
 	if len(pendingToolResults) > 0 {
-		result.history.Append(gains.NewToolResultMessage(pendingToolResults...))
+		result.history.Append(ai.NewToolResultMessage(pendingToolResults...))
 	}
 
 	result.TotalUsage = totalUsage
@@ -100,7 +100,7 @@ func (a *Agent) Run(ctx context.Context, messages []gains.Message, opts ...Optio
 // RunStream executes the agent loop and returns a channel of events.
 // The channel is closed when the agent completes or encounters a fatal error.
 // Callers should drain the channel to ensure proper cleanup.
-func (a *Agent) RunStream(ctx context.Context, messages []gains.Message, opts ...Option) <-chan Event {
+func (a *Agent) RunStream(ctx context.Context, messages []ai.Message, opts ...Option) <-chan Event {
 	eventCh := make(chan Event, 100) // Buffered to prevent blocking
 
 	go a.runLoop(ctx, messages, eventCh, opts...)
@@ -108,7 +108,7 @@ func (a *Agent) RunStream(ctx context.Context, messages []gains.Message, opts ..
 	return eventCh
 }
 
-func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh chan<- Event, opts ...Option) {
+func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan<- Event, opts ...Option) {
 	defer close(eventCh)
 
 	options := ApplyOptions(opts...)
@@ -121,7 +121,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 	}
 
 	// Prepare chat options with tools
-	chatOpts := append([]gains.Option{gains.WithTools(a.registry.Tools())}, options.ChatOptions...)
+	chatOpts := append([]ai.Option{ai.WithTools(a.registry.Tools())}, options.ChatOptions...)
 
 	// Copy messages to avoid mutating the original
 	history := store.NewMessageStoreFrom(messages, nil)
@@ -164,14 +164,14 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 		toolResults, allRejected := a.processToolCalls(ctx, response.ToolCalls, options, step, eventCh)
 
 		// Append assistant message with tool calls to history
-		history.Append(gains.Message{
-			Role:      gains.RoleAssistant,
+		history.Append(ai.Message{
+			Role:      ai.RoleAssistant,
 			Content:   response.Content,
 			ToolCalls: response.ToolCalls,
 		})
 
 		// Append tool results to history
-		history.Append(gains.NewToolResultMessage(toolResults...))
+		history.Append(ai.NewToolResultMessage(toolResults...))
 
 		// If all tools were rejected, stop
 		if allRejected {
@@ -181,14 +181,14 @@ func (a *Agent) runLoop(ctx context.Context, messages []gains.Message, eventCh c
 	}
 }
 
-func (a *Agent) executeStep(ctx context.Context, messages []gains.Message, chatOpts []gains.Option, step int, eventCh chan<- Event) (*gains.Response, error) {
+func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts []ai.Option, step int, eventCh chan<- Event) (*ai.Response, error) {
 	// Use streaming to emit deltas
 	streamCh, err := a.provider.ChatStream(ctx, messages, chatOpts...)
 	if err != nil {
 		return nil, err
 	}
 
-	var response *gains.Response
+	var response *ai.Response
 
 	for event := range streamCh {
 		if event.Err != nil {
@@ -215,10 +215,10 @@ func (a *Agent) executeStep(ctx context.Context, messages []gains.Message, chatO
 	return response, nil
 }
 
-func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall, options *Options, step int, eventCh chan<- Event) ([]gains.ToolResult, bool) {
+func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) ([]ai.ToolResult, bool) {
 	// First, emit requested events and handle approval
 	type approvalResult struct {
-		call     gains.ToolCall
+		call     ai.ToolCall
 		approved bool
 		reason   string
 	}
@@ -245,8 +245,8 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall
 	}
 
 	// Collect approved and rejected
-	var approvedCalls []gains.ToolCall
-	var rejectedResults []gains.ToolResult
+	var approvedCalls []ai.ToolCall
+	var rejectedResults []ai.ToolResult
 
 	for _, ar := range approvals {
 		if ar.approved {
@@ -256,7 +256,7 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall
 			if reason == "" {
 				reason = "Tool call rejected"
 			}
-			rejectedResults = append(rejectedResults, gains.ToolResult{
+			rejectedResults = append(rejectedResults, ai.ToolResult{
 				ToolCallID: ar.call.ID,
 				Content:    reason,
 				IsError:    true,
@@ -273,7 +273,7 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall
 	}
 
 	// Execute approved tool calls
-	var executedResults []gains.ToolResult
+	var executedResults []ai.ToolResult
 
 	if options.ParallelToolCalls && len(approvedCalls) > 1 {
 		executedResults = a.executeToolCallsParallel(ctx, approvedCalls, options, step, eventCh)
@@ -282,7 +282,7 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall
 	}
 
 	// Combine results in original order
-	results := make([]gains.ToolResult, 0, len(toolCalls))
+	results := make([]ai.ToolResult, 0, len(toolCalls))
 	approvedIdx := 0
 	rejectedIdx := 0
 
@@ -299,8 +299,8 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []gains.ToolCall
 	return results, false
 }
 
-func (a *Agent) executeToolCallsSequential(ctx context.Context, toolCalls []gains.ToolCall, options *Options, step int, eventCh chan<- Event) []gains.ToolResult {
-	results := make([]gains.ToolResult, len(toolCalls))
+func (a *Agent) executeToolCallsSequential(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) []ai.ToolResult {
+	results := make([]ai.ToolResult, len(toolCalls))
 
 	for i, tc := range toolCalls {
 		results[i] = a.executeToolCall(ctx, tc, options, step, eventCh)
@@ -309,13 +309,13 @@ func (a *Agent) executeToolCallsSequential(ctx context.Context, toolCalls []gain
 	return results
 }
 
-func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []gains.ToolCall, options *Options, step int, eventCh chan<- Event) []gains.ToolResult {
-	results := make([]gains.ToolResult, len(toolCalls))
+func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) []ai.ToolResult {
+	results := make([]ai.ToolResult, len(toolCalls))
 	var wg sync.WaitGroup
 
 	for i, tc := range toolCalls {
 		wg.Add(1)
-		go func(idx int, call gains.ToolCall) {
+		go func(idx int, call ai.ToolCall) {
 			defer wg.Done()
 			results[idx] = a.executeToolCall(ctx, call, options, step, eventCh)
 		}(i, tc)
@@ -325,7 +325,7 @@ func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []gains.
 	return results
 }
 
-func (a *Agent) executeToolCall(ctx context.Context, tc gains.ToolCall, options *Options, step int, eventCh chan<- Event) gains.ToolResult {
+func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Options, step int, eventCh chan<- Event) ai.ToolResult {
 	a.emit(eventCh, Event{Type: EventToolCallStarted, Step: step, ToolCall: &tc})
 
 	// Apply handler timeout
@@ -339,7 +339,7 @@ func (a *Agent) executeToolCall(ctx context.Context, tc gains.ToolCall, options 
 	result, err := a.registry.Execute(execCtx, tc)
 	if err != nil {
 		// Tool not found or other registry error
-		result = gains.ToolResult{
+		result = ai.ToolResult{
 			ToolCallID: tc.ID,
 			Content:    err.Error(),
 			IsError:    true,
@@ -365,7 +365,7 @@ func (a *Agent) requiresApproval(toolName string, options *Options) bool {
 	return false
 }
 
-func (a *Agent) checkTermination(ctx context.Context, step int, response *gains.Response, options *Options) TerminationReason {
+func (a *Agent) checkTermination(ctx context.Context, step int, response *ai.Response, options *Options) TerminationReason {
 	// Check context cancellation/timeout
 	if ctx.Err() != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -392,7 +392,7 @@ func (a *Agent) emit(ch chan<- Event, event Event) {
 	}
 }
 
-func (a *Agent) emitComplete(ch chan<- Event, step int, response *gains.Response, reason TerminationReason) {
+func (a *Agent) emitComplete(ch chan<- Event, step int, response *ai.Response, reason TerminationReason) {
 	a.emit(ch, Event{
 		Type:     EventAgentComplete,
 		Step:     step,

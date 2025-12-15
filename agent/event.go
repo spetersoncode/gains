@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/internal/store"
 )
 
@@ -54,13 +54,13 @@ type Event struct {
 	Delta string
 
 	// ToolCall contains the tool call for tool-related events.
-	ToolCall *gains.ToolCall
+	ToolCall *ai.ToolCall
 
 	// ToolResult contains the result for EventToolResult events.
-	ToolResult *gains.ToolResult
+	ToolResult *ai.ToolResult
 
 	// Response contains the model response for EventStepComplete and EventAgentComplete.
-	Response *gains.Response
+	Response *ai.Response
 
 	// Error contains the error for EventError events.
 	Error error
@@ -101,7 +101,7 @@ const (
 // Result represents the final outcome of an agent execution.
 type Result struct {
 	// Response is the final response from the model.
-	Response *gains.Response
+	Response *ai.Response
 
 	// history contains the complete conversation history (private).
 	history *store.MessageStore
@@ -113,14 +113,14 @@ type Result struct {
 	Termination TerminationReason
 
 	// TotalUsage aggregates token usage across all steps.
-	TotalUsage gains.Usage
+	TotalUsage ai.Usage
 
 	// Error contains any error that caused termination (if applicable).
 	Error error
 }
 
 // Messages returns the conversation history as a slice.
-func (r *Result) Messages() []gains.Message {
+func (r *Result) Messages() []ai.Message {
 	if r.history == nil {
 		return nil
 	}
@@ -137,7 +137,7 @@ func (r *Result) MessageCount() int {
 
 // LastMessages returns the last n messages from the conversation history.
 // If n exceeds the total message count, all messages are returned.
-func (r *Result) LastMessages(n int) []gains.Message {
+func (r *Result) LastMessages(n int) []ai.Message {
 	if r.history == nil {
 		return nil
 	}

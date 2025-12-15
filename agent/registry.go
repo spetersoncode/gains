@@ -4,18 +4,18 @@ import (
 	"context"
 	"sync"
 
-	"github.com/spetersoncode/gains"
+	ai "github.com/spetersoncode/gains"
 )
 
 // Handler is a function that executes a tool call and returns a result.
 // The context supports cancellation and timeout.
 // The call contains the tool name, ID, and arguments as a JSON string.
 // Returns the result content string, or an error if execution failed.
-type Handler func(ctx context.Context, call gains.ToolCall) (string, error)
+type Handler func(ctx context.Context, call ai.ToolCall) (string, error)
 
 // registeredTool combines a tool definition with its handler.
 type registeredTool struct {
-	tool    gains.Tool
+	tool    ai.Tool
 	handler Handler
 }
 
@@ -35,7 +35,7 @@ func NewRegistry() *Registry {
 
 // Register adds a tool with its handler to the registry.
 // Returns an error if a tool with the same name is already registered.
-func (r *Registry) Register(tool gains.Tool, handler Handler) error {
+func (r *Registry) Register(tool ai.Tool, handler Handler) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -51,7 +51,7 @@ func (r *Registry) Register(tool gains.Tool, handler Handler) error {
 }
 
 // MustRegister is like Register but panics on error.
-func (r *Registry) MustRegister(tool gains.Tool, handler Handler) {
+func (r *Registry) MustRegister(tool ai.Tool, handler Handler) {
 	if err := r.Register(tool, handler); err != nil {
 		panic(err)
 	}
@@ -80,24 +80,24 @@ func (r *Registry) Get(name string) (Handler, bool) {
 
 // GetTool retrieves a tool definition by name.
 // Returns the tool and true if found, or empty tool and false if not found.
-func (r *Registry) GetTool(name string) (gains.Tool, bool) {
+func (r *Registry) GetTool(name string) (ai.Tool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	rt, ok := r.tools[name]
 	if !ok {
-		return gains.Tool{}, false
+		return ai.Tool{}, false
 	}
 	return rt.tool, true
 }
 
 // Tools returns all registered tool definitions.
 // This is used to pass the tools to the ChatProvider.
-func (r *Registry) Tools() []gains.Tool {
+func (r *Registry) Tools() []ai.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	tools := make([]gains.Tool, 0, len(r.tools))
+	tools := make([]ai.Tool, 0, len(r.tools))
 	for _, rt := range r.tools {
 		tools = append(tools, rt.tool)
 	}
@@ -127,23 +127,23 @@ func (r *Registry) Len() int {
 // If the tool is not found, returns ErrToolNotFound.
 // If the handler returns an error, the error is captured in ToolResult.IsError
 // and the error message is returned as the content (allowing the model to recover).
-func (r *Registry) Execute(ctx context.Context, call gains.ToolCall) (gains.ToolResult, error) {
+func (r *Registry) Execute(ctx context.Context, call ai.ToolCall) (ai.ToolResult, error) {
 	handler, ok := r.Get(call.Name)
 	if !ok {
-		return gains.ToolResult{}, &ErrToolNotFound{Name: call.Name}
+		return ai.ToolResult{}, &ErrToolNotFound{Name: call.Name}
 	}
 
 	content, err := handler(ctx, call)
 	if err != nil {
 		// Return error as tool result so model can potentially recover
-		return gains.ToolResult{
+		return ai.ToolResult{
 			ToolCallID: call.ID,
 			Content:    err.Error(),
 			IsError:    true,
 		}, nil
 	}
 
-	return gains.ToolResult{
+	return ai.ToolResult{
 		ToolCallID: call.ID,
 		Content:    content,
 		IsError:    false,
