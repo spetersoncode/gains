@@ -12,26 +12,27 @@
 //   - [EmbeddingProvider]: Generate vector embeddings for text
 //   - [ImageProvider]: Generate images from text prompts
 //
-// Provider implementations are available in the provider subpackages:
-//
-//   - [github.com/spetersoncode/gains/provider/anthropic]: Claude models
-//   - [github.com/spetersoncode/gains/provider/openai]: GPT models
-//   - [github.com/spetersoncode/gains/provider/google]: Gemini models
-//
-// For a unified client that handles provider selection and retries, see the
-// [github.com/spetersoncode/gains/client] package.
+// Use the [github.com/spetersoncode/gains/client] package as the entry point
+// for provider access, and the [github.com/spetersoncode/gains/models] package
+// for model selection.
 //
 // # Basic Usage
 //
 // Send a simple chat message:
 //
-//	provider := anthropic.New(os.Getenv("ANTHROPIC_API_KEY"))
+//	c, err := client.New(ctx, client.Config{
+//	    Provider: client.ProviderAnthropic,
+//	    APIKey:   os.Getenv("ANTHROPIC_API_KEY"),
+//	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	messages := []gains.Message{
 //	    {Role: gains.RoleUser, Content: "What is the capital of France?"},
 //	}
 //
-//	resp, err := provider.Chat(ctx, messages)
+//	resp, err := c.Chat(ctx, messages)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -41,7 +42,7 @@
 //
 // For real-time output, use ChatStream:
 //
-//	stream, err := provider.ChatStream(ctx, messages)
+//	stream, err := c.ChatStream(ctx, messages)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -57,8 +58,8 @@
 //
 // Customize requests with functional options:
 //
-//	resp, err := provider.Chat(ctx, messages,
-//	    gains.WithModel(anthropic.ClaudeOpus45),
+//	resp, err := c.Chat(ctx, messages,
+//	    gains.WithModel(models.ClaudeOpus45),
 //	    gains.WithMaxTokens(1000),
 //	    gains.WithTemperature(0.7),
 //	)
@@ -81,7 +82,7 @@
 //	    },
 //	}
 //
-//	resp, err := provider.Chat(ctx, messages, gains.WithTools(tools))
+//	resp, err := c.Chat(ctx, messages, gains.WithTools(tools))
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -100,7 +101,7 @@
 //	    Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}}}`),
 //	}
 //
-//	resp, err := provider.Chat(ctx, messages, gains.WithResponseSchema(schema))
+//	resp, err := c.Chat(ctx, messages, gains.WithResponseSchema(schema))
 //
 // # Multimodal Messages
 //

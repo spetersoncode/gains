@@ -27,12 +27,14 @@
 //
 // Configure default models for different capabilities:
 //
+//	import "github.com/spetersoncode/gains/models"
+//
 //	client, err := client.New(ctx, client.Config{
 //	    Provider:       client.ProviderOpenAI,
 //	    APIKey:         os.Getenv("OPENAI_API_KEY"),
-//	    ChatModel:      openai.GPT52,
-//	    ImageModel:     openai.GPTImage1,
-//	    EmbeddingModel: openai.TextEmbedding3Small,
+//	    ChatModel:      models.GPT52,
+//	    ImageModel:     models.GPTImage1,
+//	    EmbeddingModel: models.TextEmbedding3Small,
 //	})
 //
 // # Feature Checking

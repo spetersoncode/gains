@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
-	"github.com/spetersoncode/gains/provider/anthropic"
-	"github.com/spetersoncode/gains/provider/google"
-	"github.com/spetersoncode/gains/provider/openai"
+	"github.com/spetersoncode/gains/internal/provider/anthropic"
+	"github.com/spetersoncode/gains/internal/provider/google"
+	"github.com/spetersoncode/gains/internal/provider/openai"
 	"github.com/spetersoncode/gains/retry"
 )
 
@@ -56,13 +56,13 @@ type Config struct {
 	// APIKey is the authentication key for the provider.
 	APIKey string
 	// ChatModel is the default model for chat operations.
-	// Use provider-specific types (e.g., openai.GPT52, anthropic.ClaudeSonnet45).
+	// Use types from the models package (e.g., models.GPT52, models.ClaudeSonnet45).
 	ChatModel gains.Model
 	// ImageModel is the default model for image generation.
-	// Use provider-specific types (e.g., openai.GPTImage1, google.Imagen4).
+	// Use types from the models package (e.g., models.GPTImage1, models.Imagen4).
 	ImageModel gains.Model
 	// EmbeddingModel is the default model for embeddings.
-	// Use provider-specific types (e.g., openai.TextEmbedding3Small).
+	// Use types from the models package (e.g., models.TextEmbedding3Small).
 	EmbeddingModel gains.Model
 	// RequiredFeatures lists features that must be available.
 	// Construction fails if any required feature is unsupported.
