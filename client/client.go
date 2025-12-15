@@ -9,6 +9,7 @@ import (
 	"github.com/spetersoncode/gains/provider/anthropic"
 	"github.com/spetersoncode/gains/provider/google"
 	"github.com/spetersoncode/gains/provider/openai"
+	"github.com/spetersoncode/gains/retry"
 )
 
 // ProviderName identifies supported AI providers.
@@ -63,6 +64,10 @@ type Config struct {
 	// RequiredFeatures lists features that must be available.
 	// Construction fails if any required feature is unsupported.
 	RequiredFeatures []Feature
+	// RetryConfig configures retry behavior for transient errors.
+	// If nil, uses default retry configuration (10 retries with exponential backoff).
+	// Use retry.Disabled() to disable retries.
+	RetryConfig *retry.Config
 }
 
 // ErrFeatureNotSupported is returned when a feature is unavailable for the provider.
@@ -93,6 +98,7 @@ type Client struct {
 	chatModel      string
 	imageModel     string
 	embeddingModel string
+	retryConfig    retry.Config
 }
 
 // New creates a unified client with the given configuration.
@@ -155,6 +161,12 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		embedProv = gc
 	}
 
+	// Determine retry configuration
+	retryConfig := retry.DefaultConfig()
+	if cfg.RetryConfig != nil {
+		retryConfig = *cfg.RetryConfig
+	}
+
 	return &Client{
 		provider:       cfg.Provider,
 		chatProvider:   chatProv,
@@ -163,21 +175,29 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		chatModel:      cfg.ChatModel,
 		imageModel:     cfg.ImageModel,
 		embeddingModel: cfg.EmbeddingModel,
+		retryConfig:    retryConfig,
 	}, nil
 }
 
 // Chat sends a conversation and returns a complete response.
+// Automatically retries on transient errors according to the client's retry configuration.
 func (c *Client) Chat(ctx context.Context, messages []gains.Message, opts ...gains.Option) (*gains.Response, error) {
-	return c.chatProvider.Chat(ctx, messages, opts...)
+	return retry.Do(ctx, c.retryConfig, func() (*gains.Response, error) {
+		return c.chatProvider.Chat(ctx, messages, opts...)
+	})
 }
 
 // ChatStream sends a conversation and returns a channel of streaming events.
+// Automatically retries on transient errors when establishing the stream connection.
 func (c *Client) ChatStream(ctx context.Context, messages []gains.Message, opts ...gains.Option) (<-chan gains.StreamEvent, error) {
-	return c.chatProvider.ChatStream(ctx, messages, opts...)
+	return retry.DoStream(ctx, c.retryConfig, func() (<-chan gains.StreamEvent, error) {
+		return c.chatProvider.ChatStream(ctx, messages, opts...)
+	})
 }
 
 // GenerateImage creates images from a text prompt.
 // Returns ErrFeatureNotSupported if the provider doesn't support image generation.
+// Automatically retries on transient errors according to the client's retry configuration.
 func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains.ImageOption) (*gains.ImageResponse, error) {
 	if c.imageProvider == nil {
 		return nil, &ErrFeatureNotSupported{
@@ -191,11 +211,14 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...gains
 		opts = append([]gains.ImageOption{gains.WithImageModel(c.imageModel)}, opts...)
 	}
 
-	return c.imageProvider.GenerateImage(ctx, prompt, opts...)
+	return retry.Do(ctx, c.retryConfig, func() (*gains.ImageResponse, error) {
+		return c.imageProvider.GenerateImage(ctx, prompt, opts...)
+	})
 }
 
 // Embed generates embeddings for the provided texts.
 // Returns ErrFeatureNotSupported if the provider doesn't support embeddings.
+// Automatically retries on transient errors according to the client's retry configuration.
 func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.EmbeddingOption) (*gains.EmbeddingResponse, error) {
 	if c.embedProvider == nil {
 		return nil, &ErrFeatureNotSupported{
@@ -209,7 +232,9 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...gains.Embedd
 		opts = append([]gains.EmbeddingOption{gains.WithEmbeddingModel(c.embeddingModel)}, opts...)
 	}
 
-	return c.embedProvider.Embed(ctx, texts, opts...)
+	return retry.Do(ctx, c.retryConfig, func() (*gains.EmbeddingResponse, error) {
+		return c.embedProvider.Embed(ctx, texts, opts...)
+	})
 }
 
 // SupportsFeature returns true if the client's provider supports the given feature.
