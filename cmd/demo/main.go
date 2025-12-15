@@ -146,5 +146,25 @@ func main() {
 		}
 	}
 
+	// Demo: Workflow Chain
+	if askYesNo("Demo workflow chain?") {
+		demoWorkflowChain(ctx, c)
+	}
+
+	// Demo: Workflow Parallel
+	if askYesNo("Demo workflow parallel?") {
+		demoWorkflowParallel(ctx, c)
+	}
+
+	// Demo: Workflow Router
+	if askYesNo("Demo workflow router?") {
+		demoWorkflowRouter(ctx, c)
+	}
+
+	// Demo: Workflow Classifier
+	if askYesNo("Demo workflow classifier?") {
+		demoWorkflowClassifier(ctx, c)
+	}
+
 	fmt.Println("\n✨ Demo complete!")
 }
