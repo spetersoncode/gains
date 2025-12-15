@@ -8,30 +8,51 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/provider/anthropic"
+	"github.com/spetersoncode/gains/provider/google"
+	"github.com/spetersoncode/gains/provider/openai"
 )
 
 func main() {
-	godotenv.Load() // loads .env from current directory
+	godotenv.Load()
+	ctx := context.Background()
 
-	client := anthropic.New()
-
-	fmt.Println("=== Streaming ===")
-	stream, err := client.ChatStream(context.Background(), []gains.Message{
+	prompt := []gains.Message{
 		{Role: gains.RoleUser, Content: "Say hello in 3 different languages, one per line."},
-	})
+	}
+
+	// Anthropic
+	fmt.Println("=== Anthropic ===")
+	testProvider(anthropic.New(), ctx, prompt)
+
+	// OpenAI
+	fmt.Println("\n=== OpenAI ===")
+	testProvider(openai.New(), ctx, prompt)
+
+	// Google
+	fmt.Println("\n=== Google ===")
+	googleClient, err := google.New(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Google client error: %v\n", err)
+	} else {
+		testProvider(googleClient, ctx, prompt)
+	}
+}
+
+func testProvider(client gains.ChatProvider, ctx context.Context, messages []gains.Message) {
+	stream, err := client.ChatStream(ctx, messages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return
 	}
 
 	for event := range stream {
 		if event.Err != nil {
 			fmt.Fprintf(os.Stderr, "Stream error: %v\n", event.Err)
-			os.Exit(1)
+			return
 		}
 		fmt.Print(event.Delta)
 		if event.Done {
-			fmt.Printf("\n\n[Tokens: %d in, %d out]\n",
+			fmt.Printf("\n[Tokens: %d in, %d out]\n",
 				event.Response.Usage.InputTokens,
 				event.Response.Usage.OutputTokens)
 		}
