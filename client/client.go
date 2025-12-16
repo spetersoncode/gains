@@ -125,13 +125,41 @@ func (e *ErrNoModel) Error() string {
 	return fmt.Sprintf("no model specified for %s and no default configured", e.Operation)
 }
 
+// ClientOption configures a Client.
+type ClientOption func(*Client)
+
+// WithDefaultTemperature sets the default temperature for chat requests.
+// Per-request options override this default.
+func WithDefaultTemperature(t float64) ClientOption {
+	return func(c *Client) {
+		c.defaultChatOpts = append(c.defaultChatOpts, ai.WithTemperature(t))
+	}
+}
+
+// WithDefaultMaxTokens sets the default max tokens for chat requests.
+// Per-request options override this default.
+func WithDefaultMaxTokens(n int) ClientOption {
+	return func(c *Client) {
+		c.defaultChatOpts = append(c.defaultChatOpts, ai.WithMaxTokens(n))
+	}
+}
+
+// WithDefaultChatOptions sets default options for all chat requests.
+// Per-request options override these defaults.
+func WithDefaultChatOptions(opts ...ai.Option) ClientOption {
+	return func(c *Client) {
+		c.defaultChatOpts = append(c.defaultChatOpts, opts...)
+	}
+}
+
 // Client is a unified interface to all AI provider capabilities.
 // Provider clients are lazily initialized when first needed.
 type Client struct {
-	apiKeys     APIKeys
-	defaults    Defaults
-	retryConfig retry.Config
-	events      chan<- Event
+	apiKeys         APIKeys
+	defaults        Defaults
+	retryConfig     retry.Config
+	events          chan<- Event
+	defaultChatOpts []ai.Option
 
 	// Lazy-initialized providers (protected by mutex)
 	mu              sync.RWMutex
@@ -143,18 +171,23 @@ type Client struct {
 
 // New creates a unified client with the given configuration.
 // Provider clients are lazily initialized when first needed based on the model used.
-func New(cfg Config) *Client {
+// Optional ClientOption arguments configure default behaviors like temperature.
+func New(cfg Config, opts ...ClientOption) *Client {
 	retryConfig := retry.DefaultConfig()
 	if cfg.RetryConfig != nil {
 		retryConfig = *cfg.RetryConfig
 	}
 
-	return &Client{
+	c := &Client{
 		apiKeys:     cfg.APIKeys,
 		defaults:    cfg.Defaults,
 		retryConfig: retryConfig,
 		events:      cfg.Events,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // getAnthropicClient returns the Anthropic client, initializing it if needed.
@@ -282,6 +315,8 @@ func (c *Client) getChatProvider(ctx context.Context, model ai.Model) (ai.ChatPr
 // The model can be specified via WithModel option, or the default chat model is used.
 // Automatically retries on transient errors according to the client's retry configuration.
 func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error) {
+	// Prepend default options so per-request options override them
+	opts = append(c.defaultChatOpts, opts...)
 	options := ai.ApplyOptions(opts...)
 
 	// Determine which model to use
@@ -355,6 +390,8 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 // The model can be specified via WithModel option, or the default chat model is used.
 // Automatically retries on transient errors when establishing the stream connection.
 func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+	// Prepend default options so per-request options override them
+	opts = append(c.defaultChatOpts, opts...)
 	options := ai.ApplyOptions(opts...)
 
 	// Determine which model to use

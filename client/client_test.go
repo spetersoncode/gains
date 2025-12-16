@@ -217,3 +217,52 @@ func TestConfigStruct(t *testing.T) {
 		assert.Equal(t, "text-embedding-3-small", cfg.Defaults.Embedding.String())
 	})
 }
+
+func TestClientOptions(t *testing.T) {
+	t.Run("WithDefaultTemperature adds option", func(t *testing.T) {
+		c := New(Config{}, WithDefaultTemperature(0.7))
+		assert.Len(t, c.defaultChatOpts, 1)
+	})
+
+	t.Run("WithDefaultMaxTokens adds option", func(t *testing.T) {
+		c := New(Config{}, WithDefaultMaxTokens(1000))
+		assert.Len(t, c.defaultChatOpts, 1)
+	})
+
+	t.Run("WithDefaultChatOptions adds multiple options", func(t *testing.T) {
+		c := New(Config{}, WithDefaultChatOptions(
+			ai.WithTemperature(0.5),
+			ai.WithMaxTokens(500),
+		))
+		assert.Len(t, c.defaultChatOpts, 2)
+	})
+
+	t.Run("multiple ClientOptions combine", func(t *testing.T) {
+		c := New(Config{},
+			WithDefaultTemperature(0.2),
+			WithDefaultMaxTokens(2000),
+		)
+		assert.Len(t, c.defaultChatOpts, 2)
+	})
+
+	t.Run("default options applied to chat options", func(t *testing.T) {
+		c := New(Config{},
+			WithDefaultTemperature(0.3),
+			WithDefaultMaxTokens(100),
+		)
+
+		// Verify the options are stored
+		assert.Len(t, c.defaultChatOpts, 2)
+
+		// Apply defaults + per-request option and verify override behavior
+		opts := append(c.defaultChatOpts, ai.WithTemperature(0.9))
+		applied := ai.ApplyOptions(opts...)
+
+		// Per-request temperature should override default
+		assert.NotNil(t, applied.Temperature)
+		assert.Equal(t, 0.9, *applied.Temperature)
+
+		// Default max tokens should be preserved
+		assert.Equal(t, 100, applied.MaxTokens)
+	})
+}
