@@ -117,84 +117,17 @@ func main() {
 	}
 	fmt.Println()
 
-	// Demo: Chat
-	if askYesNo("Demo chat?") {
-		demoChat(ctx, c)
-	}
-
-	// Demo: Chat Stream
-	if askYesNo("Demo chat stream?") {
-		demoChatStream(ctx, c)
-	}
-
-	// Demo: Vision/Image Input
-	if askYesNo("Demo vision/image input?") {
-		demoVisionInput(ctx, c)
-	}
-
-	// Demo: Image Generation
-	if c.SupportsFeature(client.FeatureImage) {
-		if askYesNo("Demo image generation?") {
-			demoImageGeneration(ctx, c)
+	// Show menu and run selected demos
+	for {
+		selected := showMenu(c)
+		if selected == nil {
+			fmt.Println("\n✨ Goodbye!")
+			return
 		}
-	}
 
-	// Demo: Tool Calling
-	if askYesNo("Demo tool/function calling?") {
-		demoToolCalling(ctx, c)
-	}
+		runDemos(ctx, c, selected)
 
-	// Demo: Agent
-	if askYesNo("Demo agent?") {
-		demoAgent(ctx, c)
+		fmt.Println("\n✨ Demo complete!")
+		fmt.Println()
 	}
-
-	// Demo: Agent Stream
-	if askYesNo("Demo agent stream?") {
-		demoAgentStream(ctx, c)
-	}
-
-	// Demo: JSON Mode / Structured Output
-	if askYesNo("Demo JSON mode / structured output?") {
-		demoJSONMode(ctx, c)
-	}
-
-	// Demo: Embeddings
-	if c.SupportsFeature(client.FeatureEmbedding) {
-		if askYesNo("Demo embeddings?") {
-			demoEmbeddings(ctx, c)
-		}
-	}
-
-	// Demo: Typed Workflow (new!)
-	if askYesNo("Demo typed workflow?") {
-		demoTypedWorkflow(ctx, c)
-	}
-
-	// Demo: Workflow Chain
-	if askYesNo("Demo workflow chain?") {
-		demoWorkflowChain(ctx, c)
-	}
-
-	// Demo: Workflow Parallel
-	if askYesNo("Demo workflow parallel?") {
-		demoWorkflowParallel(ctx, c)
-	}
-
-	// Demo: Workflow Router
-	if askYesNo("Demo workflow router?") {
-		demoWorkflowRouter(ctx, c)
-	}
-
-	// Demo: Workflow Classifier
-	if askYesNo("Demo workflow classifier?") {
-		demoWorkflowClassifier(ctx, c)
-	}
-
-	// Demo: Workflow Loop
-	if askYesNo("Demo workflow loop?") {
-		demoWorkflowLoop(ctx, c)
-	}
-
-	fmt.Println("\n✨ Demo complete!")
 }
