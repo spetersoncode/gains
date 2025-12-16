@@ -246,3 +246,34 @@ func (l *Loop) RunStream(ctx context.Context, state *State, opts ...Option) <-ch
 
 	return ch
 }
+
+// IterationKey returns a typed key for the current iteration count.
+// The key name follows the pattern "{loopName}_iteration".
+func (l *Loop) IterationKey() Key[int] {
+	return NewKey[int](l.name + "_iteration")
+}
+
+// NewLoopUntilKey creates a loop that exits when the typed key equals the target value.
+// This provides compile-time type safety compared to NewLoopUntil.
+func NewLoopUntilKey[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		v, ok := Get(state, key)
+		return ok && v == value
+	}, opts...)
+}
+
+// NewLoopWhileKey creates a loop that continues while the typed key equals the target value.
+// The loop exits when the key no longer equals the value (or is unset).
+func NewLoopWhileKey[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		v, ok := Get(state, key)
+		return !ok || v != value
+	}, opts...)
+}
+
+// NewLoopUntilKeySet creates a loop that exits when the typed key has a truthy value.
+func NewLoopUntilKeySet[T any](name string, step Step, key Key[T], opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		return isTruthy(state, key.Name())
+	}, opts...)
+}

@@ -353,3 +353,44 @@ func extractClassification(content string) (string, error) {
 	classification = strings.TrimRight(classification, ".,!?;:")
 	return classification, nil
 }
+
+// RouteKey returns a typed key for the selected route name.
+// The key name follows the pattern "{routerName}_route".
+func (r *Router) RouteKey() Key[string] {
+	return NewKey[string](r.name + "_route")
+}
+
+// RouteKey returns a typed key for the selected route name.
+// The key name follows the pattern "{routerName}_route".
+func (c *ClassifierRouter) RouteKey() Key[string] {
+	return NewKey[string](c.name + "_route")
+}
+
+// ClassificationKey returns a typed key for the raw classification result.
+// The key name follows the pattern "{routerName}_classification".
+func (c *ClassifierRouter) ClassificationKey() Key[string] {
+	return NewKey[string](c.name + "_classification")
+}
+
+// ConditionEquals returns a condition that matches when the key equals value.
+func ConditionEquals[T comparable](key Key[T], value T) Condition {
+	return func(ctx context.Context, state *State) bool {
+		v, ok := Get(state, key)
+		return ok && v == value
+	}
+}
+
+// ConditionSet returns a condition that matches when the key exists in state.
+func ConditionSet[T any](key Key[T]) Condition {
+	return func(ctx context.Context, state *State) bool {
+		return Has(state, key)
+	}
+}
+
+// ConditionMatches returns a condition using a predicate function on the key value.
+func ConditionMatches[T any](key Key[T], pred func(T) bool) Condition {
+	return func(ctx context.Context, state *State) bool {
+		v, ok := Get(state, key)
+		return ok && pred(v)
+	}
+}

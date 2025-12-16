@@ -27,14 +27,22 @@ type ContentSuggestions struct {
 	Rewrite     string   `json:"rewrite"`
 }
 
+// Define typed keys - SINGLE SOURCE OF TRUTH for state key-type mapping.
+// This pattern provides compile-time type safety and IDE autocomplete.
+var (
+	KeyInputText   = workflow.StringKey("input_text")
+	KeyAnalysis    = workflow.NewKey[*SentimentAnalysis]("analysis")
+	KeySuggestions = workflow.NewKey[*ContentSuggestions]("suggestions")
+)
+
 func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│       Typed Workflow Demo               │")
 	fmt.Println("└─────────────────────────────────────────┘")
-	fmt.Println("\nThis demo shows TypedPromptStep with automatic unmarshaling:")
+	fmt.Println("\nThis demo shows TypedPromptStep with type-safe Key[T] state access:")
 	fmt.Println("  1. Analyze text sentiment (returns *SentimentAnalysis)")
 	fmt.Println("  2. Generate content suggestions (returns *ContentSuggestions)")
-	fmt.Println("  3. Access results with type-safe GetTyped[T]")
+	fmt.Println("  3. Access results with type-safe Get/MustGet using typed keys")
 
 	// Define schemas using the schema package
 	sentimentSchema := ai.ResponseSchema{
@@ -75,29 +83,29 @@ func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 			MustBuild(),
 	}
 
-	// Step 1: Typed sentiment analysis
-	analyzeStep := workflow.NewTypedPromptStep[SentimentAnalysis](
+	// Step 1: Typed sentiment analysis using typed key
+	analyzeStep := workflow.NewTypedPromptStepWithKey(
 		"analyze",
 		c,
 		func(s *workflow.State) []ai.Message {
-			text := s.GetString("input_text")
+			text := workflow.MustGet(s, KeyInputText)
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"Analyze the sentiment of this text:\n\n%s", text)},
 			}
 		},
 		sentimentSchema,
-		"analysis",
+		KeyAnalysis,
 	)
 
 	// Step 2: Generate suggestions based on analysis
-	suggestStep := workflow.NewTypedPromptStep[ContentSuggestions](
+	suggestStep := workflow.NewTypedPromptStepWithKey(
 		"suggest",
 		c,
 		func(s *workflow.State) []ai.Message {
-			text := s.GetString("input_text")
-			// Use type-safe accessor to get the analysis
-			analysis, ok := workflow.GetTyped[*SentimentAnalysis](s, "analysis")
+			text := workflow.MustGet(s, KeyInputText)
+			// Use type-safe accessor - type inferred from key
+			analysis, ok := workflow.Get(s, KeyAnalysis)
 			if !ok {
 				return []ai.Message{
 					{Role: ai.RoleUser, Content: "No analysis available"},
@@ -120,7 +128,7 @@ Suggest improvements to make this text more engaging and positive.`,
 			}
 		},
 		suggestionsSchema,
-		"suggestions",
+		KeySuggestions,
 	)
 
 	// Create chain workflow
@@ -134,9 +142,11 @@ Suggest improvements to make this text more engaging and positive.`,
 
 	fmt.Printf("\n--- Input Text ---\n%s\n", inputText)
 
-	// Run workflow
+	// Run workflow - set state using typed key
 	fmt.Println("\n--- Executing Typed Workflow ---")
-	state := workflow.NewStateFrom(map[string]any{"input_text": inputText})
+	state := workflow.NewStateFrom(nil)
+	workflow.Set(state, KeyInputText, inputText)
+
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	for event := range events {
@@ -154,10 +164,10 @@ Suggest improvements to make this text more engaging and positive.`,
 	}
 
 	// Access results with type-safe accessors
-	fmt.Println("\n--- Results (Type-Safe Access) ---")
+	fmt.Println("\n--- Results (Type-Safe Access with Key[T]) ---")
 
-	// Using GetTyped - returns (value, ok)
-	analysis, ok := workflow.GetTyped[*SentimentAnalysis](state, "analysis")
+	// Using Get - returns (value, ok), type inferred from key
+	analysis, ok := workflow.Get(state, KeyAnalysis)
 	if ok {
 		fmt.Println("\nSentiment Analysis:")
 		fmt.Printf("  Sentiment:  %s\n", analysis.Sentiment)
@@ -166,8 +176,8 @@ Suggest improvements to make this text more engaging and positive.`,
 		fmt.Printf("  Summary:    %s\n", analysis.Summary)
 	}
 
-	// Using MustGet - panics if not found (use when you're certain it exists)
-	suggestions := workflow.MustGet[*ContentSuggestions](state, "suggestions")
+	// Using MustGet - panics if not found, type inferred from key
+	suggestions := workflow.MustGet(state, KeySuggestions)
 	fmt.Println("\nContent Suggestions:")
 	fmt.Printf("  Recommended Tone: %s\n", suggestions.Tone)
 	fmt.Println("  Suggestions:")
@@ -176,9 +186,10 @@ Suggest improvements to make this text more engaging and positive.`,
 	}
 	fmt.Printf("\n  Rewritten:\n  %s\n", suggestions.Rewrite)
 
-	// Demonstrate GetTypedOr with default value
-	missingData := workflow.GetTypedOr(state, "nonexistent", &SentimentAnalysis{
+	// Demonstrate GetOr with default value
+	missingKey := workflow.NewKey[*SentimentAnalysis]("nonexistent")
+	missingData := workflow.GetOr(state, missingKey, &SentimentAnalysis{
 		Sentiment: "unknown",
 	})
-	fmt.Printf("\n  GetTypedOr fallback demo: sentiment = %q\n", missingData.Sentiment)
+	fmt.Printf("\n  GetOr fallback demo: sentiment = %q\n", missingData.Sentiment)
 }

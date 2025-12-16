@@ -39,7 +39,7 @@ gains/
 
 - **client**: Entry point for most users. Unified access to all provider capabilities with automatic retry and event emission.
 - **agent**: Tool-calling loops with max steps, timeouts, approval workflows, and parallel tool execution.
-- **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), and TypedPromptStep (auto-unmarshaling structured output). Includes type-safe state accessors: `GetTyped[T]`, `MustGet[T]`, `GetTypedOr[T]`.
+- **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), and TypedPromptStep (auto-unmarshaling structured output). Uses `Key[T]` for type-safe state access: `Get`, `Set`, `MustGet`, `GetOr`.
 - **schema**: Fluent JSON schema builder for defining structured output schemas.
 - **model**: Type-safe model selection with pricing data for cost estimation.
 

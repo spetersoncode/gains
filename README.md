@@ -235,7 +235,7 @@ result, _ := wf.Run(ctx, initialState)
 
 ### Typed Workflow Steps
 
-Use `TypedPromptStep[T]` for automatic JSON unmarshaling into Go structs:
+Use `TypedPromptStep[T]` with `Key[T]` for compile-time type safety:
 
 ```go
 type Analysis struct {
@@ -243,6 +243,9 @@ type Analysis struct {
     Confidence float64  `json:"confidence"`
     Keywords   []string `json:"keywords"`
 }
+
+// Define typed key - single source of truth for key-type mapping
+var KeyAnalysis = workflow.NewKey[*Analysis]("analysis")
 
 // Define schema
 analysisSchema := ai.ResponseSchema{
@@ -254,15 +257,15 @@ analysisSchema := ai.ResponseSchema{
         MustBuild(),
 }
 
-// Create typed step - result is automatically unmarshaled
-step := workflow.NewTypedPromptStep[Analysis](
-    "analyze", c, promptFn, analysisSchema, "analysis",
+// Create typed step with typed key - result is automatically unmarshaled
+step := workflow.NewTypedPromptStepWithKey(
+    "analyze", c, promptFn, analysisSchema, KeyAnalysis,
 )
 
-// After execution, access with type-safe getters
-analysis, ok := workflow.GetTyped[*Analysis](state, "analysis")
-analysis := workflow.MustGet[*Analysis](state, "analysis")  // panics if missing
-count := workflow.GetTypedOr(state, "count", 0)             // with default
+// After execution, access with type-safe getters (type inferred from key)
+analysis, ok := workflow.Get(state, KeyAnalysis)
+analysis := workflow.MustGet(state, KeyAnalysis)           // panics if missing
+count := workflow.GetOr(state, workflow.IntKey("count"), 0)  // with default
 ```
 
 ## Embeddings
