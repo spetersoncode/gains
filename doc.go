@@ -1,8 +1,8 @@
 // Package gains provides a unified interface for interacting with LLM providers.
 //
 // The gains library abstracts away provider-specific APIs, allowing you to write
-// code once and switch between Anthropic (Claude), OpenAI (GPT), and Google (Gemini)
-// with minimal changes.
+// code once and use models from Anthropic (Claude), OpenAI (GPT), and Google (Gemini).
+// Models know their provider, so routing happens automatically.
 //
 // # Import Convention
 //
@@ -12,29 +12,30 @@
 //
 // All examples in this documentation use this convention.
 //
-// # Core Interfaces
+// # Core Types
 //
-// The library defines three main provider interfaces:
+// The library defines these key types:
 //
-//   - [ChatProvider]: Send conversations and receive responses (text, streaming, tool calls)
-//   - [EmbeddingProvider]: Generate vector embeddings for text
-//   - [ImageProvider]: Generate images from text prompts
+//   - [Provider]: Identifies a provider (Anthropic, OpenAI, Google)
+//   - [Model]: Interface for models that know their provider
+//   - [Message]: Conversation messages with roles and content
+//   - [Response]: Chat responses with content, tool calls, and usage
 //
 // Use the [github.com/spetersoncode/gains/client] package as the entry point
-// for provider access, and the [github.com/spetersoncode/gains/model] package
-// for model selection.
+// and the [github.com/spetersoncode/gains/model] package for model selection.
 //
 // # Basic Usage
 //
-// Send a simple chat message:
+// Create a client with API keys and default models:
 //
-//	c, err := client.New(ctx, client.Config{
-//	    Provider: client.ProviderAnthropic,
-//	    APIKey:   os.Getenv("ANTHROPIC_API_KEY"),
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{
+//	        Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+//	    },
+//	    Defaults: client.Defaults{
+//	        Chat: model.ClaudeSonnet45,
+//	    },
 //	})
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
 //
 //	messages := []ai.Message{
 //	    {Role: ai.RoleUser, Content: "What is the capital of France?"},
@@ -45,6 +46,16 @@
 //	    log.Fatal(err)
 //	}
 //	fmt.Println(resp.Content)
+//
+// # Model-Centric Routing
+//
+// Models determine their provider. Override the default with WithModel:
+//
+//	// Uses default (routes to Anthropic)
+//	resp, _ := c.Chat(ctx, messages)
+//
+//	// Override with GPT (routes to OpenAI)
+//	resp, _ := c.Chat(ctx, messages, ai.WithModel(model.GPT52))
 //
 // # Streaming Responses
 //
@@ -91,39 +102,6 @@
 //	}
 //
 //	resp, err := c.Chat(ctx, messages, ai.WithTools(tools))
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Handle tool calls
-//	for _, call := range resp.ToolCalls {
-//	    fmt.Printf("Tool: %s, Args: %s\n", call.Name, call.Arguments)
-//	}
-//
-// # Structured Output
-//
-// Request JSON responses with schema validation:
-//
-//	schema := &ai.ResponseSchema{
-//	    Name:   "answer",
-//	    Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}}}`),
-//	}
-//
-//	resp, err := c.Chat(ctx, messages, ai.WithResponseSchema(schema))
-//
-// # Multimodal Messages
-//
-// Send images alongside text:
-//
-//	messages := []ai.Message{
-//	    {
-//	        Role: ai.RoleUser,
-//	        Parts: []ai.ContentPart{
-//	            ai.NewTextPart("What's in this image?"),
-//	            ai.NewImageURLPart("https://example.com/image.jpg"),
-//	        },
-//	    },
-//	}
 //
 // # Higher-Level Abstractions
 //
@@ -131,5 +109,4 @@
 //
 //   - [github.com/spetersoncode/gains/agent]: Autonomous tool-calling agents
 //   - [github.com/spetersoncode/gains/workflow]: Composable AI pipelines
-//   - [github.com/spetersoncode/gains/retry]: Retry logic with exponential backoff
 package gains

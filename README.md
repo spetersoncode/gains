@@ -10,13 +10,13 @@ gains provides a unified interface for building AI applications across Anthropic
 
 ## Features
 
-- **Unified Client** - Single interface for chat, embeddings, and image generation across providers
+- **Model-Centric Routing** - Models know their provider; client routes automatically
+- **Unified Client** - Single interface for chat, embeddings, and image generation
 - **Agent Orchestration** - Autonomous tool-calling loops with approval workflows
 - **Composable Workflows** - Chain, Parallel, and Router patterns for complex pipelines
 - **Streaming First** - Channel-based streaming throughout the entire API
 - **Functional Options** - Go-idiomatic configuration with type-safe model selection
 - **Automatic Retry** - Exponential backoff with jitter for transient errors
-- **Event System** - Observable operations at client, agent, and workflow levels
 
 ## Installation
 
@@ -45,6 +45,7 @@ package main
 import (
     "context"
     "fmt"
+    "os"
 
     ai "github.com/spetersoncode/gains"
     "github.com/spetersoncode/gains/client"
@@ -53,13 +54,19 @@ import (
 
 func main() {
     ctx := context.Background()
-    c, _ := client.New(ctx, client.Config{
-        Provider: client.ProviderAnthropic,
+
+    c := client.New(client.Config{
+        APIKeys: client.APIKeys{
+            Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+        },
+        Defaults: client.Defaults{
+            Chat: model.ClaudeSonnet45,
+        },
     })
 
     resp, _ := c.Chat(ctx, []ai.Message{
         {Role: ai.RoleUser, Content: "Hello!"},
-    }, ai.WithModel(model.ClaudeSonnet45))
+    })
 
     fmt.Println(resp.Content)
 }
@@ -67,7 +74,7 @@ func main() {
 
 ## Providers
 
-The unified client supports all three providers with feature detection:
+Models determine their provider automatically. Configure API keys for the providers you use:
 
 | Provider  | Chat | Images | Embeddings |
 |-----------|:----:|:------:|:----------:|
@@ -76,16 +83,24 @@ The unified client supports all three providers with feature detection:
 | Google    | ✓    | ✓      | ✓          |
 
 ```go
-ctx := context.Background()
+c := client.New(client.Config{
+    APIKeys: client.APIKeys{
+        Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+        OpenAI:    os.Getenv("OPENAI_API_KEY"),
+        Google:    os.Getenv("GOOGLE_API_KEY"),
+    },
+    Defaults: client.Defaults{
+        Chat:      model.ClaudeSonnet45,      // Routes to Anthropic
+        Embedding: model.TextEmbedding3Small, // Routes to OpenAI
+        Image:     model.Imagen4,             // Routes to Google
+    },
+})
 
-// Anthropic - uses ANTHROPIC_API_KEY
-c, _ := client.New(ctx, client.Config{Provider: client.ProviderAnthropic})
+// Uses default model (ClaudeSonnet45 -> Anthropic)
+resp, _ := c.Chat(ctx, messages)
 
-// OpenAI - uses OPENAI_API_KEY
-c, _ := client.New(ctx, client.Config{Provider: client.ProviderOpenAI})
-
-// Google - uses GOOGLE_API_KEY
-c, _ := client.New(ctx, client.Config{Provider: client.ProviderGoogle})
+// Override with different model (routes to OpenAI)
+resp, _ := c.Chat(ctx, messages, ai.WithModel(model.GPT52))
 ```
 
 ## Chat & Streaming
@@ -149,13 +164,12 @@ agent.MustRegisterFunc(registry, "search", "Search the web",
         Desc("query", "Search query").Required("query").
         Build(),
     func(ctx context.Context, args SearchArgs) (string, error) {
-        // args.Query is already parsed
         return results, nil
     },
 )
 
 // Create and run agent
-a := agent.New(chatProvider, registry)
+a := agent.New(c, registry)
 
 result, _ := a.Run(ctx, messages,
     agent.WithMaxSteps(10),
@@ -169,14 +183,14 @@ fmt.Println(result.Response.Content)
 Require approval for sensitive operations:
 
 ```go
-a := agent.New(provider, registry)
+a := agent.New(c, registry)
 
 result, _ := a.Run(ctx, messages,
     agent.WithApprovalRequired("delete_file", "send_email"),
     agent.WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
         fmt.Printf("Allow %s? [y/n]: ", call.Name)
         // Get user input...
-        return approved, "" // Return approval and optional rejection reason
+        return approved, ""
     }),
 )
 ```
@@ -190,8 +204,8 @@ import "github.com/spetersoncode/gains/workflow"
 
 // Chain - sequential execution
 chain := workflow.NewChain("pipeline",
-    workflow.NewPromptStep("analyze", provider, "Analyze: {{.input}}"),
-    workflow.NewPromptStep("summarize", provider, "Summarize: {{.analyze}}"),
+    workflow.NewPromptStep("analyze", c, analyzePrompt, "analysis"),
+    workflow.NewPromptStep("summarize", c, summarizePrompt, "summary"),
 )
 
 // Parallel - concurrent execution
@@ -202,14 +216,16 @@ parallel := workflow.NewParallel("multi-analysis",
 
 // Router - conditional branching
 router := workflow.NewRouter("classifier",
-    workflow.Route{
-        Condition: func(s *workflow.State) bool { return s.GetString("type") == "question" },
-        Step:      questionHandler,
+    []workflow.Route{
+        {
+            Name:      "question",
+            Condition: func(ctx context.Context, s *workflow.State) bool {
+                return s.GetString("type") == "question"
+            },
+            Step: questionHandler,
+        },
     },
-    workflow.Route{
-        Condition: func(s *workflow.State) bool { return s.GetString("type") == "task" },
-        Step:      taskHandler,
-    },
+    defaultHandler,
 )
 
 // Execute workflow
@@ -282,20 +298,13 @@ resp, _ := c.Chat(ctx, messages,
 ## Retry Configuration
 
 ```go
-c, _ := client.New(ctx, client.Config{
-    Provider: client.ProviderOpenAI,
-    RetryConfig: &client.RetryConfig{
+c := client.New(client.Config{
+    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+    RetryConfig: &retry.Config{
         MaxAttempts:  5,
         InitialDelay: time.Second,
         MaxDelay:     30 * time.Second,
     },
-})
-
-// Or disable retries entirely
-disabled := client.DisabledRetryConfig()
-c, _ := client.New(ctx, client.Config{
-    Provider:    client.ProviderOpenAI,
-    RetryConfig: &disabled,
 })
 ```
 
@@ -306,9 +315,9 @@ Observe operations at multiple levels:
 ```go
 // Client events via channel
 events := make(chan client.Event, 100)
-c, _ := client.New(ctx, client.Config{
-    Provider: client.ProviderOpenAI,
-    Events:   events,
+c := client.New(client.Config{
+    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+    Events:  events,
 })
 
 go func() {
@@ -318,7 +327,7 @@ go func() {
 }()
 
 // Agent events via streaming
-a := agent.New(provider, registry)
+a := agent.New(c, registry)
 stream := a.RunStream(ctx, messages)
 for event := range stream {
     switch event.Type {
@@ -340,17 +349,7 @@ for event := range stream {
 
 ## Examples
 
-See the [`cmd/demo`](cmd/demo) directory for complete examples:
-
-- `chat.go` - Basic chat
-- `chat_stream.go` - Streaming responses
-- `vision.go` - Image input/vision
-- `tools.go` - Tool calling
-- `agent.go` - Agent orchestration
-- `structured.go` - JSON mode / structured output
-- `embeddings.go` - Text embeddings
-- `images.go` - Image generation
-- `workflow.go` - Workflow patterns
+See the [`cmd/demo`](cmd/demo) directory for complete examples.
 
 ## License
 
