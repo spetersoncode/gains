@@ -178,11 +178,11 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	fmt.Println("  - Statements -> Expansion step")
 	fmt.Println("  - Other -> Default step")
 
-	// Define steps for each route
+	// Define steps for each route (concise 1-2 sentence responses)
 	answerStep := workflow.NewPromptStep("answer", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Please answer this question concisely: %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Answer in 1-2 sentences: %s", s.GetString("input"))},
 			}
 		},
 		"response",
@@ -191,7 +191,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	expandStep := workflow.NewPromptStep("expand", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Please expand on this statement with additional context: %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Expand on this in 1-2 sentences: %s", s.GetString("input"))},
 			}
 		},
 		"response",
@@ -200,7 +200,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	defaultStep := workflow.NewPromptStep("default", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Please respond appropriately to: %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Respond briefly (1-2 sentences): %s", s.GetString("input"))},
 			}
 		},
 		"response",
@@ -232,11 +232,10 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 	wf := workflow.New("router-workflow", router)
 
-	// Test cases
+	// Test cases (one question, one statement)
 	testInputs := []string{
 		"What is the speed of light?",
 		"The ocean covers most of Earth's surface.",
-		"Hello there!",
 	}
 
 	for _, input := range testInputs {
@@ -373,11 +372,11 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	fmt.Println("  - technical -> Technical handler")
 	fmt.Println("  - general -> General handler")
 
-	// Define handlers for each category
+	// Define handlers for each category (concise responses)
 	billingHandler := workflow.NewPromptStep("billing-handler", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleSystem, Content: "You are a billing support specialist. Be helpful and mention payment options if relevant."},
+				{Role: ai.RoleSystem, Content: "You are a billing support specialist. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
@@ -387,7 +386,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	technicalHandler := workflow.NewPromptStep("technical-handler", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleSystem, Content: "You are a technical support specialist. Provide clear troubleshooting steps."},
+				{Role: ai.RoleSystem, Content: "You are a technical support specialist. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
@@ -397,7 +396,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	generalHandler := workflow.NewPromptStep("general-handler", c,
 		func(s *workflow.State) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleSystem, Content: "You are a general support agent. Be friendly and helpful."},
+				{Role: ai.RoleSystem, Content: "You are a general support agent. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.GetString("ticket")},
 			}
 		},
@@ -422,11 +421,10 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	wf := workflow.New("support-workflow", classifier)
 
-	// Test tickets
+	// Test tickets (billing and technical)
 	tickets := []string{
-		"I was charged twice for my subscription last month. Can you help me get a refund?",
-		"The app keeps crashing when I try to upload files larger than 10MB.",
-		"I love your product! Just wanted to say thanks to the team.",
+		"I was charged twice for my subscription last month.",
+		"The app keeps crashing when I upload large files.",
 	}
 
 	for _, ticket := range tickets {

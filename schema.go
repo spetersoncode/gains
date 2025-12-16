@@ -28,6 +28,15 @@ type propertyDef struct {
 // SchemaFrom creates a SchemaBuilder by reflecting on the given struct type.
 // Field names are derived from json tags (or field names if no tag).
 //
+// Deprecated: SchemaFrom uses reflection and string-based field references which
+// can silently fail on typos. Use the schema package for programmatic schema building:
+//
+//	import "github.com/yourusername/gains/schema"
+//	params := schema.Object().
+//	    Field("query", schema.String().Desc("Search query").Required()).
+//	    Field("limit", schema.Int().Min(1).Max(100)).
+//	    MustBuild()
+//
 // Type mappings:
 //   - string → "string"
 //   - int, int64, uint, etc. → "integer"

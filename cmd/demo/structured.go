@@ -8,6 +8,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/schema"
 )
 
 func demoJSONMode(ctx context.Context, c *client.Client) {
@@ -15,33 +16,16 @@ func demoJSONMode(ctx context.Context, c *client.Client) {
 	fmt.Println("│      JSON Mode / Structured Output      │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	// Define a schema for structured output
-	schema := ai.ResponseSchema{
+	// Define a schema for structured output using the schema builder
+	responseSchema := ai.ResponseSchema{
 		Name:        "book_info",
 		Description: "Information about a book",
-		Schema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"title": {
-					"type": "string",
-					"description": "The book title"
-				},
-				"author": {
-					"type": "string",
-					"description": "The author's name"
-				},
-				"year": {
-					"type": "integer",
-					"description": "Publication year"
-				},
-				"genres": {
-					"type": "array",
-					"items": {"type": "string"},
-					"description": "List of genres"
-				}
-			},
-			"required": ["title", "author", "year", "genres"]
-		}`),
+		Schema: schema.Object().
+			Field("title", schema.String().Desc("The book title").Required()).
+			Field("author", schema.String().Desc("The author's name").Required()).
+			Field("year", schema.Int().Desc("Publication year").Required()).
+			Field("genres", schema.Array(schema.String()).Desc("List of genres").Required()).
+			MustBuild(),
 	}
 
 	messages := []ai.Message{
@@ -52,7 +36,7 @@ func demoJSONMode(ctx context.Context, c *client.Client) {
 	fmt.Println("Schema: book_info (title, author, year, genres)")
 	fmt.Println()
 
-	resp, err := c.Chat(ctx, messages, ai.WithResponseSchema(schema))
+	resp, err := c.Chat(ctx, messages, ai.WithResponseSchema(responseSchema))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return

@@ -9,6 +9,7 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/schema"
 )
 
 // Tool argument types
@@ -32,10 +33,9 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 
 	// Weather tool
 	agent.MustRegisterFunc(registry, "get_weather", "Get the current weather for a location",
-		ai.SchemaFrom[WeatherArgs]().
-			Desc("location", "The city name, e.g. San Francisco").
-			Required("location").
-			Build(),
+		schema.Object().
+			Field("location", schema.String().Desc("The city name, e.g. San Francisco").Required()).
+			MustBuild(),
 		func(ctx context.Context, args WeatherArgs) (string, error) {
 			// Simulate weather API
 			return fmt.Sprintf(`{"location": %q, "temperature": 22, "unit": "celsius", "conditions": "Partly cloudy"}`, args.Location), nil
@@ -44,10 +44,9 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 
 	// Calculator tool
 	agent.MustRegisterFunc(registry, "calculate", "Perform a mathematical calculation",
-		ai.SchemaFrom[CalculateArgs]().
-			Desc("expression", "The mathematical expression to evaluate, e.g. '2 + 2'").
-			Required("expression").
-			Build(),
+		schema.Object().
+			Field("expression", schema.String().Desc("The mathematical expression to evaluate, e.g. '2 + 2'").Required()).
+			MustBuild(),
 		func(ctx context.Context, args CalculateArgs) (string, error) {
 			// Simulate calculation (in real implementation, use a math parser)
 			return fmt.Sprintf(`{"expression": %q, "result": 42}`, args.Expression), nil
@@ -115,7 +114,7 @@ func demoAgent(ctx context.Context, c *client.Client) {
 	// Create a registry with a single tool using typed handler
 	registry := agent.NewRegistry()
 	agent.MustRegisterFunc(registry, "get_time", "Get the current time",
-		ai.SchemaFrom[TimeArgs]().Build(),
+		schema.Object().MustBuild(),
 		func(ctx context.Context, args TimeArgs) (string, error) {
 			return fmt.Sprintf(`{"time": %q}`, time.Now().Format(time.RFC3339)), nil
 		},

@@ -122,21 +122,18 @@ for event := range stream {
 
 ## Tool Calling
 
-Define tools using struct-based schema generation:
+Define tools using the fluent schema builder:
 
 ```go
-type WeatherArgs struct {
-    Location string `json:"location"`
-    Unit     string `json:"unit"`
-}
+import "github.com/spetersoncode/gains/schema"
 
 tools := []ai.Tool{{
     Name:        "get_weather",
     Description: "Get current weather for a location",
-    Parameters: ai.SchemaFrom[WeatherArgs]().
-        Desc("location", "The city name").Required("location").
-        Desc("unit", "Temperature unit").Enum("unit", "celsius", "fahrenheit").
-        Build(),
+    Parameters: schema.Object().
+        Field("location", schema.String().Desc("The city name").Required()).
+        Field("unit", schema.String().Desc("Temperature unit").Enum("celsius", "fahrenheit")).
+        MustBuild(),
 }}
 
 resp, _ := c.Chat(ctx, messages, ai.WithTools(tools))
@@ -151,7 +148,10 @@ for _, call := range resp.ToolCalls {
 The agent package handles autonomous tool-calling loops with typed handlers:
 
 ```go
-import "github.com/spetersoncode/gains/agent"
+import (
+    "github.com/spetersoncode/gains/agent"
+    "github.com/spetersoncode/gains/schema"
+)
 
 type SearchArgs struct {
     Query string `json:"query"`
@@ -160,9 +160,9 @@ type SearchArgs struct {
 // Create a tool registry with typed handler
 registry := agent.NewRegistry()
 agent.MustRegisterFunc(registry, "search", "Search the web",
-    ai.SchemaFrom[SearchArgs]().
-        Desc("query", "Search query").Required("query").
-        Build(),
+    schema.Object().
+        Field("query", schema.String().Desc("Search query").Required()).
+        MustBuild(),
     func(ctx context.Context, args SearchArgs) (string, error) {
         return results, nil
     },
@@ -254,17 +254,53 @@ fmt.Println(resp.Images[0].URL)
 Force JSON output or use schema validation:
 
 ```go
+import "github.com/spetersoncode/gains/schema"
+
 // Simple JSON mode
 resp, _ := c.Chat(ctx, messages, ai.WithJSONMode())
 
 // With schema validation
 resp, _ := c.Chat(ctx, messages,
     ai.WithResponseSchema(ai.ResponseSchema{
-        Name:   "result",
-        Schema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"},"score":{"type":"number"}}}`),
+        Name: "result",
+        Schema: schema.Object().
+            Field("name", schema.String().Required()).
+            Field("score", schema.Number().Min(0).Max(100)).
+            MustBuild(),
     }),
 )
 ```
+
+## Schema Builder
+
+The `schema` package provides a fluent API for building JSON schemas:
+
+```go
+import "github.com/spetersoncode/gains/schema"
+
+// String with constraints
+schema.String().MinLength(1).MaxLength(100).Pattern(`^\w+$`)
+
+// Integer with range
+schema.Int().Min(1).Max(100).Default(10)
+
+// Enum values
+schema.String().Enum("low", "medium", "high")
+
+// Arrays
+schema.Array(schema.String()).MinItems(1).MaxItems(10).UniqueItems()
+
+// Complex objects
+schema.Object().
+    Field("query", schema.String().Desc("Search query").Required()).
+    Field("limit", schema.Int().Min(1).Max(100).Default(10)).
+    Field("filters", schema.Object().
+        Field("tags", schema.Array(schema.String())).
+        Field("active", schema.Bool().Default(true))).
+    MustBuild()
+```
+
+Use `Build()` for error handling or `MustBuild()` to panic on invalid schemas.
 
 ## Models
 
