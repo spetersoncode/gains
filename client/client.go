@@ -106,7 +106,22 @@ type ErrNoModel struct {
 	Operation string
 }
 
+// operationHints maps operation names to their config field and option function.
+var operationHints = map[string]struct {
+	configField string
+	optionFunc  string
+}{
+	"chat":        {"Defaults.Chat", "gains.WithModel()"},
+	"chat_stream": {"Defaults.Chat", "gains.WithModel()"},
+	"image":       {"Defaults.Image", "gains.WithImageModel()"},
+	"embedding":   {"Defaults.Embedding", "gains.WithEmbeddingModel()"},
+}
+
 func (e *ErrNoModel) Error() string {
+	if hint, ok := operationHints[e.Operation]; ok {
+		return fmt.Sprintf("no model specified for %s: set client.Config %s or use %s",
+			e.Operation, hint.configField, hint.optionFunc)
+	}
 	return fmt.Sprintf("no model specified for %s and no default configured", e.Operation)
 }
 

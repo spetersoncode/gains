@@ -233,6 +233,38 @@ wf := workflow.New("my-workflow", chain)
 result, _ := wf.Run(ctx, initialState)
 ```
 
+### Typed Workflow Steps
+
+Use `TypedPromptStep[T]` for automatic JSON unmarshaling into Go structs:
+
+```go
+type Analysis struct {
+    Sentiment  string   `json:"sentiment"`
+    Confidence float64  `json:"confidence"`
+    Keywords   []string `json:"keywords"`
+}
+
+// Define schema
+analysisSchema := ai.ResponseSchema{
+    Name: "analysis",
+    Schema: schema.Object().
+        Field("sentiment", schema.String().Enum("positive", "negative", "neutral").Required()).
+        Field("confidence", schema.Number().Min(0).Max(1).Required()).
+        Field("keywords", schema.Array(schema.String()).Required()).
+        MustBuild(),
+}
+
+// Create typed step - result is automatically unmarshaled
+step := workflow.NewTypedPromptStep[Analysis](
+    "analyze", c, promptFn, analysisSchema, "analysis",
+)
+
+// After execution, access with type-safe getters
+analysis, ok := workflow.GetTyped[*Analysis](state, "analysis")
+analysis := workflow.MustGet[*Analysis](state, "analysis")  // panics if missing
+count := workflow.GetTypedOr(state, "count", 0)             // with default
+```
+
 ## Embeddings
 
 ```go

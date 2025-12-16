@@ -166,6 +166,11 @@ func main() {
 		}
 	}
 
+	// Demo: Typed Workflow (new!)
+	if askYesNo("Demo typed workflow?") {
+		demoTypedWorkflow(ctx, c)
+	}
+
 	// Demo: Workflow Chain
 	if askYesNo("Demo workflow chain?") {
 		demoWorkflowChain(ctx, c)

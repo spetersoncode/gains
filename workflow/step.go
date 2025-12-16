@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	ai "github.com/spetersoncode/gains"
 )
@@ -176,6 +178,182 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 				Result: &StepResult{
 					StepName: p.name,
 					Output:   response.Content,
+					Response: response,
+					Usage:    response.Usage,
+				},
+			})
+		}
+	}()
+
+	return ch
+}
+
+// TypedPromptStep makes an LLM call with structured output that is automatically
+// unmarshaled into type T and stored in state.
+type TypedPromptStep[T any] struct {
+	name       string
+	chatClient ChatClient
+	prompt     PromptFunc
+	outputKey  string
+	chatOpts   []ai.Option
+	schema     ai.ResponseSchema
+}
+
+// NewTypedPromptStep creates a step that returns structured output of type T.
+// The schema parameter defines the JSON schema for the response.
+// The unmarshaled *T is stored in state under outputKey.
+//
+// Example:
+//
+//	type Analysis struct {
+//	    Sentiment  string   `json:"sentiment"`
+//	    Keywords   []string `json:"keywords"`
+//	}
+//
+//	analysisSchema := ai.ResponseSchema{
+//	    Name: "analysis",
+//	    Schema: schema.Object().
+//	        Field("sentiment", schema.String().Required()).
+//	        Field("keywords", schema.Array(schema.String()).Required()).
+//	        MustBuild(),
+//	}
+//
+//	step := workflow.NewTypedPromptStep[Analysis](
+//	    "analyze",
+//	    client,
+//	    func(s *State) []ai.Message {
+//	        return []ai.Message{{Role: ai.RoleUser, Content: s.GetString("text")}}
+//	    },
+//	    analysisSchema,
+//	    "analysis",
+//	    ai.WithModel(model.Claude35Sonnet),
+//	)
+//
+//	// After execution, state.Get("analysis") returns *Analysis
+func NewTypedPromptStep[T any](
+	name string,
+	c ChatClient,
+	prompt PromptFunc,
+	schema ai.ResponseSchema,
+	outputKey string,
+	opts ...ai.Option,
+) *TypedPromptStep[T] {
+	return &TypedPromptStep[T]{
+		name:       name,
+		chatClient: c,
+		prompt:     prompt,
+		outputKey:  outputKey,
+		chatOpts:   opts,
+		schema:     schema,
+	}
+}
+
+// Name returns the step name.
+func (p *TypedPromptStep[T]) Name() string { return p.name }
+
+// Run executes the LLM call and unmarshals the response into T.
+func (p *TypedPromptStep[T]) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+	options := ApplyOptions(opts...)
+
+	// Merge chat options, adding our response schema
+	chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions)+1)
+	chatOpts = append(chatOpts, p.chatOpts...)
+	chatOpts = append(chatOpts, options.ChatOptions...)
+	chatOpts = append(chatOpts, ai.WithResponseSchema(p.schema))
+
+	msgs := p.prompt(state)
+	resp, err := p.chatClient.Chat(ctx, msgs, chatOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal response content into T
+	var result T
+	if err := json.Unmarshal([]byte(resp.Content), &result); err != nil {
+		return nil, &UnmarshalError{
+			StepName:   p.name,
+			Content:    resp.Content,
+			TargetType: fmt.Sprintf("%T", result),
+			Err:        err,
+		}
+	}
+
+	// Store pointer to result in state
+	if p.outputKey != "" {
+		state.Set(p.outputKey, &result)
+	}
+
+	return &StepResult{
+		StepName: p.name,
+		Output:   &result,
+		Response: resp,
+		Usage:    resp.Usage,
+	}, nil
+}
+
+// RunStream executes the LLM call with streaming and unmarshals the final response.
+func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+	ch := make(chan Event, 100)
+
+	go func() {
+		defer close(ch)
+		emit(ch, Event{Type: EventStepStart, StepName: p.name})
+
+		options := ApplyOptions(opts...)
+
+		// Merge chat options, adding our response schema
+		chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions)+1)
+		chatOpts = append(chatOpts, p.chatOpts...)
+		chatOpts = append(chatOpts, options.ChatOptions...)
+		chatOpts = append(chatOpts, ai.WithResponseSchema(p.schema))
+
+		msgs := p.prompt(state)
+		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
+		if err != nil {
+			emit(ch, Event{Type: EventError, StepName: p.name, Error: err})
+			return
+		}
+
+		var response *ai.Response
+		for event := range streamCh {
+			if event.Err != nil {
+				emit(ch, Event{Type: EventError, StepName: p.name, Error: event.Err})
+				return
+			}
+			if event.Delta != "" {
+				emit(ch, Event{Type: EventStreamDelta, StepName: p.name, Delta: event.Delta})
+			}
+			if event.Done && event.Response != nil {
+				response = event.Response
+			}
+		}
+
+		if response != nil {
+			var result T
+			if err := json.Unmarshal([]byte(response.Content), &result); err != nil {
+				emit(ch, Event{
+					Type:     EventError,
+					StepName: p.name,
+					Error: &UnmarshalError{
+						StepName:   p.name,
+						Content:    response.Content,
+						TargetType: fmt.Sprintf("%T", result),
+						Err:        err,
+					},
+				})
+				return
+			}
+
+			if p.outputKey != "" {
+				state.Set(p.outputKey, &result)
+			}
+
+			emit(ch, Event{
+				Type:     EventStepComplete,
+				StepName: p.name,
+				Result: &StepResult{
+					StepName: p.name,
+					Output:   &result,
 					Response: response,
 					Usage:    response.Usage,
 				},

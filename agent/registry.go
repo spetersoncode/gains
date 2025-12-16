@@ -136,8 +136,10 @@ type TypedHandler[T any] func(ctx context.Context, args T) (string, error)
 //	type SearchArgs struct {
 //	    Query string `json:"query"`
 //	}
-//	RegisterFunc(registry, "search", "Search the web",
-//	    ai.SchemaFrom[SearchArgs]().Desc("query", "Search query").Required("query").Build(),
+//	params := schema.Object().
+//	    Field("query", schema.String().Desc("Search query").Required()).
+//	    MustBuild()
+//	RegisterFunc(registry, "search", "Search the web", params,
 //	    func(ctx context.Context, args SearchArgs) (string, error) {
 //	        return doSearch(args.Query), nil
 //	    },

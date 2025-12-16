@@ -57,9 +57,33 @@ func TestErrMissingAPIKey(t *testing.T) {
 }
 
 func TestErrNoModel(t *testing.T) {
-	t.Run("Error returns formatted message", func(t *testing.T) {
+	t.Run("chat operation", func(t *testing.T) {
 		err := &ErrNoModel{Operation: "chat"}
-		expected := "no model specified for chat and no default configured"
+		expected := "no model specified for chat: set client.Config Defaults.Chat or use gains.WithModel()"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("chat_stream operation", func(t *testing.T) {
+		err := &ErrNoModel{Operation: "chat_stream"}
+		expected := "no model specified for chat_stream: set client.Config Defaults.Chat or use gains.WithModel()"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("image operation", func(t *testing.T) {
+		err := &ErrNoModel{Operation: "image"}
+		expected := "no model specified for image: set client.Config Defaults.Image or use gains.WithImageModel()"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("embedding operation", func(t *testing.T) {
+		err := &ErrNoModel{Operation: "embedding"}
+		expected := "no model specified for embedding: set client.Config Defaults.Embedding or use gains.WithEmbeddingModel()"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("unknown operation fallback", func(t *testing.T) {
+		err := &ErrNoModel{Operation: "unknown"}
+		expected := "no model specified for unknown and no default configured"
 		assert.Equal(t, expected, err.Error())
 	})
 }

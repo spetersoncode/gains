@@ -17,8 +17,9 @@ gains/
 ├── *.go              # Core types: Message, Response, Tool, Options, interfaces
 ├── client/           # Unified multi-provider client with retry & events
 ├── agent/            # Autonomous tool-calling agent orchestration
-├── workflow/         # Composable pipelines: Chain, Parallel, Router
-├── models/           # Model constants with pricing information
+├── workflow/         # Composable pipelines: Chain, Parallel, Router, TypedPromptStep
+├── schema/           # Fluent JSON schema builder for structured output
+├── model/            # Model constants with pricing information
 ├── internal/
 │   ├── provider/     # Provider implementations (anthropic, openai, google)
 │   ├── retry/        # Exponential backoff with jitter
@@ -38,8 +39,9 @@ gains/
 
 - **client**: Entry point for most users. Unified access to all provider capabilities with automatic retry and event emission.
 - **agent**: Tool-calling loops with max steps, timeouts, approval workflows, and parallel tool execution.
-- **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), and ClassifierRouter (LLM-based routing).
-- **models**: Type-safe model selection with pricing data for cost estimation.
+- **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), and TypedPromptStep (auto-unmarshaling structured output). Includes type-safe state accessors: `GetTyped[T]`, `MustGet[T]`, `GetTypedOr[T]`.
+- **schema**: Fluent JSON schema builder for defining structured output schemas.
+- **model**: Type-safe model selection with pricing data for cost estimation.
 
 ### Patterns
 
@@ -53,7 +55,7 @@ gains/
 - Always use conventional commits (feat, fix, refactor, docs, test, chore)
 - Follow Go idioms: functional options, interfaces, error handling
 - Keep provider implementations internal; expose only through client package
-- Use `models` package constants for model selection
+- Use `model` package constants for model selection
 - Streaming methods return `<-chan EventType`
 - All public APIs should have godoc comments
 

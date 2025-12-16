@@ -69,3 +69,23 @@ func (e *ParallelError) Unwrap() error {
 	}
 	return nil
 }
+
+// UnmarshalError indicates that an LLM response could not be unmarshaled
+// into the expected type.
+type UnmarshalError struct {
+	StepName   string // Name of the step that failed
+	Content    string // Raw response content for debugging
+	TargetType string // The type we tried to unmarshal into
+	Err        error  // The underlying unmarshal error
+}
+
+// Error returns a formatted error message.
+func (e *UnmarshalError) Error() string {
+	return fmt.Sprintf("workflow: step %q failed to unmarshal response into %s: %v",
+		e.StepName, e.TargetType, e.Err)
+}
+
+// Unwrap returns the underlying error for use with errors.Is and errors.As.
+func (e *UnmarshalError) Unwrap() error {
+	return e.Err
+}
