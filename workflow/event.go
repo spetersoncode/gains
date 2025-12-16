@@ -40,6 +40,9 @@ const (
 	// EventRouteSelected fires when a route is chosen.
 	EventRouteSelected EventType = "route_selected"
 
+	// EventLoopIteration fires at the start of each loop iteration.
+	EventLoopIteration EventType = "loop_iteration"
+
 	// EventError fires when an error occurs.
 	EventError EventType = "error"
 )
@@ -66,6 +69,9 @@ type Event struct {
 
 	// RouteName identifies the selected route for EventRouteSelected.
 	RouteName string
+
+	// Iteration is the current loop iteration (1-indexed) for EventLoopIteration.
+	Iteration int
 
 	// Error contains the error for EventError.
 	Error error

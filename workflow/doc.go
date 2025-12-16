@@ -1,9 +1,10 @@
 // Package workflow provides composable patterns for orchestrating AI-powered pipelines.
 //
-// The package implements three core workflow patterns:
+// The package implements four core workflow patterns:
 //   - Chain: Sequential execution where output flows to the next step
 //   - Parallel: Concurrent execution with result aggregation
 //   - Router: Conditional branching based on predicates or LLM classification
+//   - Loop: Iterative execution until a condition is met
 //
 // All workflow types implement the Step interface, enabling arbitrary nesting
 // and composition of patterns.
@@ -79,6 +80,47 @@
 //		},
 //	)
 //
+// # Iterative Loops
+//
+// Repeat steps until a condition is met:
+//
+//	// Create a content creator that reads feedback on subsequent iterations
+//	creator := workflow.NewPromptStep("creator", provider,
+//		func(s *workflow.State) []gains.Message {
+//			feedback := s.GetString("feedback")
+//			if feedback == "" {
+//				return []gains.Message{{Role: gains.RoleUser, Content: "Write a blog post about Go"}}
+//			}
+//			return []gains.Message{
+//				{Role: gains.RoleUser, Content: "Write a blog post about Go"},
+//				{Role: gains.RoleAssistant, Content: s.GetString("draft")},
+//				{Role: gains.RoleUser, Content: "Revise based on: " + feedback},
+//			}
+//		},
+//		workflow.WithOutputKey("draft"),
+//	)
+//
+//	// Create an editor that approves or provides feedback
+//	editor := workflow.NewPromptStep("editor", provider,
+//		func(s *workflow.State) []gains.Message {
+//			return []gains.Message{{
+//				Role: gains.RoleUser,
+//				Content: "Review this draft. Reply APPROVED or provide feedback:\n\n" +
+//					s.GetString("draft"),
+//			}}
+//		},
+//		workflow.WithOutputKey("feedback"),
+//	)
+//
+//	// Combine into a chain and loop until approved
+//	reviewCycle := workflow.NewChain("review-cycle", creator, editor)
+//	loop := workflow.NewLoop("content-loop", reviewCycle,
+//		func(ctx context.Context, s *workflow.State) bool {
+//			return strings.Contains(s.GetString("feedback"), "APPROVED")
+//		},
+//		workflow.WithMaxIterations(5),
+//	)
+//
 // # Streaming Events
 //
 // Monitor workflow progress in real-time:
@@ -105,6 +147,7 @@
 //		setupStep,
 //		workflow.NewParallel("inner-parallel", parallelSteps, nil),
 //		workflow.NewRouter("inner-router", routes, nil),
+//		workflow.NewLoop("inner-loop", refinementStep, condition),
 //		finalStep,
 //	)
 package workflow

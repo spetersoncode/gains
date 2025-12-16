@@ -18,6 +18,9 @@ var (
 
 	// ErrStepNotFound indicates a referenced step does not exist.
 	ErrStepNotFound = errors.New("workflow: step not found")
+
+	// ErrMaxIterationsExceeded indicates a loop reached its iteration limit.
+	ErrMaxIterationsExceeded = errors.New("workflow: maximum loop iterations exceeded")
 )
 
 // StepError wraps errors from step execution.

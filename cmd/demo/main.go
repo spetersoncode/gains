@@ -186,5 +186,10 @@ func main() {
 		demoWorkflowClassifier(ctx, c)
 	}
 
+	// Demo: Workflow Loop
+	if askYesNo("Demo workflow loop?") {
+		demoWorkflowLoop(ctx, c)
+	}
+
 	fmt.Println("\n✨ Demo complete!")
 }
