@@ -89,3 +89,14 @@ func (e *UnmarshalError) Error() string {
 func (e *UnmarshalError) Unwrap() error {
 	return e.Err
 }
+
+// ToolExecutionError indicates a tool returned an error result.
+type ToolExecutionError struct {
+	ToolName string // Name of the tool that failed
+	Content  string // Error content returned by the tool
+}
+
+// Error returns a formatted error message.
+func (e *ToolExecutionError) Error() string {
+	return fmt.Sprintf("workflow: tool %q execution failed: %s", e.ToolName, e.Content)
+}

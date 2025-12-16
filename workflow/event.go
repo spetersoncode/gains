@@ -45,6 +45,9 @@ const (
 
 	// EventError fires when an error occurs.
 	EventError EventType = "error"
+
+	// EventToolResult fires when a tool execution completes within AgentStep.
+	EventToolResult EventType = "tool_result"
 )
 
 // Event represents an observable occurrence during workflow execution.
@@ -72,6 +75,12 @@ type Event struct {
 
 	// Iteration is the current loop iteration (1-indexed) for EventLoopIteration.
 	Iteration int
+
+	// AgentStep is the agent iteration number (1-indexed) for AgentStep events.
+	AgentStep int
+
+	// ToolResult contains tool result for EventToolResult events.
+	ToolResult *ai.ToolResult
 
 	// Error contains the error for EventError.
 	Error error

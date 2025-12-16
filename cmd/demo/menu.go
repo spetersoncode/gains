@@ -62,6 +62,8 @@ var demos = []Demo{
 	{Name: "router", Description: "Conditional router workflow", Category: CategoryWorkflow, Run: demoWorkflowRouter},
 	{Name: "classifier", Description: "LLM classifier router", Category: CategoryWorkflow, Run: demoWorkflowClassifier},
 	{Name: "loop", Description: "Iterative loop workflow", Category: CategoryWorkflow, Run: demoWorkflowLoop},
+	{Name: "tool-step", Description: "Direct tool execution in workflow", Category: CategoryWorkflow, Run: demoWorkflowToolStep},
+	{Name: "agent-step", Description: "Autonomous agent in workflow", Category: CategoryWorkflow, Run: demoWorkflowAgentStep},
 }
 
 // availableDemos returns demos filtered by client capabilities.
