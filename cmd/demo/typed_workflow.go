@@ -8,23 +8,24 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
-	"github.com/spetersoncode/gains/schema"
 	"github.com/spetersoncode/gains/workflow"
 )
 
 // SentimentAnalysis represents structured output from sentiment analysis.
+// Struct tags define the JSON schema for the LLM response.
 type SentimentAnalysis struct {
-	Sentiment  string   `json:"sentiment"`
-	Confidence float64  `json:"confidence"`
-	Keywords   []string `json:"keywords"`
-	Summary    string   `json:"summary"`
+	Sentiment  string   `json:"sentiment" desc:"The overall sentiment: positive, negative, or neutral" enum:"positive,negative,neutral" required:"true"`
+	Confidence float64  `json:"confidence" desc:"Confidence score from 0.0 to 1.0" min:"0" max:"1" required:"true"`
+	Keywords   []string `json:"keywords" desc:"Key words or phrases that influenced the analysis" required:"true"`
+	Summary    string   `json:"summary" desc:"Brief explanation of the sentiment" required:"true"`
 }
 
 // ContentSuggestions represents structured output for content improvements.
+// Struct tags define the JSON schema for the LLM response.
 type ContentSuggestions struct {
-	Tone        string   `json:"tone"`
-	Suggestions []string `json:"suggestions"`
-	Rewrite     string   `json:"rewrite"`
+	Tone        string   `json:"tone" desc:"Suggested tone: professional, casual, enthusiastic, or empathetic" enum:"professional,casual,enthusiastic,empathetic" required:"true"`
+	Suggestions []string `json:"suggestions" desc:"List of specific improvement suggestions" required:"true"`
+	Rewrite     string   `json:"rewrite" desc:"Rewritten version of the text with improvements applied" required:"true"`
 }
 
 // Define typed keys - SINGLE SOURCE OF TRUTH for state key-type mapping.
@@ -44,43 +45,18 @@ func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 	fmt.Println("  2. Generate content suggestions (returns *ContentSuggestions)")
 	fmt.Println("  3. Access results with type-safe Get/MustGet using typed keys")
 
-	// Define schemas using the schema package
+	// Define schemas using struct tags - the struct definitions above
+	// include all the schema metadata via desc, enum, min, max, required tags
 	sentimentSchema := ai.ResponseSchema{
 		Name:        "sentiment_analysis",
 		Description: "Sentiment analysis result",
-		Schema: schema.Object().
-			Field("sentiment", schema.String().
-				Desc("The overall sentiment: positive, negative, or neutral").
-				Enum("positive", "negative", "neutral").
-				Required()).
-			Field("confidence", schema.Number().
-				Desc("Confidence score from 0.0 to 1.0").
-				Min(0).Max(1).
-				Required()).
-			Field("keywords", schema.Array(schema.String()).
-				Desc("Key words or phrases that influenced the analysis").
-				Required()).
-			Field("summary", schema.String().
-				Desc("Brief explanation of the sentiment").
-				Required()).
-			MustBuild(),
+		Schema:      ai.MustSchemaFor[SentimentAnalysis](),
 	}
 
 	suggestionsSchema := ai.ResponseSchema{
 		Name:        "content_suggestions",
 		Description: "Content improvement suggestions",
-		Schema: schema.Object().
-			Field("tone", schema.String().
-				Desc("Suggested tone: professional, casual, enthusiastic, or empathetic").
-				Enum("professional", "casual", "enthusiastic", "empathetic").
-				Required()).
-			Field("suggestions", schema.Array(schema.String()).
-				Desc("List of specific improvement suggestions").
-				Required()).
-			Field("rewrite", schema.String().
-				Desc("Rewritten version of the text with improvements applied").
-				Required()).
-			MustBuild(),
+		Schema:      ai.MustSchemaFor[ContentSuggestions](),
 	}
 
 	// Step 1: Typed sentiment analysis using typed key

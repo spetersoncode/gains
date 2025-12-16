@@ -9,16 +9,16 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
-	"github.com/spetersoncode/gains/schema"
+	"github.com/spetersoncode/gains/tool"
 )
 
-// Tool argument types
+// Tool argument types with schema tags
 type WeatherArgs struct {
-	Location string `json:"location"`
+	Location string `json:"location" desc:"The city name, e.g. San Francisco" required:"true"`
 }
 
 type CalculateArgs struct {
-	Expression string `json:"expression"`
+	Expression string `json:"expression" desc:"The mathematical expression to evaluate, e.g. '2 + 2'" required:"true"`
 }
 
 type TimeArgs struct{}
@@ -29,13 +29,10 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	// Create a registry and register tools with typed handlers
-	registry := agent.NewRegistry()
+	registry := tool.NewRegistry()
 
 	// Weather tool
-	agent.MustRegisterFunc(registry, "get_weather", "Get the current weather for a location",
-		schema.Object().
-			Field("location", schema.String().Desc("The city name, e.g. San Francisco").Required()).
-			MustBuild(),
+	tool.MustRegisterFunc(registry, "get_weather", "Get the current weather for a location",
 		func(ctx context.Context, args WeatherArgs) (string, error) {
 			// Simulate weather API
 			return fmt.Sprintf(`{"location": %q, "temperature": 22, "unit": "celsius", "conditions": "Partly cloudy"}`, args.Location), nil
@@ -43,10 +40,7 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 	)
 
 	// Calculator tool
-	agent.MustRegisterFunc(registry, "calculate", "Perform a mathematical calculation",
-		schema.Object().
-			Field("expression", schema.String().Desc("The mathematical expression to evaluate, e.g. '2 + 2'").Required()).
-			MustBuild(),
+	tool.MustRegisterFunc(registry, "calculate", "Perform a mathematical calculation",
 		func(ctx context.Context, args CalculateArgs) (string, error) {
 			// Simulate calculation (in real implementation, use a math parser)
 			return fmt.Sprintf(`{"expression": %q, "result": 42}`, args.Expression), nil
@@ -112,9 +106,8 @@ func demoAgent(ctx context.Context, c *client.Client) {
 	fmt.Println("└─────────────────────────────────────────┘")
 
 	// Create a registry with a single tool using typed handler
-	registry := agent.NewRegistry()
-	agent.MustRegisterFunc(registry, "get_time", "Get the current time",
-		schema.Object().MustBuild(),
+	registry := tool.NewRegistry()
+	tool.MustRegisterFunc(registry, "get_time", "Get the current time",
 		func(ctx context.Context, args TimeArgs) (string, error) {
 			return fmt.Sprintf(`{"time": %q}`, time.Now().Format(time.RFC3339)), nil
 		},

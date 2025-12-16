@@ -10,6 +10,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,58 +99,58 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, op
 
 func TestRegistry_Register(t *testing.T) {
 	t.Run("registers tool successfully", func(t *testing.T) {
-		r := NewRegistry()
-		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		r := tool.NewRegistry()
+		testTool := ai.Tool{Name: "test_tool", Description: "A test tool"}
 		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
-		err := r.Register(tool, handler)
+		err := r.Register(testTool, handler)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 1, r.Len())
 	})
 
 	t.Run("returns error for duplicate registration", func(t *testing.T) {
-		r := NewRegistry()
-		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		r := tool.NewRegistry()
+		testTool := ai.Tool{Name: "test_tool", Description: "A test tool"}
 		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
-		err := r.Register(tool, handler)
+		err := r.Register(testTool, handler)
 		require.NoError(t, err)
 
-		err = r.Register(tool, handler)
+		err = r.Register(testTool, handler)
 		assert.Error(t, err)
-		var errAlreadyRegistered *ErrToolAlreadyRegistered
+		var errAlreadyRegistered *tool.ErrToolAlreadyRegistered
 		assert.ErrorAs(t, err, &errAlreadyRegistered)
 	})
 }
 
 func TestRegistry_MustRegister(t *testing.T) {
 	t.Run("panics on duplicate registration", func(t *testing.T) {
-		r := NewRegistry()
-		tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+		r := tool.NewRegistry()
+		testTool := ai.Tool{Name: "test_tool", Description: "A test tool"}
 		handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 			return "result", nil
 		}
 
-		r.MustRegister(tool, handler)
+		r.MustRegister(testTool, handler)
 
 		assert.Panics(t, func() {
-			r.MustRegister(tool, handler)
+			r.MustRegister(testTool, handler)
 		})
 	})
 }
 
 func TestRegistry_Get(t *testing.T) {
-	r := NewRegistry()
-	tool := ai.Tool{Name: "test_tool", Description: "A test tool"}
+	r := tool.NewRegistry()
+	testTool := ai.Tool{Name: "test_tool", Description: "A test tool"}
 	handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
 		return "result", nil
 	}
-	r.MustRegister(tool, handler)
+	r.MustRegister(testTool, handler)
 
 	t.Run("returns handler for registered tool", func(t *testing.T) {
 		h, ok := r.Get("test_tool")
@@ -165,7 +166,7 @@ func TestRegistry_Get(t *testing.T) {
 }
 
 func TestRegistry_Tools(t *testing.T) {
-	r := NewRegistry()
+	r := tool.NewRegistry()
 	r.MustRegister(ai.Tool{Name: "tool1"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "", nil })
 	r.MustRegister(ai.Tool{Name: "tool2"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "", nil })
 
@@ -182,7 +183,7 @@ func TestRegistry_Tools(t *testing.T) {
 
 func TestRegistry_Execute(t *testing.T) {
 	t.Run("executes handler successfully", func(t *testing.T) {
-		r := NewRegistry()
+		r := tool.NewRegistry()
 		r.MustRegister(
 			ai.Tool{Name: "test_tool"},
 			func(ctx context.Context, call ai.ToolCall) (string, error) {
@@ -203,7 +204,7 @@ func TestRegistry_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error result when handler fails", func(t *testing.T) {
-		r := NewRegistry()
+		r := tool.NewRegistry()
 		r.MustRegister(
 			ai.Tool{Name: "failing_tool"},
 			func(ctx context.Context, call ai.ToolCall) (string, error) {
@@ -223,7 +224,7 @@ func TestRegistry_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for unknown tool", func(t *testing.T) {
-		r := NewRegistry()
+		r := tool.NewRegistry()
 
 		_, err := r.Execute(context.Background(), ai.ToolCall{
 			ID:   "call_1",
@@ -231,7 +232,7 @@ func TestRegistry_Execute(t *testing.T) {
 		})
 
 		assert.Error(t, err)
-		var errNotFound *ErrToolNotFound
+		var errNotFound *tool.ErrToolNotFound
 		assert.ErrorAs(t, err, &errNotFound)
 	})
 }
@@ -271,7 +272,7 @@ func TestAgent_Run_SimpleConversation(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	agent := New(provider, registry)
 
 	result, err := agent.Run(context.Background(), []ai.Message{
@@ -297,7 +298,7 @@ func TestAgent_Run_WithToolCalls(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	registry.MustRegister(
 		ai.Tool{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)},
 		func(ctx context.Context, call ai.ToolCall) (string, error) {
@@ -331,7 +332,7 @@ func TestAgent_Run_MaxSteps(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	registry.MustRegister(
 		ai.Tool{Name: "tool1"},
 		func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil },
@@ -358,7 +359,7 @@ func TestAgent_Run_Timeout(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	registry.MustRegister(
 		ai.Tool{Name: "slow_tool"},
 		func(ctx context.Context, call ai.ToolCall) (string, error) {
@@ -387,7 +388,7 @@ func TestAgent_Run_CustomStopPredicate(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	agent := New(provider, registry)
 
 	result, err := agent.Run(context.Background(), []ai.Message{
@@ -409,7 +410,7 @@ func TestAgent_Run_Approval(t *testing.T) {
 			},
 		}
 
-		registry := NewRegistry()
+		registry := tool.NewRegistry()
 		registry.MustRegister(
 			ai.Tool{Name: "tool1"},
 			func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
@@ -435,7 +436,7 @@ func TestAgent_Run_Approval(t *testing.T) {
 			},
 		}
 
-		registry := NewRegistry()
+		registry := tool.NewRegistry()
 		registry.MustRegister(
 			ai.Tool{Name: "tool1"},
 			func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
@@ -463,7 +464,7 @@ func TestAgent_Run_Approval(t *testing.T) {
 			},
 		}
 
-		registry := NewRegistry()
+		registry := tool.NewRegistry()
 		registry.MustRegister(ai.Tool{Name: "safe_tool"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil })
 		registry.MustRegister(ai.Tool{Name: "dangerous_tool"}, func(ctx context.Context, call ai.ToolCall) (string, error) { return "ok", nil })
 
@@ -494,7 +495,7 @@ func TestAgent_RunStream_Events(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	registry.MustRegister(
 		ai.Tool{Name: "tool1"},
 		func(ctx context.Context, call ai.ToolCall) (string, error) { return "result", nil },
@@ -540,7 +541,7 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 		},
 	}
 
-	registry := NewRegistry()
+	registry := tool.NewRegistry()
 	for _, name := range []string{"tool1", "tool2", "tool3"} {
 		toolName := name
 		registry.MustRegister(
@@ -572,21 +573,21 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	t.Run("ErrToolNotFound", func(t *testing.T) {
-		err := &ErrToolNotFound{Name: "missing_tool"}
+		err := &tool.ErrToolNotFound{Name: "missing_tool"}
 		assert.Contains(t, err.Error(), "missing_tool")
 		assert.Contains(t, err.Error(), "not found")
 	})
 
 	t.Run("ErrToolExecution", func(t *testing.T) {
 		inner := errors.New("connection failed")
-		err := &ErrToolExecution{Name: "api_tool", Err: inner}
+		err := &tool.ErrToolExecution{Name: "api_tool", Err: inner}
 		assert.Contains(t, err.Error(), "api_tool")
 		assert.Contains(t, err.Error(), "connection failed")
 		assert.ErrorIs(t, err, inner)
 	})
 
 	t.Run("ErrToolAlreadyRegistered", func(t *testing.T) {
-		err := &ErrToolAlreadyRegistered{Name: "duplicate"}
+		err := &tool.ErrToolAlreadyRegistered{Name: "duplicate"}
 		assert.Contains(t, err.Error(), "duplicate")
 		assert.Contains(t, err.Error(), "already registered")
 	})

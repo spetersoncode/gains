@@ -8,17 +8,15 @@
 //
 // Create a registry, register tools with their handlers, then create an agent:
 //
-//	// Create and populate registry
-//	registry := agent.NewRegistry()
-//	registry.MustRegister(
-//	    gains.Tool{
-//	        Name:        "get_weather",
-//	        Description: "Get current weather for a location",
-//	        Parameters:  json.RawMessage(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
-//	    },
-//	    func(ctx context.Context, call gains.ToolCall) (string, error) {
-//	        var args struct{ Location string }
-//	        json.Unmarshal([]byte(call.Arguments), &args)
+//	// Define tool arguments
+//	type WeatherArgs struct {
+//	    Location string `json:"location" desc:"City name" required:"true"`
+//	}
+//
+//	// Create registry and register tool
+//	registry := tool.NewRegistry()
+//	tool.MustRegisterFunc(registry, "get_weather", "Get current weather",
+//	    func(ctx context.Context, args WeatherArgs) (string, error) {
 //	        return fmt.Sprintf(`{"temp": 72, "location": %q}`, args.Location), nil
 //	    },
 //	)

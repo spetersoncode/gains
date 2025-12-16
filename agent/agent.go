@@ -7,6 +7,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/internal/store"
+	"github.com/spetersoncode/gains/tool"
 )
 
 // ChatClient is the interface for chat capabilities needed by the agent.
@@ -17,11 +18,11 @@ type ChatClient interface {
 // Agent orchestrates autonomous tool-calling conversations.
 type Agent struct {
 	chatClient ChatClient
-	registry   *Registry
+	registry   *tool.Registry
 }
 
 // New creates a new Agent with the given chat client and tool registry.
-func New(c ChatClient, registry *Registry) *Agent {
+func New(c ChatClient, registry *tool.Registry) *Agent {
 	return &Agent{
 		chatClient: c,
 		registry:   registry,

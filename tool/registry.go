@@ -1,4 +1,4 @@
-package agent
+package tool
 
 import (
 	"context"
@@ -7,12 +7,6 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 )
-
-// Handler is a function that executes a tool call and returns a result.
-// The context supports cancellation and timeout.
-// The call contains the tool name, ID, and arguments as a JSON string.
-// Returns the result content string, or an error if execution failed.
-type Handler func(ctx context.Context, call ai.ToolCall) (string, error)
 
 // registeredTool combines a tool definition with its handler.
 type registeredTool struct {
@@ -124,31 +118,30 @@ func (r *Registry) Len() int {
 	return len(r.tools)
 }
 
-// TypedHandler is a function that executes a tool call with typed arguments.
-// The args parameter is automatically unmarshaled from the tool call's JSON arguments.
-type TypedHandler[T any] func(ctx context.Context, args T) (string, error)
-
 // RegisterFunc registers a tool with a typed handler that automatically
 // unmarshals the arguments JSON into the specified type T.
 //
 // Example:
 //
 //	type SearchArgs struct {
-//	    Query string `json:"query"`
+//	    Query string `json:"query" desc:"Search query" required:"true"`
 //	}
-//	params := schema.Object().
-//	    Field("query", schema.String().Desc("Search query").Required()).
-//	    MustBuild()
-//	RegisterFunc(registry, "search", "Search the web", params,
+//
+//	tool.RegisterFunc(registry, "search", "Search the web",
 //	    func(ctx context.Context, args SearchArgs) (string, error) {
 //	        return doSearch(args.Query), nil
 //	    },
 //	)
-func RegisterFunc[T any](r *Registry, name, description string, params json.RawMessage, fn TypedHandler[T]) error {
-	tool := ai.Tool{
+func RegisterFunc[T any](r *Registry, name, description string, fn TypedHandler[T]) error {
+	schema, err := SchemaFor[T]()
+	if err != nil {
+		return err
+	}
+
+	t := ai.Tool{
 		Name:        name,
 		Description: description,
-		Parameters:  params,
+		Parameters:  schema,
 	}
 
 	handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
@@ -159,12 +152,12 @@ func RegisterFunc[T any](r *Registry, name, description string, params json.RawM
 		return fn(ctx, args)
 	}
 
-	return r.Register(tool, handler)
+	return r.Register(t, handler)
 }
 
 // MustRegisterFunc is like RegisterFunc but panics on error.
-func MustRegisterFunc[T any](r *Registry, name, description string, params json.RawMessage, fn TypedHandler[T]) {
-	if err := RegisterFunc(r, name, description, params, fn); err != nil {
+func MustRegisterFunc[T any](r *Registry, name, description string, fn TypedHandler[T]) {
+	if err := RegisterFunc(r, name, description, fn); err != nil {
 		panic(err)
 	}
 }

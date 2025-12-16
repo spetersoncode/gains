@@ -8,24 +8,26 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
-	"github.com/spetersoncode/gains/schema"
 )
+
+// BookInfo defines structured output for book information via struct tags.
+type BookInfo struct {
+	Title  string   `json:"title" desc:"The book title" required:"true"`
+	Author string   `json:"author" desc:"The author's name" required:"true"`
+	Year   int      `json:"year" desc:"Publication year" required:"true"`
+	Genres []string `json:"genres" desc:"List of genres" required:"true"`
+}
 
 func demoJSONMode(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│      JSON Mode / Structured Output      │")
 	fmt.Println("└─────────────────────────────────────────┘")
 
-	// Define a schema for structured output using the schema builder
+	// Define a schema for structured output using struct tags
 	responseSchema := ai.ResponseSchema{
 		Name:        "book_info",
 		Description: "Information about a book",
-		Schema: schema.Object().
-			Field("title", schema.String().Desc("The book title").Required()).
-			Field("author", schema.String().Desc("The author's name").Required()).
-			Field("year", schema.Int().Desc("Publication year").Required()).
-			Field("genres", schema.Array(schema.String()).Desc("List of genres").Required()).
-			MustBuild(),
+		Schema:      ai.MustSchemaFor[BookInfo](),
 	}
 
 	messages := []ai.Message{
