@@ -6,6 +6,12 @@ import (
 	ai "github.com/spetersoncode/gains"
 )
 
+// ChatClient is the interface for chat capabilities needed by workflow steps.
+type ChatClient interface {
+	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
+	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error)
+}
+
 // Step represents a single unit of work in a workflow.
 // Steps can be functions, LLM calls, or nested workflows.
 type Step interface {
@@ -74,23 +80,23 @@ type PromptFunc func(state *State) []ai.Message
 
 // PromptStep makes a single LLM call with a dynamic prompt.
 type PromptStep struct {
-	name      string
-	provider  ai.ChatProvider
-	prompt    PromptFunc
-	outputKey string
-	chatOpts  []ai.Option
+	name       string
+	chatClient ChatClient
+	prompt     PromptFunc
+	outputKey  string
+	chatOpts   []ai.Option
 }
 
 // NewPromptStep creates a step for a single LLM call.
 // The prompt function generates messages from current state.
 // If outputKey is non-empty, the response content is stored in state under that key.
-func NewPromptStep(name string, provider ai.ChatProvider, prompt PromptFunc, outputKey string, opts ...ai.Option) *PromptStep {
+func NewPromptStep(name string, c ChatClient, prompt PromptFunc, outputKey string, opts ...ai.Option) *PromptStep {
 	return &PromptStep{
-		name:      name,
-		provider:  provider,
-		prompt:    prompt,
-		outputKey: outputKey,
-		chatOpts:  opts,
+		name:       name,
+		chatClient: c,
+		prompt:     prompt,
+		outputKey:  outputKey,
+		chatOpts:   opts,
 	}
 }
 
@@ -107,7 +113,7 @@ func (p *PromptStep) Run(ctx context.Context, state *State, opts ...Option) (*St
 	chatOpts = append(chatOpts, options.ChatOptions...)
 
 	msgs := p.prompt(state)
-	resp, err := p.provider.Chat(ctx, msgs, chatOpts...)
+	resp, err := p.chatClient.Chat(ctx, msgs, chatOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +146,7 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 		chatOpts = append(chatOpts, options.ChatOptions...)
 
 		msgs := p.prompt(state)
-		streamCh, err := p.provider.ChatStream(ctx, msgs, chatOpts...)
+		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
 			emit(ch, Event{Type: EventError, StepName: p.name, Error: err})
 			return

@@ -9,7 +9,8 @@ import (
 // testImageModel is a simple Model implementation for testing.
 type testImageModel string
 
-func (m testImageModel) String() string { return string(m) }
+func (m testImageModel) String() string     { return string(m) }
+func (m testImageModel) Provider() Provider { return Provider("test") }
 
 func TestApplyImageOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {

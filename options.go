@@ -4,8 +4,10 @@ import "encoding/json"
 
 // Model is an interface implemented by all provider model types.
 // It allows strongly-typed model selection while maintaining a unified API.
+// Every model must identify its provider for automatic routing.
 type Model interface {
 	String() string
+	Provider() Provider
 }
 
 // ResponseFormat specifies how the model should format its response.

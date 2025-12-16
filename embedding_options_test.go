@@ -9,7 +9,8 @@ import (
 // testEmbeddingModel is a simple Model implementation for testing.
 type testEmbeddingModel string
 
-func (m testEmbeddingModel) String() string { return string(m) }
+func (m testEmbeddingModel) String() string     { return string(m) }
+func (m testEmbeddingModel) Provider() Provider { return Provider("test") }
 
 func TestApplyEmbeddingOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {

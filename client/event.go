@@ -32,7 +32,7 @@ type Event struct {
 	Operation string
 
 	// Provider identifies which AI provider is being used.
-	Provider ProviderName
+	Provider ai.Provider
 
 	// Model is the model name being used (if known).
 	Model string

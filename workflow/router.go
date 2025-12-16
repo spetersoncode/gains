@@ -135,29 +135,29 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 
 // ClassifierRouter uses an LLM to classify input and route accordingly.
 type ClassifierRouter struct {
-	name     string
-	provider ai.ChatProvider
-	prompt   PromptFunc
-	routes   map[string]Step
-	chatOpts []ai.Option
+	name       string
+	chatClient ChatClient
+	prompt     PromptFunc
+	routes     map[string]Step
+	chatOpts   []ai.Option
 }
 
 // NewClassifierRouter creates a router that uses LLM classification.
 // The LLM response should match one of the route keys (case-insensitive).
-// For more reliable classification, use WithClassifierSchema() option.
+// For more reliable classification, use ClassifierSchema().
 func NewClassifierRouter(
 	name string,
-	provider ai.ChatProvider,
+	c ChatClient,
 	prompt PromptFunc,
 	routes map[string]Step,
 	opts ...ai.Option,
 ) *ClassifierRouter {
 	return &ClassifierRouter{
-		name:     name,
-		provider: provider,
-		prompt:   prompt,
-		routes:   routes,
-		chatOpts: opts,
+		name:       name,
+		chatClient: c,
+		prompt:     prompt,
+		routes:     routes,
+		chatOpts:   opts,
 	}
 }
 
@@ -209,7 +209,7 @@ func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option
 
 	// Get classification from LLM
 	msgs := c.prompt(state)
-	resp, err := c.provider.Chat(ctx, msgs, chatOpts...)
+	resp, err := c.chatClient.Chat(ctx, msgs, chatOpts...)
 	if err != nil {
 		return nil, &StepError{StepName: c.name, Err: err}
 	}
@@ -265,7 +265,7 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 
 		// Get classification with streaming
 		msgs := c.prompt(state)
-		streamCh, err := c.provider.ChatStream(ctx, msgs, chatOpts...)
+		streamCh, err := c.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
 			emit(ch, Event{Type: EventError, StepName: c.name, Error: err})
 			return

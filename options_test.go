@@ -11,7 +11,8 @@ import (
 // testModel is a simple Model implementation for testing.
 type testModel string
 
-func (m testModel) String() string { return string(m) }
+func (m testModel) String() string     { return string(m) }
+func (m testModel) Provider() Provider { return Provider("test") }
 
 func TestApplyOptions(t *testing.T) {
 	t.Run("returns empty options when no options provided", func(t *testing.T) {

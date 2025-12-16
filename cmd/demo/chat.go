@@ -19,7 +19,7 @@ func demoChat(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Printf("\nUser: %s\n", messages[0].Content)
-	fmt.Printf("\n%s: ", c.Provider())
+	fmt.Print("\nAssistant: ")
 
 	resp, err := c.Chat(ctx, messages)
 	if err != nil {
@@ -46,7 +46,7 @@ func demoChatStream(ctx context.Context, c *client.Client) {
 		return
 	}
 
-	fmt.Printf("\n%s:\n", c.Provider())
+	fmt.Print("\nAssistant:\n")
 	for event := range stream {
 		if event.Err != nil {
 			fmt.Fprintf(os.Stderr, "Stream error: %v\n", event.Err)

@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/model"
 )
 
 func main() {
@@ -19,48 +21,55 @@ func main() {
 	fmt.Println("╚════════════════════════════════════════╝")
 	fmt.Println()
 
-	// Check available providers
-	providers := []struct {
-		name   client.ProviderName
-		envKey string
-		label  string
-	}{
-		{client.ProviderAnthropic, "ANTHROPIC_API_KEY", "Anthropic (Claude)"},
-		{client.ProviderOpenAI, "OPENAI_API_KEY", "OpenAI (GPT-4)"},
-		{client.ProviderGoogle, "GOOGLE_API_KEY", "Google (Gemini)"},
+	// Collect available API keys
+	apiKeys := client.APIKeys{
+		Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAI:    os.Getenv("OPENAI_API_KEY"),
+		Google:    os.Getenv("GOOGLE_API_KEY"),
 	}
 
+	// Check what's available
 	var available []struct {
-		name   client.ProviderName
-		apiKey string
-		label  string
+		name  string
+		label string
 	}
 
 	fmt.Println("Available providers:")
-	for _, p := range providers {
-		if key := os.Getenv(p.envKey); key != "" {
-			fmt.Printf("  [%d] %s\n", len(available)+1, p.label)
-			available = append(available, struct {
-				name   client.ProviderName
-				apiKey string
-				label  string
-			}{p.name, key, p.label})
-		}
+	if apiKeys.Anthropic != "" {
+		fmt.Printf("  [%d] Anthropic (Claude)\n", len(available)+1)
+		available = append(available, struct {
+			name  string
+			label string
+		}{"anthropic", "Anthropic (Claude)"})
+	}
+	if apiKeys.OpenAI != "" {
+		fmt.Printf("  [%d] OpenAI (GPT)\n", len(available)+1)
+		available = append(available, struct {
+			name  string
+			label string
+		}{"openai", "OpenAI (GPT)"})
+	}
+	if apiKeys.Google != "" {
+		fmt.Printf("  [%d] Google (Gemini)\n", len(available)+1)
+		available = append(available, struct {
+			name  string
+			label string
+		}{"google", "Google (Gemini)"})
 	}
 
 	if len(available) == 0 {
-		fmt.Println("  ✗ No API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.")
+		fmt.Println("  No API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.")
 		return
 	}
 	fmt.Println()
 
-	// Let user select provider
+	// Let user select default provider for chat
 	var selected int
 	if len(available) == 1 {
 		selected = 0
-		fmt.Printf("Using %s (only available provider)\n", available[0].label)
+		fmt.Printf("Using %s for chat (only available provider)\n", available[0].label)
 	} else {
-		fmt.Printf("Select provider [1-%d]: ", len(available))
+		fmt.Printf("Select default chat provider [1-%d]: ", len(available))
 		answer, _ := reader.ReadString('\n')
 		answer = strings.TrimSpace(answer)
 		fmt.Sscanf(answer, "%d", &selected)
@@ -68,19 +77,30 @@ func main() {
 		if selected < 0 || selected >= len(available) {
 			selected = 0
 		}
-		fmt.Printf("Using %s\n", available[selected].label)
+		fmt.Printf("Using %s for chat\n", available[selected].label)
 	}
 	fmt.Println()
 
-	// Create unified client
-	c, err := client.New(ctx, client.Config{
-		Provider: available[selected].name,
-		APIKey:   available[selected].apiKey,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
-		return
+	// Determine default chat model based on selection
+	var defaultChatModel ai.Model
+	switch available[selected].name {
+	case "anthropic":
+		defaultChatModel = model.ClaudeSonnet45
+	case "openai":
+		defaultChatModel = model.GPT52
+	case "google":
+		defaultChatModel = model.Gemini25Flash
 	}
+
+	// Create unified client with all available API keys
+	c := client.New(client.Config{
+		APIKeys: apiKeys,
+		Defaults: client.Defaults{
+			Chat:      defaultChatModel,
+			Embedding: model.TextEmbedding3Small,
+			Image:     model.GPTImage1,
+		},
+	})
 
 	// Show supported features
 	fmt.Println("Supported features:")

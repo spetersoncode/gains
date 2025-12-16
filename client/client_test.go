@@ -1,42 +1,25 @@
 package client
 
 import (
-	"context"
 	"testing"
 
+	ai "github.com/spetersoncode/gains"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // testModel implements gains.Model for testing.
-type testModel string
-
-func (m testModel) String() string { return string(m) }
-
-func TestProviderNameConstants(t *testing.T) {
-	assert.Equal(t, ProviderName("anthropic"), ProviderAnthropic)
-	assert.Equal(t, ProviderName("openai"), ProviderOpenAI)
-	assert.Equal(t, ProviderName("google"), ProviderGoogle)
+type testModel struct {
+	id       string
+	provider ai.Provider
 }
+
+func (m testModel) String() string      { return m.id }
+func (m testModel) Provider() ai.Provider { return m.provider }
 
 func TestFeatureConstants(t *testing.T) {
 	assert.Equal(t, Feature("chat"), FeatureChat)
 	assert.Equal(t, Feature("image"), FeatureImage)
 	assert.Equal(t, Feature("embedding"), FeatureEmbedding)
-}
-
-func TestErrInvalidProvider(t *testing.T) {
-	t.Run("Error returns formatted message", func(t *testing.T) {
-		err := &ErrInvalidProvider{Provider: "unknown"}
-		expected := `unknown provider: "unknown" (valid providers: anthropic, openai, google)`
-		assert.Equal(t, expected, err.Error())
-	})
-
-	t.Run("Error with empty provider", func(t *testing.T) {
-		err := &ErrInvalidProvider{Provider: ""}
-		expected := `unknown provider: "" (valid providers: anthropic, openai, google)`
-		assert.Equal(t, expected, err.Error())
-	})
 }
 
 func TestErrFeatureNotSupported(t *testing.T) {
@@ -59,362 +42,154 @@ func TestErrFeatureNotSupported(t *testing.T) {
 	})
 }
 
-func TestNewWithInvalidProvider(t *testing.T) {
-	ctx := context.Background()
+func TestErrMissingAPIKey(t *testing.T) {
+	t.Run("Error with model", func(t *testing.T) {
+		err := &ErrMissingAPIKey{Provider: "anthropic", Model: "claude-sonnet"}
+		expected := `no API key configured for anthropic (required by model "claude-sonnet")`
+		assert.Equal(t, expected, err.Error())
+	})
 
-	tests := []struct {
-		name     string
-		provider ProviderName
-	}{
-		{"unknown provider", ProviderName("unknown")},
-		{"empty provider", ProviderName("")},
-		{"typo in provider", ProviderName("opnai")},
-	}
+	t.Run("Error without model", func(t *testing.T) {
+		err := &ErrMissingAPIKey{Provider: "openai"}
+		expected := "no API key configured for openai"
+		assert.Equal(t, expected, err.Error())
+	})
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
-				Provider: tt.provider,
-				APIKey:   "test-key",
-			}
+func TestErrNoModel(t *testing.T) {
+	t.Run("Error returns formatted message", func(t *testing.T) {
+		err := &ErrNoModel{Operation: "chat"}
+		expected := "no model specified for chat and no default configured"
+		assert.Equal(t, expected, err.Error())
+	})
+}
 
-			client, err := New(ctx, cfg)
-			assert.Nil(t, client)
-			require.Error(t, err)
+func TestNew(t *testing.T) {
+	t.Run("creates client with API keys", func(t *testing.T) {
+		cfg := Config{
+			APIKeys: APIKeys{
+				Anthropic: "test-anthropic-key",
+				OpenAI:    "test-openai-key",
+			},
+		}
 
-			var invalidErr *ErrInvalidProvider
-			assert.ErrorAs(t, err, &invalidErr)
-			assert.Equal(t, string(tt.provider), invalidErr.Provider)
+		c := New(cfg)
+		assert.NotNil(t, c)
+	})
+
+	t.Run("creates client with defaults", func(t *testing.T) {
+		chatModel := testModel{id: "claude-sonnet", provider: ai.ProviderAnthropic}
+		cfg := Config{
+			APIKeys: APIKeys{
+				Anthropic: "test-key",
+			},
+			Defaults: Defaults{
+				Chat: chatModel,
+			},
+		}
+
+		c := New(cfg)
+		assert.NotNil(t, c)
+	})
+}
+
+func TestSupportsFeature(t *testing.T) {
+	t.Run("chat supported with any API key", func(t *testing.T) {
+		c := New(Config{
+			APIKeys: APIKeys{Anthropic: "key"},
 		})
-	}
-}
+		assert.True(t, c.SupportsFeature(FeatureChat))
+	})
 
-func TestNewWithUnsupportedRequiredFeature(t *testing.T) {
-	ctx := context.Background()
-
-	tests := []struct {
-		name             string
-		provider         ProviderName
-		requiredFeatures []Feature
-		expectedFeature  string
-	}{
-		{
-			name:             "anthropic image not supported",
-			provider:         ProviderAnthropic,
-			requiredFeatures: []Feature{FeatureImage},
-			expectedFeature:  "image",
-		},
-		{
-			name:             "anthropic embedding not supported",
-			provider:         ProviderAnthropic,
-			requiredFeatures: []Feature{FeatureEmbedding},
-			expectedFeature:  "embedding",
-		},
-		{
-			name:             "anthropic multiple unsupported",
-			provider:         ProviderAnthropic,
-			requiredFeatures: []Feature{FeatureChat, FeatureImage},
-			expectedFeature:  "image",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
-				Provider:         tt.provider,
-				APIKey:           "test-key",
-				RequiredFeatures: tt.requiredFeatures,
-			}
-
-			client, err := New(ctx, cfg)
-			assert.Nil(t, client)
-			require.Error(t, err)
-
-			var featureErr *ErrFeatureNotSupported
-			assert.ErrorAs(t, err, &featureErr)
-			assert.Equal(t, tt.expectedFeature, featureErr.Feature)
+	t.Run("image supported with OpenAI or Google", func(t *testing.T) {
+		c1 := New(Config{
+			APIKeys: APIKeys{OpenAI: "key"},
 		})
-	}
-}
+		assert.True(t, c1.SupportsFeature(FeatureImage))
 
-func TestNewWithValidProviders(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("creates Anthropic client", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderAnthropic,
-			APIKey:   "test-anthropic-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-
-		assert.Equal(t, ProviderAnthropic, client.Provider())
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.False(t, client.SupportsFeature(FeatureImage))
-		assert.False(t, client.SupportsFeature(FeatureEmbedding))
-	})
-
-	t.Run("creates OpenAI client", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderOpenAI,
-			APIKey:   "test-openai-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-
-		assert.Equal(t, ProviderOpenAI, client.Provider())
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.True(t, client.SupportsFeature(FeatureImage))
-		assert.True(t, client.SupportsFeature(FeatureEmbedding))
-	})
-
-	t.Run("creates Google client", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderGoogle,
-			APIKey:   "test-google-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-
-		assert.Equal(t, ProviderGoogle, client.Provider())
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.True(t, client.SupportsFeature(FeatureImage))
-		assert.True(t, client.SupportsFeature(FeatureEmbedding))
-	})
-}
-
-func TestNewWithCustomModels(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("sets custom chat model for Anthropic", func(t *testing.T) {
-		cfg := Config{
-			Provider:  ProviderAnthropic,
-			APIKey:    "test-key",
-			ChatModel: testModel("claude-3-opus"),
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-	})
-
-	t.Run("sets custom models for OpenAI", func(t *testing.T) {
-		cfg := Config{
-			Provider:       ProviderOpenAI,
-			APIKey:         "test-key",
-			ChatModel:      testModel("gpt-4-turbo"),
-			ImageModel:     testModel("dall-e-2"),
-			EmbeddingModel: testModel("text-embedding-3-large"),
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-	})
-}
-
-func TestNewWithRequiredFeatures(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("succeeds when required features are supported", func(t *testing.T) {
-		cfg := Config{
-			Provider:         ProviderOpenAI,
-			APIKey:           "test-key",
-			RequiredFeatures: []Feature{FeatureChat, FeatureImage, FeatureEmbedding},
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-	})
-
-	t.Run("succeeds with chat only for Anthropic", func(t *testing.T) {
-		cfg := Config{
-			Provider:         ProviderAnthropic,
-			APIKey:           "test-key",
-			RequiredFeatures: []Feature{FeatureChat},
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-	})
-
-	t.Run("succeeds with empty required features", func(t *testing.T) {
-		cfg := Config{
-			Provider:         ProviderAnthropic,
-			APIKey:           "test-key",
-			RequiredFeatures: []Feature{},
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-	})
-}
-
-func TestClientSupportsFeature(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("Anthropic capabilities", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderAnthropic,
-			APIKey:   "test-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.False(t, client.SupportsFeature(FeatureImage))
-		assert.False(t, client.SupportsFeature(FeatureEmbedding))
-		assert.False(t, client.SupportsFeature(Feature("unknown")))
-	})
-
-	t.Run("OpenAI capabilities", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderOpenAI,
-			APIKey:   "test-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.True(t, client.SupportsFeature(FeatureImage))
-		assert.True(t, client.SupportsFeature(FeatureEmbedding))
-	})
-
-	t.Run("Google capabilities", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderGoogle,
-			APIKey:   "test-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-
-		assert.True(t, client.SupportsFeature(FeatureChat))
-		assert.True(t, client.SupportsFeature(FeatureImage))
-		assert.True(t, client.SupportsFeature(FeatureEmbedding))
-	})
-}
-
-func TestClientProvider(t *testing.T) {
-	ctx := context.Background()
-
-	tests := []struct {
-		name     string
-		provider ProviderName
-	}{
-		{"Anthropic", ProviderAnthropic},
-		{"OpenAI", ProviderOpenAI},
-		{"Google", ProviderGoogle},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
-				Provider: tt.provider,
-				APIKey:   "test-key",
-			}
-
-			client, err := New(ctx, cfg)
-			require.NoError(t, err)
-
-			assert.Equal(t, tt.provider, client.Provider())
+		c2 := New(Config{
+			APIKeys: APIKeys{Google: "key"},
 		})
-	}
-}
+		assert.True(t, c2.SupportsFeature(FeatureImage))
 
-func TestClientGenerateImageFeatureCheck(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("returns error for Anthropic", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderAnthropic,
-			APIKey:   "test-key",
-		}
-
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-
-		_, err = client.GenerateImage(ctx, "test prompt")
-		require.Error(t, err)
-
-		var featureErr *ErrFeatureNotSupported
-		assert.ErrorAs(t, err, &featureErr)
-		assert.Equal(t, "image", featureErr.Feature)
+		c3 := New(Config{
+			APIKeys: APIKeys{Anthropic: "key"},
+		})
+		assert.False(t, c3.SupportsFeature(FeatureImage))
 	})
-}
 
-func TestClientEmbedFeatureCheck(t *testing.T) {
-	ctx := context.Background()
+	t.Run("embedding supported with OpenAI or Google", func(t *testing.T) {
+		c1 := New(Config{
+			APIKeys: APIKeys{OpenAI: "key"},
+		})
+		assert.True(t, c1.SupportsFeature(FeatureEmbedding))
 
-	t.Run("returns error for Anthropic", func(t *testing.T) {
-		cfg := Config{
-			Provider: ProviderAnthropic,
-			APIKey:   "test-key",
-		}
+		c2 := New(Config{
+			APIKeys: APIKeys{Google: "key"},
+		})
+		assert.True(t, c2.SupportsFeature(FeatureEmbedding))
 
-		client, err := New(ctx, cfg)
-		require.NoError(t, err)
-
-		_, err = client.Embed(ctx, []string{"test text"})
-		require.Error(t, err)
-
-		var featureErr *ErrFeatureNotSupported
-		assert.ErrorAs(t, err, &featureErr)
-		assert.Equal(t, "embedding", featureErr.Feature)
+		c3 := New(Config{
+			APIKeys: APIKeys{Anthropic: "key"},
+		})
+		assert.False(t, c3.SupportsFeature(FeatureEmbedding))
 	})
-}
 
-func TestConfigStruct(t *testing.T) {
-	t.Run("creates config with all fields", func(t *testing.T) {
-		cfg := Config{
-			Provider:         ProviderOpenAI,
-			APIKey:           "sk-test-key",
-			ChatModel:        testModel("gpt-4"),
-			ImageModel:       testModel("dall-e-3"),
-			EmbeddingModel:   testModel("text-embedding-3-small"),
-			RequiredFeatures: []Feature{FeatureChat, FeatureImage},
-		}
-
-		assert.Equal(t, ProviderOpenAI, cfg.Provider)
-		assert.Equal(t, "sk-test-key", cfg.APIKey)
-		assert.Equal(t, "gpt-4", cfg.ChatModel.String())
-		assert.Equal(t, "dall-e-3", cfg.ImageModel.String())
-		assert.Equal(t, "text-embedding-3-small", cfg.EmbeddingModel.String())
-		assert.Len(t, cfg.RequiredFeatures, 2)
+	t.Run("unknown feature not supported", func(t *testing.T) {
+		c := New(Config{
+			APIKeys: APIKeys{OpenAI: "key", Anthropic: "key", Google: "key"},
+		})
+		assert.False(t, c.SupportsFeature(Feature("unknown")))
 	})
 }
 
 func TestProviderCapabilities(t *testing.T) {
-	// Test that the providerCapabilities map is correctly defined
 	t.Run("Anthropic has correct capabilities", func(t *testing.T) {
-		caps := providerCapabilities[ProviderAnthropic]
+		caps := providerCapabilities[ai.ProviderAnthropic]
 		assert.True(t, caps[FeatureChat])
 		assert.False(t, caps[FeatureImage])
 		assert.False(t, caps[FeatureEmbedding])
 	})
 
 	t.Run("OpenAI has correct capabilities", func(t *testing.T) {
-		caps := providerCapabilities[ProviderOpenAI]
+		caps := providerCapabilities[ai.ProviderOpenAI]
 		assert.True(t, caps[FeatureChat])
 		assert.True(t, caps[FeatureImage])
 		assert.True(t, caps[FeatureEmbedding])
 	})
 
 	t.Run("Google has correct capabilities", func(t *testing.T) {
-		caps := providerCapabilities[ProviderGoogle]
+		caps := providerCapabilities[ai.ProviderGoogle]
 		assert.True(t, caps[FeatureChat])
 		assert.True(t, caps[FeatureImage])
 		assert.True(t, caps[FeatureEmbedding])
+	})
+}
+
+func TestConfigStruct(t *testing.T) {
+	t.Run("creates config with all fields", func(t *testing.T) {
+		chatModel := testModel{id: "gpt-4", provider: ai.ProviderOpenAI}
+		imageModel := testModel{id: "dall-e-3", provider: ai.ProviderOpenAI}
+		embedModel := testModel{id: "text-embedding-3-small", provider: ai.ProviderOpenAI}
+
+		cfg := Config{
+			APIKeys: APIKeys{
+				Anthropic: "anthropic-key",
+				OpenAI:    "openai-key",
+				Google:    "google-key",
+			},
+			Defaults: Defaults{
+				Chat:      chatModel,
+				Image:     imageModel,
+				Embedding: embedModel,
+			},
+		}
+
+		assert.Equal(t, "anthropic-key", cfg.APIKeys.Anthropic)
+		assert.Equal(t, "openai-key", cfg.APIKeys.OpenAI)
+		assert.Equal(t, "google-key", cfg.APIKeys.Google)
+		assert.Equal(t, "gpt-4", cfg.Defaults.Chat.String())
+		assert.Equal(t, "dall-e-3", cfg.Defaults.Image.String())
+		assert.Equal(t, "text-embedding-3-small", cfg.Defaults.Embedding.String())
 	})
 }

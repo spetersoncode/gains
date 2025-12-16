@@ -9,17 +9,22 @@ import (
 	"github.com/spetersoncode/gains/internal/store"
 )
 
-// Agent orchestrates autonomous tool-calling conversations.
-type Agent struct {
-	provider ai.ChatProvider
-	registry *Registry
+// ChatClient is the interface for chat capabilities needed by the agent.
+type ChatClient interface {
+	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error)
 }
 
-// New creates a new Agent with the given provider and tool registry.
-func New(provider ai.ChatProvider, registry *Registry) *Agent {
+// Agent orchestrates autonomous tool-calling conversations.
+type Agent struct {
+	chatClient ChatClient
+	registry   *Registry
+}
+
+// New creates a new Agent with the given chat client and tool registry.
+func New(c ChatClient, registry *Registry) *Agent {
 	return &Agent{
-		provider: provider,
-		registry: registry,
+		chatClient: c,
+		registry:   registry,
 	}
 }
 
@@ -183,7 +188,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 
 func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts []ai.Option, step int, eventCh chan<- Event) (*ai.Response, error) {
 	// Use streaming to emit deltas
-	streamCh, err := a.provider.ChatStream(ctx, messages, chatOpts...)
+	streamCh, err := a.chatClient.ChatStream(ctx, messages, chatOpts...)
 	if err != nil {
 		return nil, err
 	}
