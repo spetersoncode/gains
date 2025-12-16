@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"reflect"
 
 	ai "github.com/spetersoncode/gains"
 )
@@ -48,6 +49,60 @@ func NewLoop(name string, step Step, condition LoopCondition, opts ...LoopOption
 		opt(l)
 	}
 	return l
+}
+
+// NewLoopUntil creates a loop that exits when state[key] equals the target value.
+// This is a convenience wrapper for common "exit when key equals X" patterns.
+func NewLoopUntil(name string, step Step, key string, value any, opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		v, ok := state.Get(key)
+		return ok && v == value
+	}, opts...)
+}
+
+// NewLoopWhile creates a loop that continues while state[key] equals the target value.
+// The loop exits when the key no longer equals the value (or is unset).
+func NewLoopWhile(name string, step Step, key string, value any, opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		v, ok := state.Get(key)
+		return !ok || v != value
+	}, opts...)
+}
+
+// NewLoopUntilSet creates a loop that exits when state[key] is "truthy".
+// A value is truthy if it exists and is non-nil, non-zero, non-empty.
+func NewLoopUntilSet(name string, step Step, key string, opts ...LoopOption) *Loop {
+	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
+		return isTruthy(state, key)
+	}, opts...)
+}
+
+// isTruthy checks if a state key has a "truthy" value.
+func isTruthy(state *State, key string) bool {
+	v, ok := state.Get(key)
+	if !ok || v == nil {
+		return false
+	}
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val != ""
+	case int:
+		return val != 0
+	case int64:
+		return val != 0
+	case float64:
+		return val != 0
+	default:
+		rv := reflect.ValueOf(v)
+		switch rv.Kind() {
+		case reflect.Slice, reflect.Map, reflect.Array:
+			return rv.Len() > 0
+		default:
+			return true // non-nil, exists = truthy
+		}
+	}
 }
 
 // Name returns the loop name.
