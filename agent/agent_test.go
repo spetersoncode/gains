@@ -10,6 +10,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,15 +44,24 @@ func (m *mockProvider) Chat(ctx context.Context, messages []ai.Message, opts ...
 	}, nil
 }
 
-func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
-	ch := make(chan ai.StreamEvent)
+func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error) {
+	ch := make(chan event.Event)
 
 	if m.callCount >= len(m.responses) {
 		go func() {
 			defer close(ch)
-			ch <- ai.StreamEvent{
-				Delta: "No more responses",
-				Done:  true,
+			ch <- event.Event{
+				Type:      event.MessageStart,
+				MessageID: "msg-default",
+			}
+			ch <- event.Event{
+				Type:      event.MessageDelta,
+				MessageID: "msg-default",
+				Delta:     "No more responses",
+			}
+			ch <- event.Event{
+				Type:      event.MessageEnd,
+				MessageID: "msg-default",
 				Response: &ai.Response{
 					Content: "No more responses",
 				},
@@ -66,24 +76,27 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, op
 	if resp.err != nil {
 		go func() {
 			defer close(ch)
-			ch <- ai.StreamEvent{Err: resp.err}
+			ch <- event.Event{Type: event.RunError, Error: resp.err}
 		}()
 		return ch, nil
 	}
 
 	go func() {
 		defer close(ch)
+		msgID := "msg-test"
+		ch <- event.Event{Type: event.MessageStart, MessageID: msgID}
 		// Simulate streaming by sending content character by character
 		for _, c := range resp.content {
 			select {
 			case <-ctx.Done():
-				ch <- ai.StreamEvent{Err: ctx.Err()}
+				ch <- event.Event{Type: event.RunError, Error: ctx.Err()}
 				return
-			case ch <- ai.StreamEvent{Delta: string(c)}:
+			case ch <- event.Event{Type: event.MessageDelta, MessageID: msgID, Delta: string(c)}:
 			}
 		}
-		ch <- ai.StreamEvent{
-			Done: true,
+		ch <- event.Event{
+			Type:      event.MessageEnd,
+			MessageID: msgID,
 			Response: &ai.Response{
 				Content:   resp.content,
 				ToolCalls: resp.toolCalls,
@@ -507,20 +520,20 @@ func TestAgent_RunStream_Events(t *testing.T) {
 		{Role: ai.RoleUser, Content: "Go"},
 	})
 
-	var eventTypes []EventType
-	for event := range events {
-		eventTypes = append(eventTypes, event.Type)
+	var eventTypes []event.Type
+	for ev := range events {
+		eventTypes = append(eventTypes, ev.Type)
 	}
 
 	// Verify we get expected event sequence
-	assert.Contains(t, eventTypes, EventStepStart)
-	assert.Contains(t, eventTypes, EventStreamDelta)
-	assert.Contains(t, eventTypes, EventStepComplete)
-	assert.Contains(t, eventTypes, EventToolCallRequested)
-	assert.Contains(t, eventTypes, EventToolCallApproved)
-	assert.Contains(t, eventTypes, EventToolCallStarted)
-	assert.Contains(t, eventTypes, EventToolResult)
-	assert.Contains(t, eventTypes, EventAgentComplete)
+	assert.Contains(t, eventTypes, event.StepStart)
+	assert.Contains(t, eventTypes, event.MessageDelta)
+	assert.Contains(t, eventTypes, event.StepEnd)
+	assert.Contains(t, eventTypes, event.ToolCallStart)
+	assert.Contains(t, eventTypes, event.ToolCallApproved)
+	assert.Contains(t, eventTypes, event.ToolCallExecuting)
+	assert.Contains(t, eventTypes, event.ToolCallResult)
+	assert.Contains(t, eventTypes, event.RunEnd)
 }
 
 func TestAgent_ParallelToolCalls(t *testing.T) {
@@ -596,17 +609,17 @@ func TestErrors(t *testing.T) {
 // --- Event Tests ---
 
 func TestEventType_Constants(t *testing.T) {
-	// Verify event type constants are defined
-	assert.Equal(t, EventType("step_start"), EventStepStart)
-	assert.Equal(t, EventType("stream_delta"), EventStreamDelta)
-	assert.Equal(t, EventType("tool_call_requested"), EventToolCallRequested)
-	assert.Equal(t, EventType("tool_call_approved"), EventToolCallApproved)
-	assert.Equal(t, EventType("tool_call_rejected"), EventToolCallRejected)
-	assert.Equal(t, EventType("tool_call_started"), EventToolCallStarted)
-	assert.Equal(t, EventType("tool_result"), EventToolResult)
-	assert.Equal(t, EventType("step_complete"), EventStepComplete)
-	assert.Equal(t, EventType("agent_complete"), EventAgentComplete)
-	assert.Equal(t, EventType("error"), EventError)
+	// Verify event type constants are defined in the event package
+	assert.Equal(t, event.Type("step_start"), event.StepStart)
+	assert.Equal(t, event.Type("message_delta"), event.MessageDelta)
+	assert.Equal(t, event.Type("tool_call_start"), event.ToolCallStart)
+	assert.Equal(t, event.Type("tool_call_approved"), event.ToolCallApproved)
+	assert.Equal(t, event.Type("tool_call_rejected"), event.ToolCallRejected)
+	assert.Equal(t, event.Type("tool_call_executing"), event.ToolCallExecuting)
+	assert.Equal(t, event.Type("tool_call_result"), event.ToolCallResult)
+	assert.Equal(t, event.Type("step_end"), event.StepEnd)
+	assert.Equal(t, event.Type("run_end"), event.RunEnd)
+	assert.Equal(t, event.Type("run_error"), event.RunError)
 }
 
 func TestTerminationReason_Constants(t *testing.T) {

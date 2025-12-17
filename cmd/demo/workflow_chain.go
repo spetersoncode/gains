@@ -9,6 +9,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -63,17 +64,17 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	currentStep := ""
-	for event := range events {
-		switch event.Type {
-		case workflow.EventStepStart:
-			currentStep = event.StepName
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			currentStep = ev.StepName
 			fmt.Printf("\n[%s] Starting...\n", currentStep)
-		case workflow.EventStreamDelta:
-			fmt.Print(event.Delta)
-		case workflow.EventStepComplete:
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
+		case event.StepEnd:
 			fmt.Println()
-		case workflow.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			return
 		}
 	}

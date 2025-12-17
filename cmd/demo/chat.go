@@ -7,6 +7,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 )
 
 func demoChat(ctx context.Context, c *client.Client) {
@@ -47,16 +48,19 @@ func demoChatStream(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Print("\nAssistant:\n")
-	for event := range stream {
-		if event.Err != nil {
-			fmt.Fprintf(os.Stderr, "Stream error: %v\n", event.Err)
+	for ev := range stream {
+		switch ev.Type {
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
+		case event.MessageEnd:
+			if ev.Response != nil {
+				fmt.Printf("\n[Tokens: %d in, %d out]\n",
+					ev.Response.Usage.InputTokens,
+					ev.Response.Usage.OutputTokens)
+			}
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "Stream error: %v\n", ev.Error)
 			return
-		}
-		fmt.Print(event.Delta)
-		if event.Done {
-			fmt.Printf("\n[Tokens: %d in, %d out]\n",
-				event.Response.Usage.InputTokens,
-				event.Response.Usage.OutputTokens)
 		}
 	}
 }

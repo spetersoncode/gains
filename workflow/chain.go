@@ -4,6 +4,7 @@ import (
 	"context"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
 // Chain executes steps sequentially, passing state between them.
@@ -85,13 +86,13 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventWorkflowStart, StepName: c.name})
+		event.Emit(ch, Event{Type: event.RunStart, StepName: c.name})
 
 		var totalUsage ai.Usage
 
 		for _, step := range c.steps {
 			if err := ctx.Err(); err != nil {
-				emit(ch, Event{Type: EventError, StepName: step.Name(), Error: err})
+				event.Emit(ch, Event{Type: event.RunError, StepName: step.Name(), Error: err})
 				return
 			}
 
@@ -107,14 +108,18 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 			var stepResult *StepResult
 			var stepError error
 
-			for event := range stepEvents {
-				ch <- event
+			for ev := range stepEvents {
+				ch <- ev
 
-				if event.Type == EventStepComplete && event.Result != nil {
-					stepResult = event.Result
+				if ev.Type == event.StepEnd && ev.Response != nil {
+					stepResult = &StepResult{
+						StepName: step.Name(),
+						Response: ev.Response,
+						Usage:    ev.Response.Usage,
+					}
 				}
-				if event.Type == EventError {
-					stepError = event.Error
+				if ev.Type == event.RunError {
+					stepError = ev.Error
 				}
 			}
 
@@ -133,13 +138,9 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 			}
 		}
 
-		emit(ch, Event{
-			Type:     EventWorkflowComplete,
+		event.Emit(ch, Event{
+			Type:     event.RunEnd,
 			StepName: c.name,
-			Result: &StepResult{
-				StepName: c.name,
-				Usage:    totalUsage,
-			},
 		})
 	}()
 

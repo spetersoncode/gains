@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
 // Aggregator combines results from parallel steps into the shared state.
@@ -138,7 +139,7 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventParallelStart, StepName: p.name})
+		event.Emit(ch, Event{Type: event.ParallelStart, StepName: p.name})
 
 		results := make(map[string]*StepResult)
 		errors := make(map[string]error)
@@ -168,16 +169,20 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 				branchState := state.Clone()
 				stepEvents := s.RunStream(ctx, branchState, opts...)
 
-				for event := range stepEvents {
-					eventCh <- event
+				for ev := range stepEvents {
+					eventCh <- ev
 
 					mu.Lock()
-					if event.Type == EventStepComplete && event.Result != nil {
-						results[s.Name()] = event.Result
+					if ev.Type == event.StepEnd && ev.Response != nil {
+						results[s.Name()] = &StepResult{
+							StepName: s.Name(),
+							Response: ev.Response,
+							Usage:    ev.Response.Usage,
+						}
 						branchStates[s.Name()] = branchState
 					}
-					if event.Type == EventError {
-						errors[s.Name()] = event.Error
+					if ev.Type == event.RunError {
+						errors[s.Name()] = ev.Error
 					}
 					mu.Unlock()
 				}
@@ -191,20 +196,20 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 		}()
 
 		// Forward all events
-		for event := range eventCh {
-			ch <- event
+		for ev := range eventCh {
+			ch <- ev
 		}
 
 		// Handle errors
 		if len(errors) > 0 && !options.ContinueOnError {
-			emit(ch, Event{Type: EventError, StepName: p.name, Error: &ParallelError{Errors: errors}})
+			event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: &ParallelError{Errors: errors}})
 			return
 		}
 
 		// Aggregate
 		if p.aggregator != nil {
 			if err := p.aggregator(state, results); err != nil {
-				emit(ch, Event{Type: EventError, StepName: p.name, Error: err})
+				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 				return
 			}
 		} else {
@@ -222,14 +227,9 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 			totalUsage.OutputTokens += result.Usage.OutputTokens
 		}
 
-		emit(ch, Event{
-			Type:            EventParallelComplete,
-			StepName:        p.name,
-			ParallelResults: results,
-			Result: &StepResult{
-				StepName: p.name,
-				Usage:    totalUsage,
-			},
+		event.Emit(ch, Event{
+			Type:     event.ParallelEnd,
+			StepName: p.name,
 		})
 	}()
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/internal/provider/anthropic"
 	"github.com/spetersoncode/gains/internal/provider/google"
 	"github.com/spetersoncode/gains/internal/provider/openai"
@@ -386,10 +387,12 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 	return resp, nil
 }
 
-// ChatStream sends a conversation and returns a channel of streaming events.
+// ChatStream sends a conversation and returns a channel of unified streaming events.
 // The model can be specified via WithModel option, or the default chat model is used.
 // Automatically retries on transient errors when establishing the stream connection.
-func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+//
+// Events emitted: MessageStart, MessageDelta*, MessageEnd (or RunError on failure).
+func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error) {
 	// Prepend default options so per-request options override them
 	opts = append(c.defaultChatOpts, opts...)
 	options := ai.ApplyOptions(opts...)
@@ -428,7 +431,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		go c.forwardRetryEvents(retryEvents, "chat_stream", provider)
 	}
 
-	ch, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan ai.StreamEvent, error) {
+	providerCh, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan ai.StreamEvent, error) {
 		return chatProvider.ChatStream(ctx, messages, opts...)
 	})
 
@@ -453,7 +456,72 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		Provider:  provider,
 		Duration:  time.Since(start),
 	})
-	return ch, nil
+
+	// Wrap provider stream in unified event stream
+	eventCh := event.NewChannel()
+	go c.wrapProviderStream(providerCh, eventCh)
+
+	return eventCh, nil
+}
+
+// wrapProviderStream converts provider StreamEvents to unified events.
+func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh chan<- event.Event) {
+	defer close(eventCh)
+
+	messageID := generateMessageID()
+	messageStarted := false
+
+	for se := range providerCh {
+		// Handle errors
+		if se.Err != nil {
+			event.Emit(eventCh, event.Event{
+				Type:  event.RunError,
+				Error: se.Err,
+			})
+			return
+		}
+
+		// Handle streaming delta
+		if se.Delta != "" {
+			// Emit MessageStart on first delta
+			if !messageStarted {
+				event.Emit(eventCh, event.Event{
+					Type:      event.MessageStart,
+					MessageID: messageID,
+				})
+				messageStarted = true
+			}
+
+			event.Emit(eventCh, event.Event{
+				Type:      event.MessageDelta,
+				MessageID: messageID,
+				Delta:     se.Delta,
+			})
+		}
+
+		// Handle completion
+		if se.Done {
+			// Ensure message was started (handles empty responses)
+			if !messageStarted {
+				event.Emit(eventCh, event.Event{
+					Type:      event.MessageStart,
+					MessageID: messageID,
+				})
+			}
+
+			event.Emit(eventCh, event.Event{
+				Type:      event.MessageEnd,
+				MessageID: messageID,
+				Response:  se.Response,
+			})
+			return
+		}
+	}
+}
+
+// generateMessageID creates a unique message ID.
+func generateMessageID() string {
+	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
 }
 
 // GenerateImage creates images from a text prompt.

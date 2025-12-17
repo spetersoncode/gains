@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
 // LoopCondition evaluates state to determine if the loop should exit.
@@ -176,17 +177,17 @@ func (l *Loop) RunStream(ctx context.Context, state *State, opts ...Option) <-ch
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventWorkflowStart, StepName: l.name})
+		event.Emit(ch, Event{Type: event.RunStart, StepName: l.name})
 
 		var totalUsage ai.Usage
 
 		for i := 1; i <= l.maxIters; i++ {
 			state.Set(l.name+"_iteration", i)
 
-			emit(ch, Event{Type: EventLoopIteration, StepName: l.name, Iteration: i})
+			event.Emit(ch, Event{Type: event.LoopIteration, StepName: l.name, Iteration: i})
 
 			if err := ctx.Err(); err != nil {
-				emit(ch, Event{Type: EventError, StepName: l.name, Error: err})
+				event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: err})
 				return
 			}
 
@@ -202,14 +203,18 @@ func (l *Loop) RunStream(ctx context.Context, state *State, opts ...Option) <-ch
 			var stepResult *StepResult
 			var stepError error
 
-			for event := range stepEvents {
-				ch <- event
+			for ev := range stepEvents {
+				ch <- ev
 
-				if event.Type == EventStepComplete && event.Result != nil {
-					stepResult = event.Result
+				if ev.Type == event.StepEnd && ev.Response != nil {
+					stepResult = &StepResult{
+						StepName: l.step.Name(),
+						Response: ev.Response,
+						Usage:    ev.Response.Usage,
+					}
 				}
-				if event.Type == EventError {
-					stepError = event.Error
+				if ev.Type == event.RunError {
+					stepError = ev.Error
 				}
 			}
 
@@ -228,20 +233,16 @@ func (l *Loop) RunStream(ctx context.Context, state *State, opts ...Option) <-ch
 			}
 
 			if l.condition(ctx, state) {
-				emit(ch, Event{
-					Type:     EventWorkflowComplete,
+				event.Emit(ch, Event{
+					Type:     event.RunEnd,
 					StepName: l.name,
-					Result: &StepResult{
-						StepName: l.name,
-						Usage:    totalUsage,
-					},
 				})
 				return
 			}
 		}
 
 		// Max iterations exceeded
-		emit(ch, Event{Type: EventError, StepName: l.name, Error: ErrMaxIterationsExceeded})
+		event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: ErrMaxIterationsExceeded})
 	}()
 
 	return ch

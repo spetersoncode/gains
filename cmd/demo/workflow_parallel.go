@@ -9,6 +9,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -76,19 +77,19 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	)
 
 	completedSteps := make(map[string]bool)
-	for event := range events {
-		switch event.Type {
-		case workflow.EventParallelStart:
+	for ev := range events {
+		switch ev.Type {
+		case event.ParallelStart:
 			fmt.Println("Starting parallel execution...")
-		case workflow.EventStepStart:
-			fmt.Printf("  [%s] Analyzing...\n", event.StepName)
-		case workflow.EventStepComplete:
-			completedSteps[event.StepName] = true
-			fmt.Printf("  [%s] Done (%d/%d)\n", event.StepName, len(completedSteps), len(perspectives))
-		case workflow.EventParallelComplete:
+		case event.StepStart:
+			fmt.Printf("  [%s] Analyzing...\n", ev.StepName)
+		case event.StepEnd:
+			completedSteps[ev.StepName] = true
+			fmt.Printf("  [%s] Done (%d/%d)\n", ev.StepName, len(completedSteps), len(perspectives))
+		case event.ParallelEnd:
 			fmt.Println("All perspectives complete!")
-		case workflow.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			return
 		}
 	}

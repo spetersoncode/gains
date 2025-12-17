@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,18 +49,21 @@ func (m *mockProvider) Chat(ctx context.Context, messages []ai.Message, opts ...
 	}, nil
 }
 
-func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error) {
+func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ch := make(chan ai.StreamEvent)
+	ch := make(chan event.Event)
 
 	if m.callCount >= len(m.responses) {
 		go func() {
 			defer close(ch)
-			ch <- ai.StreamEvent{
-				Delta: "No more responses",
-				Done:  true,
+			msgID := "msg-default"
+			ch <- event.Event{Type: event.MessageStart, MessageID: msgID}
+			ch <- event.Event{Type: event.MessageDelta, MessageID: msgID, Delta: "No more responses"}
+			ch <- event.Event{
+				Type:      event.MessageEnd,
+				MessageID: msgID,
 				Response: &ai.Response{
 					Content: "No more responses",
 				},
@@ -74,23 +78,26 @@ func (m *mockProvider) ChatStream(ctx context.Context, messages []ai.Message, op
 	if resp.err != nil {
 		go func() {
 			defer close(ch)
-			ch <- ai.StreamEvent{Err: resp.err}
+			ch <- event.Event{Type: event.RunError, Error: resp.err}
 		}()
 		return ch, nil
 	}
 
 	go func() {
 		defer close(ch)
+		msgID := "msg-test"
+		ch <- event.Event{Type: event.MessageStart, MessageID: msgID}
 		for _, c := range resp.content {
 			select {
 			case <-ctx.Done():
-				ch <- ai.StreamEvent{Err: ctx.Err()}
+				ch <- event.Event{Type: event.RunError, Error: ctx.Err()}
 				return
-			case ch <- ai.StreamEvent{Delta: string(c)}:
+			case ch <- event.Event{Type: event.MessageDelta, MessageID: msgID, Delta: string(c)}:
 			}
 		}
-		ch <- ai.StreamEvent{
-			Done: true,
+		ch <- event.Event{
+			Type:      event.MessageEnd,
+			MessageID: msgID,
 			Response: &ai.Response{
 				Content:   resp.content,
 				ToolCalls: resp.toolCalls,
@@ -140,12 +147,12 @@ func TestFuncStep_RunStream(t *testing.T) {
 	state := NewState(nil)
 	events := step.RunStream(context.Background(), state)
 
-	var eventTypes []EventType
-	for event := range events {
-		eventTypes = append(eventTypes, event.Type)
+	var eventTypes []event.Type
+	for ev := range events {
+		eventTypes = append(eventTypes, ev.Type)
 	}
 
-	assert.Equal(t, []EventType{EventStepStart, EventStepComplete}, eventTypes)
+	assert.Equal(t, []event.Type{event.StepStart, event.StepEnd}, eventTypes)
 	assert.Equal(t, "done", state.GetString("result"))
 }
 
@@ -192,11 +199,11 @@ func TestPromptStep_RunStream(t *testing.T) {
 
 	var deltas string
 	var completed bool
-	for event := range events {
-		if event.Type == EventStreamDelta {
-			deltas += event.Delta
+	for ev := range events {
+		if ev.Type == event.MessageDelta {
+			deltas += ev.Delta
 		}
-		if event.Type == EventStepComplete {
+		if ev.Type == event.StepEnd {
 			completed = true
 		}
 	}
@@ -272,16 +279,16 @@ func TestChain_RunStream(t *testing.T) {
 
 	events := chain.RunStream(context.Background(), NewState(nil))
 
-	var eventTypes []EventType
-	for event := range events {
-		eventTypes = append(eventTypes, event.Type)
+	var eventTypes []event.Type
+	for ev := range events {
+		eventTypes = append(eventTypes, ev.Type)
 	}
 
-	expected := []EventType{
-		EventWorkflowStart,
-		EventStepStart, EventStepComplete,
-		EventStepStart, EventStepComplete,
-		EventWorkflowComplete,
+	expected := []event.Type{
+		event.RunStart,
+		event.StepStart, event.StepEnd,
+		event.StepStart, event.StepEnd,
+		event.RunEnd,
 	}
 	assert.Equal(t, expected, eventTypes)
 }
@@ -435,14 +442,14 @@ func TestParallel_RunStream(t *testing.T) {
 
 	var hasStart, hasComplete bool
 	var stepCompletes int
-	for event := range events {
-		if event.Type == EventParallelStart {
+	for ev := range events {
+		if ev.Type == event.ParallelStart {
 			hasStart = true
 		}
-		if event.Type == EventParallelComplete {
+		if ev.Type == event.ParallelEnd {
 			hasComplete = true
 		}
-		if event.Type == EventStepComplete {
+		if ev.Type == event.StepEnd {
 			stepCompletes++
 		}
 	}
@@ -572,10 +579,10 @@ func TestRouter_RunStream(t *testing.T) {
 
 	var hasRouteSelected bool
 	var selectedRoute string
-	for event := range events {
-		if event.Type == EventRouteSelected {
+	for ev := range events {
+		if ev.Type == event.RouteSelected {
 			hasRouteSelected = true
-			selectedRoute = event.RouteName
+			selectedRoute = ev.RouteName
 		}
 	}
 
@@ -701,13 +708,13 @@ func TestWorkflow_RunStream(t *testing.T) {
 	wf := New("test-workflow", chain)
 	events := wf.RunStream(context.Background(), NewState(nil))
 
-	var eventTypes []EventType
-	for event := range events {
-		eventTypes = append(eventTypes, event.Type)
+	var eventTypes []event.Type
+	for ev := range events {
+		eventTypes = append(eventTypes, ev.Type)
 	}
 
-	assert.Contains(t, eventTypes, EventWorkflowStart)
-	assert.Contains(t, eventTypes, EventWorkflowComplete)
+	assert.Contains(t, eventTypes, event.RunStart)
+	assert.Contains(t, eventTypes, event.RunEnd)
 }
 
 // --- Nested Workflow Tests ---

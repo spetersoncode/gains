@@ -7,6 +7,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -128,15 +129,16 @@ func (t *ToolStep) RunStream(ctx context.Context, state *State, opts ...Option) 
 
 	go func() {
 		defer close(ch)
-		emit(ch, Event{Type: EventStepStart, StepName: t.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: t.name})
 
 		result, err := t.Run(ctx, state, opts...)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: t.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: t.name, Error: err})
 			return
 		}
 
-		emit(ch, Event{Type: EventStepComplete, StepName: t.name, Result: result})
+		event.Emit(ch, Event{Type: event.StepEnd, StepName: t.name})
+		_ = result
 	}()
 
 	return ch
@@ -257,15 +259,16 @@ func (t *TypedToolStep[T]) RunStream(ctx context.Context, state *State, opts ...
 
 	go func() {
 		defer close(ch)
-		emit(ch, Event{Type: EventStepStart, StepName: t.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: t.name})
 
 		result, err := t.Run(ctx, state, opts...)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: t.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: t.name, Error: err})
 			return
 		}
 
-		emit(ch, Event{Type: EventStepComplete, StepName: t.name, Result: result})
+		event.Emit(ch, Event{Type: event.StepEnd, StepName: t.name})
+		_ = result
 	}()
 
 	return ch

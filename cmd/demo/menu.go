@@ -17,6 +17,7 @@ const (
 	CategoryTools    Category = "Tools & Agents"
 	CategoryOutput   Category = "Structured Output"
 	CategoryWorkflow Category = "Workflows"
+	CategoryAGUI     Category = "AG-UI Protocol"
 )
 
 // categoryOrder defines the display order of categories.
@@ -25,6 +26,7 @@ var categoryOrder = []Category{
 	CategoryTools,
 	CategoryOutput,
 	CategoryWorkflow,
+	CategoryAGUI,
 }
 
 // Demo represents a single demo with its metadata.
@@ -64,6 +66,10 @@ var demos = []Demo{
 	{Name: "loop", Description: "Iterative loop workflow", Category: CategoryWorkflow, Run: demoWorkflowLoop},
 	{Name: "tool-step", Description: "Direct tool execution in workflow", Category: CategoryWorkflow, Run: demoWorkflowToolStep},
 	{Name: "agent-step", Description: "Autonomous agent in workflow", Category: CategoryWorkflow, Run: demoWorkflowAgentStep},
+
+	// AG-UI Protocol
+	{Name: "agui-stream", Description: "AG-UI event stream simulation", Category: CategoryAGUI, Run: demoAGUIStream},
+	{Name: "agui-messages", Description: "AG-UI message conversion", Category: CategoryAGUI, Run: demoAGUIMessages},
 }
 
 // availableDemos returns demos filtered by client capabilities.

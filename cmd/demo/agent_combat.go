@@ -15,6 +15,7 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -364,29 +365,29 @@ BEGIN THE BATTLE!`
 	nat1s := 0
 
 	// Process streaming events
-	for event := range events {
-		switch event.Type {
-		case agent.EventStepStart:
-			fmt.Printf("\n────── Round %d ──────\n", event.Step)
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			fmt.Printf("\n────── Round %d ──────\n", ev.Step)
 
-		case agent.EventStreamDelta:
-			fmt.Print(event.Delta)
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
 
-		case agent.EventToolCallRequested:
+		case event.ToolCallStart:
 			// Special formatting for dice rolls
-			if event.ToolCall.Name == "roll_dice" {
+			if ev.ToolCall.Name == "roll_dice" {
 				var args RollDiceArgs
-				json.Unmarshal([]byte(event.ToolCall.Arguments), &args)
+				json.Unmarshal([]byte(ev.ToolCall.Arguments), &args)
 				fmt.Printf("\n  🎲 Rolling %s for %s...\n", args.Notation, args.Purpose)
 			} else {
-				fmt.Printf("\n  [%s]\n", event.ToolCall.Name)
+				fmt.Printf("\n  [%s]\n", ev.ToolCall.Name)
 			}
 
-		case agent.EventToolResult:
-			if event.ToolCall.Name == "roll_dice" {
+		case event.ToolCallResult:
+			if ev.ToolCall.Name == "roll_dice" {
 				rollCount++
 				var result map[string]interface{}
-				json.Unmarshal([]byte(event.ToolResult.Content), &result)
+				json.Unmarshal([]byte(ev.ToolResult.Content), &result)
 
 				// Check for crits
 				if crit, ok := result["critical"].(string); ok {
@@ -403,9 +404,9 @@ BEGIN THE BATTLE!`
 					total := result["total"].(float64)
 					fmt.Printf("  → %s (Total: %.0f)\n", breakdown, total)
 				}
-			} else if event.ToolCall.Name == "apply_damage" {
+			} else if ev.ToolCall.Name == "apply_damage" {
 				var result map[string]interface{}
-				json.Unmarshal([]byte(event.ToolResult.Content), &result)
+				json.Unmarshal([]byte(ev.ToolResult.Content), &result)
 				if msg, ok := result["message"].(string); ok {
 					if defeated, ok := result["defeated"].(bool); ok && defeated {
 						fmt.Printf("  💥 %s\n", msg)
@@ -413,9 +414,9 @@ BEGIN THE BATTLE!`
 						fmt.Printf("  ⚔️  %s\n", msg)
 					}
 				}
-			} else if event.ToolCall.Name == "get_combat_status" {
+			} else if ev.ToolCall.Name == "get_combat_status" {
 				var result map[string]interface{}
-				json.Unmarshal([]byte(event.ToolResult.Content), &result)
+				json.Unmarshal([]byte(ev.ToolResult.Content), &result)
 				if combatants, ok := result["combatants"].([]interface{}); ok {
 					fmt.Println("  📊 Combat Status:")
 					for _, c := range combatants {
@@ -431,10 +432,10 @@ BEGIN THE BATTLE!`
 				}
 			}
 
-		case agent.EventStepComplete:
+		case event.StepEnd:
 			// Just a visual separator
 
-		case agent.EventAgentComplete:
+		case event.RunEnd:
 			fmt.Println()
 			fmt.Println()
 			fmt.Println("═══════════════════════════════════════")
@@ -455,8 +456,8 @@ BEGIN THE BATTLE!`
 				fmt.Printf("  %s: %d/%d HP - %s\n", c.Name, c.HP, c.MaxHP, status)
 			}
 
-		case agent.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 		}
 	}
 }

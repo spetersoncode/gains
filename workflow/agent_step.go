@@ -5,6 +5,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -157,7 +158,7 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventStepStart, StepName: a.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: a.name})
 
 		msgs := a.prompt(state)
 
@@ -192,7 +193,7 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 			steps = agentEvent.Step
 
 			switch agentEvent.Type {
-			case agent.EventStepStart:
+			case event.StepStart:
 				// Commit pending messages from previous step
 				if pendingAssistantMsg != nil {
 					messageHistory = append(messageHistory, *pendingAssistantMsg)
@@ -203,64 +204,91 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 					pendingToolResults = nil
 				}
 
-				emit(ch, Event{
-					Type:      EventStepStart,
+				event.Emit(ch, Event{
+					Type:     event.StepStart,
+					StepName: a.name,
+					Step:     agentEvent.Step,
+					Message:  "agent_iteration",
+				})
+
+			case event.MessageStart:
+				event.Emit(ch, Event{
+					Type:      event.MessageStart,
 					StepName:  a.name,
-					AgentStep: agentEvent.Step,
-					Message:   "agent_iteration",
+					MessageID: agentEvent.MessageID,
 				})
 
-			case agent.EventStreamDelta:
-				emit(ch, Event{
-					Type:     EventStreamDelta,
-					StepName: a.name,
-					Delta:    agentEvent.Delta,
+			case event.MessageDelta:
+				event.Emit(ch, Event{
+					Type:      event.MessageDelta,
+					StepName:  a.name,
+					MessageID: agentEvent.MessageID,
+					Delta:     agentEvent.Delta,
 				})
 
-			case agent.EventToolCallRequested:
-				emit(ch, Event{
-					Type:     EventToolCall,
-					StepName: a.name,
-					ToolCall: agentEvent.ToolCall,
-					Message:  "requested",
+			case event.MessageEnd:
+				event.Emit(ch, Event{
+					Type:      event.MessageEnd,
+					StepName:  a.name,
+					MessageID: agentEvent.MessageID,
+					Response:  agentEvent.Response,
 				})
 
-			case agent.EventToolCallApproved:
-				emit(ch, Event{
-					Type:     EventToolCall,
-					StepName: a.name,
-					ToolCall: agentEvent.ToolCall,
-					Message:  "approved",
-				})
-
-			case agent.EventToolCallRejected:
-				emit(ch, Event{
-					Type:     EventToolCall,
+			case event.ToolCallStart:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallStart,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
-					Message:  "rejected: " + agentEvent.Message,
 				})
 
-			case agent.EventToolCallStarted:
-				emit(ch, Event{
-					Type:     EventToolCall,
+			case event.ToolCallArgs:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallArgs,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
-					Message:  "started",
 				})
 
-			case agent.EventToolResult:
+			case event.ToolCallApproved:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallApproved,
+					StepName: a.name,
+					ToolCall: agentEvent.ToolCall,
+				})
+
+			case event.ToolCallRejected:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallRejected,
+					StepName: a.name,
+					ToolCall: agentEvent.ToolCall,
+					Message:  agentEvent.Message,
+				})
+
+			case event.ToolCallExecuting:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallExecuting,
+					StepName: a.name,
+					ToolCall: agentEvent.ToolCall,
+				})
+
+			case event.ToolCallEnd:
+				event.Emit(ch, Event{
+					Type:     event.ToolCallEnd,
+					StepName: a.name,
+					ToolCall: agentEvent.ToolCall,
+				})
+
+			case event.ToolCallResult:
 				if agentEvent.ToolResult != nil {
 					pendingToolResults = append(pendingToolResults, *agentEvent.ToolResult)
 				}
-				emit(ch, Event{
-					Type:       EventToolResult,
+				event.Emit(ch, Event{
+					Type:       event.ToolCallResult,
 					StepName:   a.name,
 					ToolCall:   agentEvent.ToolCall,
 					ToolResult: agentEvent.ToolResult,
 				})
 
-			case agent.EventStepComplete:
+			case event.StepEnd:
 				if agentEvent.Response != nil {
 					totalUsage.InputTokens += agentEvent.Response.Usage.InputTokens
 					totalUsage.OutputTokens += agentEvent.Response.Usage.OutputTokens
@@ -275,15 +303,15 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 					}
 				}
 
-			case agent.EventAgentComplete:
+			case event.RunEnd:
 				termination = agent.TerminationReason(agentEvent.Message)
 				if agentEvent.Response != nil {
 					lastResponse = agentEvent.Response
 				}
 
-			case agent.EventError:
-				emit(ch, Event{
-					Type:     EventError,
+			case event.RunError:
+				event.Emit(ch, Event{
+					Type:     event.RunError,
 					StepName: a.name,
 					Error:    agentEvent.Error,
 				})
@@ -316,19 +344,11 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 			output = lastResponse.Content
 		}
 
-		emit(ch, Event{
-			Type:     EventStepComplete,
+		event.Emit(ch, Event{
+			Type:     event.StepEnd,
 			StepName: a.name,
-			Result: &StepResult{
-				StepName: a.name,
-				Output:   output,
-				Response: lastResponse,
-				Usage:    totalUsage,
-				Metadata: map[string]any{
-					"steps":       steps,
-					"termination": string(termination),
-				},
-			},
+			Response: lastResponse,
+			Message:  output,
 		})
 	}()
 

@@ -1,96 +1,19 @@
 package workflow
 
 import (
-	"time"
-
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
-// EventType identifies the kind of event occurring during workflow execution.
-type EventType string
-
-const (
-	// EventWorkflowStart fires when the workflow begins.
-	EventWorkflowStart EventType = "workflow_start"
-
-	// EventWorkflowComplete fires when the workflow finishes.
-	EventWorkflowComplete EventType = "workflow_complete"
-
-	// EventStepStart fires when a step begins execution.
-	EventStepStart EventType = "step_start"
-
-	// EventStepComplete fires when a step finishes successfully.
-	EventStepComplete EventType = "step_complete"
-
-	// EventStepSkipped fires when a step is skipped (e.g., routing).
-	EventStepSkipped EventType = "step_skipped"
-
-	// EventStreamDelta fires for streaming content from LLM.
-	EventStreamDelta EventType = "stream_delta"
-
-	// EventToolCall fires when a tool is called within a step.
-	EventToolCall EventType = "tool_call"
-
-	// EventParallelStart fires when parallel execution begins.
-	EventParallelStart EventType = "parallel_start"
-
-	// EventParallelComplete fires when all parallel branches complete.
-	EventParallelComplete EventType = "parallel_complete"
-
-	// EventRouteSelected fires when a route is chosen.
-	EventRouteSelected EventType = "route_selected"
-
-	// EventLoopIteration fires at the start of each loop iteration.
-	EventLoopIteration EventType = "loop_iteration"
-
-	// EventError fires when an error occurs.
-	EventError EventType = "error"
-
-	// EventToolResult fires when a tool execution completes within AgentStep.
-	EventToolResult EventType = "tool_result"
-)
-
-// Event represents an observable occurrence during workflow execution.
-type Event struct {
-	// Type identifies the kind of event.
-	Type EventType
-
-	// StepName identifies the step that produced this event.
-	StepName string
-
-	// Delta contains streaming content for EventStreamDelta.
-	Delta string
-
-	// Result contains step result for EventStepComplete.
-	Result *StepResult
-
-	// ToolCall contains tool call info for EventToolCall.
-	ToolCall *ai.ToolCall
-
-	// ParallelResults contains results from parallel execution.
-	ParallelResults map[string]*StepResult
-
-	// RouteName identifies the selected route for EventRouteSelected.
-	RouteName string
-
-	// Iteration is the current loop iteration (1-indexed) for EventLoopIteration.
-	Iteration int
-
-	// AgentStep is the agent iteration number (1-indexed) for AgentStep events.
-	AgentStep int
-
-	// ToolResult contains tool result for EventToolResult events.
-	ToolResult *ai.ToolResult
-
-	// Error contains the error for EventError.
-	Error error
-
-	// Message contains additional context.
-	Message string
-
-	// Timestamp is when the event occurred.
-	Timestamp time.Time
-}
+// Event is an alias to the unified event type.
+// Workflow events use these event.Type values:
+//   - event.RunStart, event.RunEnd, event.RunError
+//   - event.StepStart, event.StepEnd, event.StepSkipped
+//   - event.MessageStart, event.MessageDelta, event.MessageEnd
+//   - event.ToolCallStart, event.ToolCallArgs, event.ToolCallEnd, event.ToolCallResult
+//   - event.ParallelStart, event.ParallelEnd
+//   - event.RouteSelected, event.LoopIteration
+type Event = event.Event
 
 // StepResult contains the output of a step execution.
 type StepResult struct {
@@ -146,14 +69,4 @@ type Result struct {
 
 	// Error contains any error that caused termination.
 	Error error
-}
-
-// emit sends an event with timestamp to the channel.
-func emit(ch chan<- Event, event Event) {
-	event.Timestamp = time.Now()
-	select {
-	case ch <- event:
-	default:
-		// Channel full - don't block
-	}
 }

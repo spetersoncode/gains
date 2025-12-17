@@ -9,6 +9,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -87,16 +88,16 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 		events := wf.RunStream(ctx, state, workflow.WithTimeout(1*time.Minute))
 
-		for event := range events {
-			switch event.Type {
-			case workflow.EventRouteSelected:
-				fmt.Printf("Route selected: %s\n", event.RouteName)
-			case workflow.EventStreamDelta:
-				fmt.Print(event.Delta)
-			case workflow.EventStepComplete:
+		for ev := range events {
+			switch ev.Type {
+			case event.RouteSelected:
+				fmt.Printf("Route selected: %s\n", ev.RouteName)
+			case event.MessageDelta:
+				fmt.Print(ev.Delta)
+			case event.StepEnd:
 				fmt.Println()
-			case workflow.EventError:
-				fmt.Fprintf(os.Stderr, "Error: %v\n", event.Error)
+			case event.RunError:
+				fmt.Fprintf(os.Stderr, "Error: %v\n", ev.Error)
 			}
 		}
 	}

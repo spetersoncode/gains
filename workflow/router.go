@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
 // Condition determines if a route should be taken.
@@ -91,7 +92,7 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventStepStart, StepName: r.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: r.name})
 
 		// Find matching route
 		var selectedStep Step
@@ -110,13 +111,13 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 				selectedStep = r.defaultRoute
 				selectedName = "default"
 			} else {
-				emit(ch, Event{Type: EventError, StepName: r.name, Error: ErrNoRouteMatched})
+				event.Emit(ch, Event{Type: event.RunError, StepName: r.name, Error: ErrNoRouteMatched})
 				return
 			}
 		}
 
-		emit(ch, Event{
-			Type:      EventRouteSelected,
+		event.Emit(ch, Event{
+			Type:      event.RouteSelected,
 			StepName:  r.name,
 			RouteName: selectedName,
 		})
@@ -125,8 +126,8 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 
 		// Forward events from selected step
 		stepEvents := selectedStep.RunStream(ctx, state, opts...)
-		for event := range stepEvents {
-			ch <- event
+		for ev := range stepEvents {
+			ch <- ev
 		}
 	}()
 
@@ -256,7 +257,7 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 			defer cancel()
 		}
 
-		emit(ch, Event{Type: EventStepStart, StepName: c.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: c.name})
 
 		// Merge chat options
 		chatOpts := make([]ai.Option, 0, len(c.chatOpts)+len(options.ChatOptions))
@@ -267,25 +268,26 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 		msgs := c.prompt(state)
 		streamCh, err := c.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: c.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: c.name, Error: err})
 			return
 		}
 
 		var classification string
-		for event := range streamCh {
-			if event.Err != nil {
-				emit(ch, Event{Type: EventError, StepName: c.name, Error: event.Err})
+		for ev := range streamCh {
+			switch ev.Type {
+			case event.RunError:
+				event.Emit(ch, Event{Type: event.RunError, StepName: c.name, Error: ev.Error})
 				return
-			}
-			if event.Delta != "" {
-				emit(ch, Event{Type: EventStreamDelta, StepName: c.name, Delta: event.Delta})
-			}
-			if event.Done && event.Response != nil {
-				var err error
-				classification, err = extractClassification(event.Response.Content)
-				if err != nil {
-					emit(ch, Event{Type: EventError, StepName: c.name, Error: err})
-					return
+			case event.MessageDelta:
+				event.Emit(ch, Event{Type: event.MessageDelta, StepName: c.name, Delta: ev.Delta})
+			case event.MessageEnd:
+				if ev.Response != nil {
+					var err error
+					classification, err = extractClassification(ev.Response.Content)
+					if err != nil {
+						event.Emit(ch, Event{Type: event.RunError, StepName: c.name, Error: err})
+						return
+					}
 				}
 			}
 		}
@@ -303,16 +305,16 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 			}
 		}
 		if selectedStep == nil {
-			emit(ch, Event{
-				Type:     EventError,
+			event.Emit(ch, Event{
+				Type:     event.RunError,
 				StepName: c.name,
 				Error:    fmt.Errorf("unknown classification: %q", classification),
 			})
 			return
 		}
 
-		emit(ch, Event{
-			Type:      EventRouteSelected,
+		event.Emit(ch, Event{
+			Type:      event.RouteSelected,
 			StepName:  c.name,
 			RouteName: matchedRoute,
 		})
@@ -321,8 +323,8 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 
 		// Forward events from selected step
 		stepEvents := selectedStep.RunStream(ctx, state, opts...)
-		for event := range stepEvents {
-			ch <- event
+		for ev := range stepEvents {
+			ch <- ev
 		}
 	}()
 

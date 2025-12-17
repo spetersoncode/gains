@@ -9,6 +9,7 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -62,40 +63,40 @@ func demoAgentStream(ctx context.Context, c *client.Client) {
 	)
 
 	// Process events
-	for event := range events {
-		switch event.Type {
-		case agent.EventStepStart:
-			fmt.Printf("\n[Step %d]\n", event.Step)
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			fmt.Printf("\n[Step %d]\n", ev.Step)
 
-		case agent.EventStreamDelta:
-			fmt.Print(event.Delta)
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
 
-		case agent.EventToolCallRequested:
-			fmt.Printf("\n  -> Tool requested: %s(%s)\n", event.ToolCall.Name, event.ToolCall.Arguments)
+		case event.ToolCallStart:
+			fmt.Printf("\n  -> Tool requested: %s(%s)\n", ev.ToolCall.Name, ev.ToolCall.Arguments)
 
-		case agent.EventToolResult:
+		case event.ToolCallResult:
 			status := "success"
-			if event.ToolResult.IsError {
+			if ev.ToolResult.IsError {
 				status = "error"
 			}
-			fmt.Printf("  <- Tool result [%s]: %s\n", status, truncate(event.ToolResult.Content, 80))
+			fmt.Printf("  <- Tool result [%s]: %s\n", status, truncate(ev.ToolResult.Content, 80))
 
-		case agent.EventStepComplete:
-			if event.Response != nil {
+		case event.StepEnd:
+			if ev.Response != nil {
 				fmt.Printf("\n  [Tokens: %d in, %d out]\n",
-					event.Response.Usage.InputTokens,
-					event.Response.Usage.OutputTokens)
+					ev.Response.Usage.InputTokens,
+					ev.Response.Usage.OutputTokens)
 			}
 
-		case agent.EventAgentComplete:
+		case event.RunEnd:
 			fmt.Printf("\n\n--- Agent Complete ---\n")
-			fmt.Printf("Termination: %s\n", event.Message)
-			if event.Response != nil {
-				fmt.Printf("Final response: %s\n", event.Response.Content)
+			fmt.Printf("Termination: %s\n", ev.Message)
+			if ev.Response != nil {
+				fmt.Printf("Final response: %s\n", ev.Response.Content)
 			}
 
-		case agent.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 		}
 	}
 }

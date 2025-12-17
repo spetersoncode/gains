@@ -2,17 +2,19 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/internal/store"
 	"github.com/spetersoncode/gains/tool"
 )
 
 // ChatClient is the interface for chat capabilities needed by the agent.
 type ChatClient interface {
-	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error)
+	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error)
 }
 
 // Agent orchestrates autonomous tool-calling conversations.
@@ -43,11 +45,11 @@ func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) 
 	var pendingAssistantMsg *ai.Message
 	var pendingToolResults []ai.ToolResult
 
-	for event := range eventCh {
-		result.Steps = event.Step
+	for ev := range eventCh {
+		result.Steps = ev.Step
 
-		switch event.Type {
-		case EventStepStart:
+		switch ev.Type {
+		case event.StepStart:
 			// Commit pending messages from previous step
 			if pendingAssistantMsg != nil {
 				result.history.Append(*pendingAssistantMsg)
@@ -58,35 +60,35 @@ func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) 
 				pendingToolResults = nil
 			}
 
-		case EventStepComplete:
-			lastResponse = event.Response
-			if event.Response != nil {
-				totalUsage.InputTokens += event.Response.Usage.InputTokens
-				totalUsage.OutputTokens += event.Response.Usage.OutputTokens
+		case event.StepEnd:
+			lastResponse = ev.Response
+			if ev.Response != nil {
+				totalUsage.InputTokens += ev.Response.Usage.InputTokens
+				totalUsage.OutputTokens += ev.Response.Usage.OutputTokens
 
-				if len(event.Response.ToolCalls) > 0 {
+				if len(ev.Response.ToolCalls) > 0 {
 					pendingAssistantMsg = &ai.Message{
 						Role:      ai.RoleAssistant,
-						Content:   event.Response.Content,
-						ToolCalls: event.Response.ToolCalls,
+						Content:   ev.Response.Content,
+						ToolCalls: ev.Response.ToolCalls,
 					}
 				}
 			}
 
-		case EventToolResult:
-			if event.ToolResult != nil {
-				pendingToolResults = append(pendingToolResults, *event.ToolResult)
+		case event.ToolCallResult:
+			if ev.ToolResult != nil {
+				pendingToolResults = append(pendingToolResults, *ev.ToolResult)
 			}
 
-		case EventAgentComplete:
-			result.Response = event.Response
-			result.Termination = TerminationReason(event.Message)
+		case event.RunEnd:
+			result.Response = ev.Response
+			result.Termination = TerminationReason(ev.Message)
 			if result.Response == nil {
 				result.Response = lastResponse
 			}
 
-		case EventError:
-			result.Error = event.Error
+		case event.RunError:
+			result.Error = ev.Error
 			result.Termination = TerminationError
 		}
 	}
@@ -107,7 +109,7 @@ func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) 
 // The channel is closed when the agent completes or encounters a fatal error.
 // Callers should drain the channel to ensure proper cleanup.
 func (a *Agent) RunStream(ctx context.Context, messages []ai.Message, opts ...Option) <-chan Event {
-	eventCh := make(chan Event, 100) // Buffered to prevent blocking
+	eventCh := event.NewChannel()
 
 	go a.runLoop(ctx, messages, eventCh, opts...)
 
@@ -126,6 +128,9 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 		defer cancel()
 	}
 
+	// Emit run start
+	event.Emit(eventCh, Event{Type: event.RunStart})
+
 	// Prepare chat options with tools
 	chatOpts := append([]ai.Option{ai.WithTools(a.registry.Tools())}, options.ChatOptions...)
 
@@ -143,16 +148,16 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 			return
 		}
 
-		a.emit(eventCh, Event{Type: EventStepStart, Step: step})
+		event.Emit(eventCh, Event{Type: event.StepStart, Step: step})
 
 		// Execute chat call with streaming
 		response, err := a.executeStep(ctx, history.Messages(), chatOpts, step, eventCh)
 		if err != nil {
-			a.emit(eventCh, Event{Type: EventError, Step: step, Error: err})
+			event.Emit(eventCh, Event{Type: event.RunError, Step: step, Error: err})
 			return
 		}
 
-		a.emit(eventCh, Event{Type: EventStepComplete, Step: step, Response: response})
+		event.Emit(eventCh, Event{Type: event.StepEnd, Step: step, Response: response})
 
 		// Check custom stop predicate
 		if options.StopPredicate != nil && options.StopPredicate(step, response) {
@@ -195,22 +200,55 @@ func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts
 	}
 
 	var response *ai.Response
+	messageID := fmt.Sprintf("msg_%d_%d", step, time.Now().UnixNano())
+	messageStarted := false
 
-	for event := range streamCh {
-		if event.Err != nil {
-			return nil, event.Err
-		}
+	for ev := range streamCh {
+		switch ev.Type {
+		case event.RunError:
+			return nil, ev.Error
 
-		if event.Delta != "" {
-			a.emit(eventCh, Event{
-				Type:  EventStreamDelta,
-				Step:  step,
-				Delta: event.Delta,
+		case event.MessageStart:
+			// Forward message start with our step-scoped message ID
+			event.Emit(eventCh, Event{
+				Type:      event.MessageStart,
+				Step:      step,
+				MessageID: messageID,
 			})
-		}
+			messageStarted = true
 
-		if event.Done && event.Response != nil {
-			response = event.Response
+		case event.MessageDelta:
+			if !messageStarted {
+				// Emit start if we haven't yet (defensive)
+				event.Emit(eventCh, Event{
+					Type:      event.MessageStart,
+					Step:      step,
+					MessageID: messageID,
+				})
+				messageStarted = true
+			}
+			event.Emit(eventCh, Event{
+				Type:      event.MessageDelta,
+				Step:      step,
+				MessageID: messageID,
+				Delta:     ev.Delta,
+			})
+
+		case event.MessageEnd:
+			if !messageStarted {
+				event.Emit(eventCh, Event{
+					Type:      event.MessageStart,
+					Step:      step,
+					MessageID: messageID,
+				})
+			}
+			event.Emit(eventCh, Event{
+				Type:      event.MessageEnd,
+				Step:      step,
+				MessageID: messageID,
+				Response:  ev.Response,
+			})
+			response = ev.Response
 		}
 	}
 
@@ -232,21 +270,23 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 	approvals := make([]approvalResult, len(toolCalls))
 
 	for i, tc := range toolCalls {
-		a.emit(eventCh, Event{Type: EventToolCallRequested, Step: step, ToolCall: &tc})
+		// Emit tool call start (name only) and args (arguments)
+		event.Emit(eventCh, Event{Type: event.ToolCallStart, Step: step, ToolCall: &tc})
+		event.Emit(eventCh, Event{Type: event.ToolCallArgs, Step: step, ToolCall: &tc})
 
 		if a.requiresApproval(tc.Name, options) {
 			approved, reason := options.Approver(ctx, tc)
 			approvals[i] = approvalResult{call: tc, approved: approved, reason: reason}
 
 			if approved {
-				a.emit(eventCh, Event{Type: EventToolCallApproved, Step: step, ToolCall: &tc})
+				event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 			} else {
-				a.emit(eventCh, Event{Type: EventToolCallRejected, Step: step, ToolCall: &tc, Message: reason})
+				event.Emit(eventCh, Event{Type: event.ToolCallRejected, Step: step, ToolCall: &tc, Message: reason})
 			}
 		} else {
 			// Auto-approved
 			approvals[i] = approvalResult{call: tc, approved: true}
-			a.emit(eventCh, Event{Type: EventToolCallApproved, Step: step, ToolCall: &tc})
+			event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 		}
 	}
 
@@ -273,7 +313,9 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 	// If all rejected, return early
 	if len(approvedCalls) == 0 {
 		for i := range rejectedResults {
-			a.emit(eventCh, Event{Type: EventToolResult, Step: step, ToolCall: &toolCalls[i], ToolResult: &rejectedResults[i]})
+			tc := toolCalls[i]
+			event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+			event.Emit(eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &rejectedResults[i]})
 		}
 		return rejectedResults, true
 	}
@@ -332,7 +374,7 @@ func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []ai.Too
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Options, step int, eventCh chan<- Event) ai.ToolResult {
-	a.emit(eventCh, Event{Type: EventToolCallStarted, Step: step, ToolCall: &tc})
+	event.Emit(eventCh, Event{Type: event.ToolCallExecuting, Step: step, ToolCall: &tc})
 
 	// Apply handler timeout
 	execCtx := ctx
@@ -352,7 +394,8 @@ func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Op
 		}
 	}
 
-	a.emit(eventCh, Event{Type: EventToolResult, Step: step, ToolCall: &tc, ToolResult: &result})
+	event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+	event.Emit(eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &result})
 	return result
 }
 
@@ -388,19 +431,9 @@ func (a *Agent) checkTermination(ctx context.Context, step int, response *ai.Res
 	return ""
 }
 
-func (a *Agent) emit(ch chan<- Event, event Event) {
-	event.Timestamp = time.Now()
-	select {
-	case ch <- event:
-	default:
-		// Channel full - should not happen with buffered channel
-		// but we don't want to block the agent loop
-	}
-}
-
 func (a *Agent) emitComplete(ch chan<- Event, step int, response *ai.Response, reason TerminationReason) {
-	a.emit(ch, Event{
-		Type:     EventAgentComplete,
+	event.Emit(ch, Event{
+		Type:     event.RunEnd,
 		Step:     step,
 		Response: response,
 		Message:  string(reason),

@@ -6,12 +6,13 @@ import (
 	"fmt"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 )
 
 // ChatClient is the interface for chat capabilities needed by workflow steps.
 type ChatClient interface {
 	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
-	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan ai.StreamEvent, error)
+	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error)
 }
 
 // Step represents a single unit of work in a workflow.
@@ -60,18 +61,17 @@ func (f *FuncStep) RunStream(ctx context.Context, state *State, opts ...Option) 
 	ch := make(chan Event, 10)
 	go func() {
 		defer close(ch)
-		emit(ch, Event{Type: EventStepStart, StepName: f.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: f.name})
 
 		err := f.fn(ctx, state)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: f.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: f.name, Error: err})
 			return
 		}
 
-		emit(ch, Event{
-			Type:     EventStepComplete,
+		event.Emit(ch, Event{
+			Type:     event.StepEnd,
 			StepName: f.name,
-			Result:   &StepResult{StepName: f.name},
 		})
 	}()
 	return ch
@@ -138,7 +138,7 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 
 	go func() {
 		defer close(ch)
-		emit(ch, Event{Type: EventStepStart, StepName: p.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: p.name})
 
 		options := ApplyOptions(opts...)
 
@@ -150,21 +150,23 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 		msgs := p.prompt(state)
 		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: p.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 			return
 		}
 
 		var response *ai.Response
-		for event := range streamCh {
-			if event.Err != nil {
-				emit(ch, Event{Type: EventError, StepName: p.name, Error: event.Err})
+		for ev := range streamCh {
+			switch ev.Type {
+			case event.RunError:
+				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: ev.Error})
 				return
-			}
-			if event.Delta != "" {
-				emit(ch, Event{Type: EventStreamDelta, StepName: p.name, Delta: event.Delta})
-			}
-			if event.Done && event.Response != nil {
-				response = event.Response
+			case event.MessageStart:
+				event.Emit(ch, Event{Type: event.MessageStart, StepName: p.name, MessageID: ev.MessageID})
+			case event.MessageDelta:
+				event.Emit(ch, Event{Type: event.MessageDelta, StepName: p.name, MessageID: ev.MessageID, Delta: ev.Delta})
+			case event.MessageEnd:
+				event.Emit(ch, Event{Type: event.MessageEnd, StepName: p.name, MessageID: ev.MessageID, Response: ev.Response})
+				response = ev.Response
 			}
 		}
 
@@ -172,15 +174,10 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 			if p.outputKey != "" {
 				state.Set(p.outputKey, response.Content)
 			}
-			emit(ch, Event{
-				Type:     EventStepComplete,
+			event.Emit(ch, Event{
+				Type:     event.StepEnd,
 				StepName: p.name,
-				Result: &StepResult{
-					StepName: p.name,
-					Output:   response.Content,
-					Response: response,
-					Usage:    response.Usage,
-				},
+				Response: response,
 			})
 		}
 	}()
@@ -297,7 +294,7 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 
 	go func() {
 		defer close(ch)
-		emit(ch, Event{Type: EventStepStart, StepName: p.name})
+		event.Emit(ch, Event{Type: event.StepStart, StepName: p.name})
 
 		options := ApplyOptions(opts...)
 
@@ -310,29 +307,31 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 		msgs := p.prompt(state)
 		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
-			emit(ch, Event{Type: EventError, StepName: p.name, Error: err})
+			event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 			return
 		}
 
 		var response *ai.Response
-		for event := range streamCh {
-			if event.Err != nil {
-				emit(ch, Event{Type: EventError, StepName: p.name, Error: event.Err})
+		for ev := range streamCh {
+			switch ev.Type {
+			case event.RunError:
+				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: ev.Error})
 				return
-			}
-			if event.Delta != "" {
-				emit(ch, Event{Type: EventStreamDelta, StepName: p.name, Delta: event.Delta})
-			}
-			if event.Done && event.Response != nil {
-				response = event.Response
+			case event.MessageStart:
+				event.Emit(ch, Event{Type: event.MessageStart, StepName: p.name, MessageID: ev.MessageID})
+			case event.MessageDelta:
+				event.Emit(ch, Event{Type: event.MessageDelta, StepName: p.name, MessageID: ev.MessageID, Delta: ev.Delta})
+			case event.MessageEnd:
+				event.Emit(ch, Event{Type: event.MessageEnd, StepName: p.name, MessageID: ev.MessageID, Response: ev.Response})
+				response = ev.Response
 			}
 		}
 
 		if response != nil {
 			var result T
 			if err := json.Unmarshal([]byte(response.Content), &result); err != nil {
-				emit(ch, Event{
-					Type:     EventError,
+				event.Emit(ch, Event{
+					Type:     event.RunError,
 					StepName: p.name,
 					Error: &UnmarshalError{
 						StepName:   p.name,
@@ -348,15 +347,10 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 				state.Set(p.outputKey, &result)
 			}
 
-			emit(ch, Event{
-				Type:     EventStepComplete,
+			event.Emit(ch, Event{
+				Type:     event.StepEnd,
 				StepName: p.name,
-				Result: &StepResult{
-					StepName: p.name,
-					Output:   &result,
-					Response: response,
-					Usage:    response.Usage,
-				},
+				Response: response,
 			})
 		}
 	}()

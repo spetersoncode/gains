@@ -12,6 +12,7 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -162,70 +163,70 @@ Be thorough but concise. Start by fetching the README.`
 	)
 
 	// Process streaming events
-	for event := range events {
-		switch event.Type {
-		case agent.EventStepStart:
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
 			fmt.Printf("\n╔══════════════════════════════════════════╗\n")
-			fmt.Printf("║  Step %d                                   ║\n", event.Step)
+			fmt.Printf("║  Step %d                                   ║\n", ev.Step)
 			fmt.Printf("╚══════════════════════════════════════════╝\n")
 
-		case agent.EventStreamDelta:
+		case event.MessageDelta:
 			// Print streaming tokens as they arrive
-			fmt.Print(event.Delta)
+			fmt.Print(ev.Delta)
 
-		case agent.EventToolCallRequested:
+		case event.ToolCallStart:
 			toolCallCount++
-			fmt.Printf("\n\n  -> Tool Requested: %s\n", event.ToolCall.Name)
+			fmt.Printf("\n\n  -> Tool Requested: %s\n", ev.ToolCall.Name)
 			// Pretty-print arguments
 			var prettyArgs map[string]interface{}
-			if err := json.Unmarshal([]byte(event.ToolCall.Arguments), &prettyArgs); err == nil {
+			if err := json.Unmarshal([]byte(ev.ToolCall.Arguments), &prettyArgs); err == nil {
 				argsJSON, _ := json.MarshalIndent(prettyArgs, "     ", "  ")
 				fmt.Printf("     Arguments:\n     %s\n", string(argsJSON))
 			}
 
-		case agent.EventToolCallApproved:
+		case event.ToolCallApproved:
 			approvedCount++
-			fmt.Printf("  -> Approved: %s\n", event.ToolCall.Name)
+			fmt.Printf("  -> Approved: %s\n", ev.ToolCall.Name)
 
-		case agent.EventToolCallRejected:
+		case event.ToolCallRejected:
 			rejectedCount++
-			fmt.Printf("  -> Rejected: %s - %s\n", event.ToolCall.Name, event.Message)
+			fmt.Printf("  -> Rejected: %s - %s\n", ev.ToolCall.Name, ev.Message)
 
-		case agent.EventToolCallStarted:
-			fmt.Printf("  -> Executing: %s\n", event.ToolCall.Name)
+		case event.ToolCallExecuting:
+			fmt.Printf("  -> Executing: %s\n", ev.ToolCall.Name)
 
-		case agent.EventToolResult:
+		case event.ToolCallResult:
 			status := "Success"
-			if event.ToolResult.IsError {
+			if ev.ToolResult.IsError {
 				status = "Error"
 			}
 			// Truncate long results for display
-			content := truncateForDisplay(event.ToolResult.Content, 100)
+			content := truncateForDisplay(ev.ToolResult.Content, 100)
 			fmt.Printf("  <- Result [%s]: %s\n", status, content)
 
-		case agent.EventStepComplete:
-			if event.Response != nil {
+		case event.StepEnd:
+			if ev.Response != nil {
 				fmt.Printf("\n  [Tokens: %d in, %d out]\n",
-					event.Response.Usage.InputTokens,
-					event.Response.Usage.OutputTokens)
+					ev.Response.Usage.InputTokens,
+					ev.Response.Usage.OutputTokens)
 			}
 
-		case agent.EventAgentComplete:
+		case event.RunEnd:
 			fmt.Println("\n╔══════════════════════════════════════════╗")
 			fmt.Println("║           AGENT COMPLETE                 ║")
 			fmt.Println("╚══════════════════════════════════════════╝")
-			fmt.Printf("Termination: %s\n", event.Message)
-			fmt.Printf("Total Steps: %d\n", event.Step)
+			fmt.Printf("Termination: %s\n", ev.Message)
+			fmt.Printf("Total Steps: %d\n", ev.Step)
 			fmt.Printf("Tool Calls: %d (approved: %d, rejected: %d)\n",
 				toolCallCount, approvedCount, rejectedCount)
 
-			if event.Response != nil && event.Response.Content != "" {
+			if ev.Response != nil && ev.Response.Content != "" {
 				fmt.Println("\n--- Final Response ---")
-				fmt.Println(event.Response.Content)
+				fmt.Println(ev.Response.Content)
 			}
 
-		case agent.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 		}
 	}
 

@@ -9,6 +9,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -83,28 +84,28 @@ Be a tough but fair editor - only approve truly good work.`, draft)},
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(3*time.Minute))
 
 	currentStep := ""
-	for event := range events {
-		switch event.Type {
-		case workflow.EventLoopIteration:
-			fmt.Printf("\n═══ Iteration %d ═══\n", event.Iteration)
-		case workflow.EventStepStart:
-			currentStep = event.StepName
+	for ev := range events {
+		switch ev.Type {
+		case event.LoopIteration:
+			fmt.Printf("\n═══ Iteration %d ═══\n", ev.Iteration)
+		case event.StepStart:
+			currentStep = ev.StepName
 			if currentStep == "writer" {
 				fmt.Print("\n[Writer] ")
 			} else if currentStep == "editor" {
 				fmt.Print("\n[Editor] ")
 			}
-		case workflow.EventStreamDelta:
-			fmt.Print(event.Delta)
-		case workflow.EventStepComplete:
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
+		case event.StepEnd:
 			fmt.Println()
-		case workflow.EventWorkflowComplete:
+		case event.RunEnd:
 			// Loop completed successfully
-		case workflow.EventError:
-			if event.Error == workflow.ErrMaxIterationsExceeded {
+		case event.RunError:
+			if ev.Error == workflow.ErrMaxIterationsExceeded {
 				fmt.Println("\n⚠ Max iterations reached - editor never fully approved!")
 			} else {
-				fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+				fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			}
 			return
 		}

@@ -9,6 +9,7 @@ import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 	"github.com/spetersoncode/gains/workflow"
 )
@@ -92,18 +93,19 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	state := workflow.NewState(nil)
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(time.Minute))
 
-	for event := range events {
-		switch event.Type {
-		case workflow.EventStepStart:
-			fmt.Printf("\n[%s] Starting...\n", event.StepName)
-		case workflow.EventStreamDelta:
-			fmt.Print(event.Delta)
-		case workflow.EventStepComplete:
-			if event.Result != nil && event.StepName == "lookup-constant" {
-				fmt.Printf("  Tool result: %v\n", event.Result.Output)
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			fmt.Printf("\n[%s] Starting...\n", ev.StepName)
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
+		case event.StepEnd:
+			if ev.StepName == "lookup-constant" {
+				// Tool result is stored in state
+				fmt.Printf("  Tool result: %v\n", state.GetString("constant_value"))
 			}
-		case workflow.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			return
 		}
 	}
@@ -208,29 +210,29 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	currentStep := ""
-	for event := range events {
-		switch event.Type {
-		case workflow.EventStepStart:
-			if event.AgentStep == 0 {
-				currentStep = event.StepName
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			if ev.Step == 0 {
+				currentStep = ev.StepName
 				fmt.Printf("\n[%s] Starting...\n", currentStep)
 			} else {
-				fmt.Printf("  Agent iteration %d...\n", event.AgentStep)
+				fmt.Printf("  Agent iteration %d...\n", ev.Step)
 			}
-		case workflow.EventStreamDelta:
-			fmt.Print(event.Delta)
-		case workflow.EventToolCall:
-			if event.Message == "requested" && event.ToolCall != nil {
-				fmt.Printf("\n  📞 Tool call: %s(%s)\n", event.ToolCall.Name, event.ToolCall.Arguments)
+		case event.MessageDelta:
+			fmt.Print(ev.Delta)
+		case event.ToolCallStart:
+			if ev.ToolCall != nil {
+				fmt.Printf("\n  📞 Tool call: %s(%s)\n", ev.ToolCall.Name, ev.ToolCall.Arguments)
 			}
-		case workflow.EventToolResult:
-			if event.ToolResult != nil {
-				fmt.Printf("  📋 Result: %s\n", event.ToolResult.Content)
+		case event.ToolCallResult:
+			if ev.ToolResult != nil {
+				fmt.Printf("  📋 Result: %s\n", ev.ToolResult.Content)
 			}
-		case workflow.EventStepComplete:
+		case event.StepEnd:
 			fmt.Println()
-		case workflow.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			return
 		}
 	}

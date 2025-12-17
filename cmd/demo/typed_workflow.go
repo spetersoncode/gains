@@ -8,6 +8,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/workflow"
 )
 
@@ -125,16 +126,16 @@ Suggest improvements to make this text more engaging and positive.`,
 
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
-	for event := range events {
-		switch event.Type {
-		case workflow.EventStepStart:
-			fmt.Printf("\n[%s] Processing...\n", event.StepName)
-		case workflow.EventStreamDelta:
+	for ev := range events {
+		switch ev.Type {
+		case event.StepStart:
+			fmt.Printf("\n[%s] Processing...\n", ev.StepName)
+		case event.MessageDelta:
 			// Don't print deltas for JSON responses (they're partial JSON)
-		case workflow.EventStepComplete:
-			fmt.Printf("[%s] Complete\n", event.StepName)
-		case workflow.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %v\n", event.Error)
+		case event.StepEnd:
+			fmt.Printf("[%s] Complete\n", ev.StepName)
+		case event.RunError:
+			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
 			return
 		}
 	}
