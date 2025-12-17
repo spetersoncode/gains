@@ -408,6 +408,15 @@ See the [`cmd/demo`](cmd/demo) directory for complete examples including:
 - Structured output
 - Vision and embeddings
 
+### AG-UI Server (Experimental)
+
+The [`cmd/aguiserver`](cmd/aguiserver) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE. This is experimental and in progress.
+
+```bash
+GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
+# POST http://localhost:8000/api/agent
+```
+
 ## License
 
 MIT
