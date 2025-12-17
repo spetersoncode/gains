@@ -26,6 +26,7 @@ func ToGainsMessages(msgs []events.Message) []ai.Message {
 // ToGainsMessage converts a single AG-UI message to a gains message.
 func ToGainsMessage(msg events.Message) ai.Message {
 	m := ai.Message{
+		ID:   msg.ID, // Preserve the AG-UI message ID
 		Role: toGainsRole(msg.Role),
 	}
 
@@ -69,8 +70,12 @@ func FromGainsMessages(msgs []ai.Message) []events.Message {
 // FromGainsMessage converts a single gains message to an AG-UI message.
 // The index is used to generate a message ID if needed.
 func FromGainsMessage(msg ai.Message, index int) events.Message {
+	id := msg.ID
+	if id == "" {
+		id = events.GenerateMessageID()
+	}
 	m := events.Message{
-		ID:   events.GenerateMessageID(),
+		ID:   id,
 		Role: fromGainsRole(msg.Role),
 	}
 

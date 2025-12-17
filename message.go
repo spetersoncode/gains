@@ -1,5 +1,7 @@
 package gains
 
+import "github.com/google/uuid"
+
 // Role represents the role of a message sender in a conversation.
 type Role string
 
@@ -22,18 +24,18 @@ const (
 // Use either Text (for text parts) or ImageURL/Base64 (for image parts).
 type ContentPart struct {
 	// Type indicates the content type: "text" or "image".
-	Type ContentPartType
+	Type ContentPartType `json:"type"`
 	// Text contains the text content. Only used when Type is "text".
-	Text string
+	Text string `json:"text,omitempty"`
 	// ImageURL contains a URL to an image. Only used when Type is "image".
 	// Mutually exclusive with Base64.
-	ImageURL string
+	ImageURL string `json:"imageUrl,omitempty"`
 	// Base64 contains base64-encoded image data. Only used when Type is "image".
 	// Mutually exclusive with ImageURL.
-	Base64 string
+	Base64 string `json:"base64,omitempty"`
 	// MimeType specifies the image format (e.g., "image/jpeg", "image/png").
 	// Required when using Base64, optional for ImageURL (may be inferred).
-	MimeType string
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // NewTextPart creates a text content part.
@@ -63,17 +65,25 @@ func NewImageBase64Part(base64Data, mimeType string) ContentPart {
 
 // Message represents a single message in a conversation.
 type Message struct {
-	Role    Role
-	Content string
+	// ID is an optional unique identifier for the message.
+	// Used for message correlation and AG-UI protocol compatibility.
+	ID      string `json:"id,omitempty"`
+	Role    Role   `json:"role"`
+	Content string `json:"content,omitempty"`
 	// Parts contains multimodal content parts (text, images).
 	// If populated, Content is ignored for providers that support multimodal.
-	Parts []ContentPart
+	Parts []ContentPart `json:"parts,omitempty"`
 	// ToolCalls contains tool invocation requests from an assistant message.
 	// Only populated when Role is RoleAssistant and the model wants to use tools.
-	ToolCalls []ToolCall
+	ToolCalls []ToolCall `json:"toolCalls,omitempty"`
 	// ToolResults contains results from tool executions.
 	// Only populated when Role is RoleTool.
-	ToolResults []ToolResult
+	ToolResults []ToolResult `json:"toolResults,omitempty"`
+}
+
+// GenerateMessageID creates a unique message identifier.
+func GenerateMessageID() string {
+	return "msg-" + uuid.New().String()
 }
 
 // HasParts returns true if the message has multimodal content parts.
@@ -83,18 +93,18 @@ func (m Message) HasParts() bool {
 
 // Response represents a complete response from a chat provider.
 type Response struct {
-	Content      string
-	FinishReason string
-	Usage        Usage
+	Content      string `json:"content,omitempty"`
+	FinishReason string `json:"finishReason,omitempty"`
+	Usage        Usage  `json:"usage"`
 	// ToolCalls contains any tool invocation requests from the model.
 	// Check if len(ToolCalls) > 0 to determine if tools should be executed.
-	ToolCalls []ToolCall
+	ToolCalls []ToolCall `json:"toolCalls,omitempty"`
 }
 
 // Usage contains token usage information for a request.
 type Usage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens  int `json:"inputTokens"`
+	OutputTokens int `json:"outputTokens"`
 }
 
 // StreamEvent represents a single event in a streaming response.

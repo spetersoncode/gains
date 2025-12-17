@@ -15,21 +15,21 @@ type Tool struct {
 // ToolCall represents a request from the model to invoke a tool.
 type ToolCall struct {
 	// ID is a unique identifier for this tool call (used to match results).
-	ID string
+	ID string `json:"id"`
 	// Name is the name of the tool to invoke.
-	Name string
+	Name string `json:"name"`
 	// Arguments is a JSON string containing the arguments to pass.
-	Arguments string
+	Arguments string `json:"arguments"`
 }
 
 // ToolResult represents the result of executing a tool call.
 type ToolResult struct {
 	// ToolCallID matches the ID from the corresponding ToolCall.
-	ToolCallID string
+	ToolCallID string `json:"toolCallId"`
 	// Content is the result content to return to the model.
-	Content string
+	Content string `json:"content"`
 	// IsError indicates if the result represents an error.
-	IsError bool
+	IsError bool `json:"isError,omitempty"`
 }
 
 // ToolChoice controls how the model uses tools.
