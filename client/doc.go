@@ -2,81 +2,49 @@
 //
 // The Client wraps provider-specific implementations and provides:
 //
-//   - Provider abstraction: Switch between Anthropic, OpenAI, and Google with config changes
-//   - Feature detection: Check provider capabilities before making requests
+//   - Model-centric routing: Models know their provider; switching is automatic
+//   - Multi-provider support: Configure all providers at once, use any model
 //   - Automatic retries: Built-in exponential backoff for transient errors
-//   - Unified defaults: Configure default models for chat, embeddings, and images
+//   - Event emission: Observable operations via channel
 //
 // # Basic Usage
 //
-// Create a client with a specific provider:
+// Create a client with API keys and default models:
 //
-//	client, err := client.New(ctx, client.Config{
-//	    Provider: client.ProviderOpenAI,
-//	    APIKey:   os.Getenv("OPENAI_API_KEY"),
-//	})
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	resp, err := client.Chat(ctx, []gains.Message{
-//	    {Role: gains.RoleUser, Content: "Hello!"},
-//	})
-//
-// # Provider Configuration
-//
-// Configure default models for different capabilities:
-//
-//	import "github.com/spetersoncode/gains/model"
-//
-//	client, err := client.New(ctx, client.Config{
-//	    Provider:       client.ProviderOpenAI,
-//	    APIKey:         os.Getenv("OPENAI_API_KEY"),
-//	    ChatModel:      model.GPT52,
-//	    ImageModel:     model.GPTImage1,
-//	    EmbeddingModel: model.TextEmbedding3Small,
-//	})
-//
-// # Feature Checking
-//
-// Verify provider capabilities before use:
-//
-//	if client.SupportsFeature(client.FeatureImage) {
-//	    resp, err := client.GenerateImage(ctx, "A sunset over mountains")
-//	}
-//
-// Require features at construction time:
-//
-//	client, err := client.New(ctx, client.Config{
-//	    Provider:         client.ProviderAnthropic,
-//	    APIKey:           apiKey,
-//	    RequiredFeatures: []client.Feature{client.FeatureChat, client.FeatureEmbedding},
-//	})
-//	// Returns ErrFeatureNotSupported since Anthropic doesn't support embeddings
-//
-// # Retry Configuration
-//
-// The client automatically retries transient errors (rate limits, timeouts, 5xx errors).
-// Customize retry behavior:
-//
-//	client, err := client.New(ctx, client.Config{
-//	    Provider:    client.ProviderOpenAI,
-//	    APIKey:      apiKey,
-//	    RetryConfig: &client.RetryConfig{
-//	        MaxAttempts:  5,
-//	        InitialDelay: 500 * time.Millisecond,
-//	        MaxDelay:     30 * time.Second,
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{
+//	        Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+//	        OpenAI:    os.Getenv("OPENAI_API_KEY"),
+//	    },
+//	    Defaults: client.Defaults{
+//	        Chat: model.ClaudeSonnet45,
 //	    },
 //	})
 //
-// Disable retries entirely:
-//
-//	cfg := client.DisabledRetryConfig()
-//	client, err := client.New(ctx, client.Config{
-//	    Provider:    client.ProviderOpenAI,
-//	    APIKey:      apiKey,
-//	    RetryConfig: &cfg,
+//	resp, err := c.Chat(ctx, []ai.Message{
+//	    {Role: ai.RoleUser, Content: "Hello!"},
 //	})
+//
+// # Model-Centric Routing
+//
+// Models determine their provider. The client routes automatically:
+//
+//	// Uses default model (routes to Anthropic)
+//	resp, _ := c.Chat(ctx, messages)
+//
+//	// Override with GPT-5.2 (routes to OpenAI)
+//	resp, _ := c.Chat(ctx, messages, ai.WithModel(model.GPT52))
+//
+//	// Override with Gemini (routes to Google)
+//	resp, _ := c.Chat(ctx, messages, ai.WithModel(model.Gemini25Flash))
+//
+// # Feature Detection
+//
+// Check provider capabilities before use:
+//
+//	if c.SupportsFeature(client.FeatureImage) {
+//	    resp, err := c.GenerateImage(ctx, "A sunset over mountains")
+//	}
 //
 // # Provider Capabilities
 //
@@ -88,24 +56,33 @@
 //	| OpenAI    | Yes  | Yes        | Yes    |
 //	| Google    | Yes  | Yes        | Yes    |
 //
-// # Switching Providers
+// # Retry Configuration
 //
-// The unified interface makes it easy to switch providers:
+// The client automatically retries transient errors (rate limits, timeouts, 5xx errors).
+// Customize retry behavior:
 //
-//	providerName := os.Getenv("AI_PROVIDER")
-//
-//	var provider client.ProviderName
-//	switch providerName {
-//	case "anthropic":
-//	    provider = client.ProviderAnthropic
-//	case "google":
-//	    provider = client.ProviderGoogle
-//	default:
-//	    provider = client.ProviderOpenAI
-//	}
-//
-//	c, err := client.New(ctx, client.Config{
-//	    Provider: provider,
-//	    APIKey:   os.Getenv("API_KEY"),
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+//	    RetryConfig: &retry.Config{
+//	        MaxAttempts:  5,
+//	        InitialDelay: 500 * time.Millisecond,
+//	        MaxDelay:     30 * time.Second,
+//	    },
 //	})
+//
+// # Events
+//
+// Observe operations via an event channel:
+//
+//	events := make(chan client.Event, 100)
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+//	    Events:  events,
+//	})
+//
+//	go func() {
+//	    for e := range events {
+//	        fmt.Printf("[%s] %s took %v\n", e.Type, e.Operation, e.Duration)
+//	    }
+//	}()
 package client

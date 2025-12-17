@@ -27,7 +27,8 @@
 //
 //	// Run agent and map events
 //	for event := range myAgent.RunStream(ctx, messages) {
-//	    for _, aguiEvent := range mapper.MapAgentEvent(event) {
+//	    aguiEvent := mapper.MapEvent(event)
+//	    if aguiEvent != nil {
 //	        writeEvent(aguiEvent)
 //	    }
 //	}
@@ -39,10 +40,10 @@
 //
 // The Mapper tracks state to properly emit AG-UI's Start-Content-End sequences:
 //
-//   - gains EventStreamDelta → TEXT_MESSAGE_START (on first delta), TEXT_MESSAGE_CONTENT
-//   - gains EventStepComplete → TEXT_MESSAGE_END (if message active), STEP_FINISHED
-//   - gains EventToolCallRequested → TOOL_CALL_START, TOOL_CALL_ARGS
-//   - gains EventToolResult → TOOL_CALL_END, TOOL_CALL_RESULT
+//   - event.MessageDelta → TEXT_MESSAGE_START (on first delta), TEXT_MESSAGE_CONTENT
+//   - event.StepEnd → TEXT_MESSAGE_END (if message active), STEP_FINISHED
+//   - event.ToolCallStart → TOOL_CALL_START, TOOL_CALL_ARGS
+//   - event.ToolCallResult → TOOL_CALL_END, TOOL_CALL_RESULT
 //
 // # Message Conversion
 //

@@ -19,6 +19,7 @@ gains/
 ├── agent/            # Autonomous tool-calling agent orchestration
 ├── workflow/         # Composable pipelines: Chain, Parallel, Router, TypedPromptStep
 ├── tool/             # Tool infrastructure: Registry, binding, built-in tools
+├── event/            # Unified event types for streaming across client/agent/workflow
 ├── agui/             # AG-UI protocol support: event mapping, message conversion
 ├── model/            # Model constants with pricing information
 ├── internal/
@@ -42,6 +43,7 @@ gains/
 - **agent**: Tool-calling loops with max steps, timeouts, approval workflows, and parallel tool execution. Uses `tool.Registry` for tool management.
 - **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), and TypedPromptStep (auto-unmarshaling structured output). Uses `Key[T]` for type-safe state access: `Get`, `Set`, `MustGet`, `GetOr`.
 - **tool**: Tool infrastructure including Registry, Handler types, function binding with auto schema generation from struct tags, and built-in tools (file, HTTP, search, client tools).
+- **event**: Unified event types for streaming. Defines `Event` struct with types for run lifecycle (`RunStart`, `RunEnd`), message streaming (`MessageStart`, `MessageDelta`, `MessageEnd`), tool calls (`ToolCallStart`, `ToolCallEnd`, `ToolCallResult`), and workflow events (`StepStart`, `StepEnd`, `RouteSelected`, `LoopIteration`).
 - **agui**: AG-UI protocol support. Provides `Mapper` for converting gains events to AG-UI events (handles Start-Content-End pattern), and message conversion utilities (`ToGainsMessages`, `FromGainsMessages`). Transport-agnostic - users implement their own HTTP/SSE server.
 - **model**: Type-safe model selection with pricing data for cost estimation.
 

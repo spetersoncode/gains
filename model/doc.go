@@ -1,44 +1,51 @@
 // Package model provides model constants for all supported AI providers.
 //
-// This package exposes typed model constants with pricing information
-// without requiring users to import provider-specific packages. Use this
-// package in conjunction with the client package for a complete solution.
+// This package exposes typed model constants with pricing information.
+// Models know their provider, enabling automatic routing in the client.
 //
 // # Chat Models
 //
-// Use chat models with gains.WithModel():
+// Use chat models with ai.WithModel() or as client defaults:
 //
 //	import (
-//	    "github.com/spetersoncode/gains"
+//	    ai "github.com/spetersoncode/gains"
 //	    "github.com/spetersoncode/gains/client"
 //	    "github.com/spetersoncode/gains/model"
 //	)
 //
-//	c, _ := client.New(ctx, client.Config{
-//	    Provider:  client.ProviderOpenAI,
-//	    APIKey:    os.Getenv("OPENAI_API_KEY"),
-//	    ChatModel: model.GPT52,
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{
+//	        Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
+//	        OpenAI:    os.Getenv("OPENAI_API_KEY"),
+//	    },
+//	    Defaults: client.Defaults{
+//	        Chat: model.ClaudeSonnet45,
+//	    },
 //	})
-//	resp, err := c.Chat(ctx, messages, gains.WithModel(model.ClaudeSonnet45))
+//
+//	// Override with different model (routes to OpenAI)
+//	resp, err := c.Chat(ctx, messages, ai.WithModel(model.GPT52))
 //
 // # Image Models
 //
 // Use image models for generation:
 //
-//	c, _ := client.New(ctx, client.Config{
-//	    Provider:   client.ProviderOpenAI,
-//	    APIKey:     os.Getenv("OPENAI_API_KEY"),
-//	    ImageModel: model.GPTImage1,
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+//	    Defaults: client.Defaults{
+//	        Image: model.GPTImage1,
+//	    },
 //	})
 //
 // # Embedding Models
 //
 // Use embedding models for vector embeddings:
 //
-//	c, _ := client.New(ctx, client.Config{
-//	    Provider:       client.ProviderOpenAI,
-//	    APIKey:         os.Getenv("OPENAI_API_KEY"),
-//	    EmbeddingModel: model.TextEmbedding3Small,
+//	c := client.New(client.Config{
+//	    APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
+//	    Defaults: client.Defaults{
+//	        Embedding: model.TextEmbedding3Small,
+//	    },
 //	})
 //
 // # Pricing Information

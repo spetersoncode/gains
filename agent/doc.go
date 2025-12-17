@@ -31,14 +31,16 @@
 //
 // Use RunStream() to receive events as the agent executes:
 //
+//	import "github.com/spetersoncode/gains/event"
+//
 //	events := a.RunStream(ctx, messages, agent.WithMaxSteps(5))
-//	for event := range events {
-//	    switch event.Type {
-//	    case agent.EventStreamDelta:
-//	        fmt.Print(event.Delta)
-//	    case agent.EventToolCallRequested:
-//	        fmt.Printf("[Tool: %s]\n", event.ToolCall.Name)
-//	    case agent.EventAgentComplete:
+//	for e := range events {
+//	    switch e.Type {
+//	    case event.MessageDelta:
+//	        fmt.Print(e.Delta)
+//	    case event.ToolCallStart:
+//	        fmt.Printf("[Tool: %s]\n", e.ToolCall.Name)
+//	    case event.RunEnd:
 //	        fmt.Println("Done!")
 //	    }
 //	}

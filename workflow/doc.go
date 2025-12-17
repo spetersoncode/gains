@@ -125,17 +125,19 @@
 //
 // Monitor workflow progress in real-time:
 //
+//	import "github.com/spetersoncode/gains/event"
+//
 //	events := wf.RunStream(ctx, state)
-//	for event := range events {
-//		switch event.Type {
-//		case workflow.EventStepStart:
-//			fmt.Printf("Starting: %s\n", event.StepName)
-//		case workflow.EventStreamDelta:
-//			fmt.Print(event.Delta)
-//		case workflow.EventStepComplete:
-//			fmt.Printf("Completed: %s\n", event.StepName)
-//		case workflow.EventError:
-//			fmt.Printf("Error: %v\n", event.Error)
+//	for e := range events {
+//		switch e.Type {
+//		case event.StepStart:
+//			fmt.Printf("Starting: %s\n", e.StepName)
+//		case event.MessageDelta:
+//			fmt.Print(e.Delta)
+//		case event.StepEnd:
+//			fmt.Printf("Completed: %s\n", e.StepName)
+//		case event.RunError:
+//			fmt.Printf("Error: %v\n", e.Error)
 //		}
 //	}
 //

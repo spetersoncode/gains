@@ -6,16 +6,17 @@
 
 **Go AI Native Scaffold** - A Go-idiomatic generative AI library. Not yet production ready.
 
-gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Inspired by langchain and langgraph, but built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
+gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
 
 ## Features
 
 - **Model-Centric Routing** - Models know their provider; client routes automatically
 - **Unified Client** - Single interface for chat, embeddings, and image generation
 - **Agent Orchestration** - Autonomous tool-calling loops with approval workflows
-- **Composable Workflows** - Chain, Parallel, and Router patterns for complex pipelines
+- **Composable Workflows** - Chain, Parallel, Router, and Loop patterns for complex pipelines
+- **Built-in Tools** - File, HTTP, search, and client tools ready to use
+- **AG-UI Protocol** - Frontend integration via event mapping
 - **Streaming First** - Channel-based streaming throughout the entire API
-- **Functional Options** - Go-idiomatic configuration with type-safe model selection
 - **Automatic Retry** - Exponential backoff with jitter for transient errors
 
 ## Installation
@@ -34,8 +35,6 @@ import ai "github.com/spetersoncode/gains"
 // Now you can write:
 msg := ai.Message{Role: ai.RoleUser, Content: "Hello"}
 ```
-
-All examples in this documentation use this convention.
 
 ## Quick Start
 
@@ -100,7 +99,7 @@ c := client.New(client.Config{
 resp, _ := c.Chat(ctx, messages)
 
 // Override with different model (routes to OpenAI)
-resp, _ := c.Chat(ctx, messages, ai.WithModel(model.GPT52))
+resp, _ = c.Chat(ctx, messages, ai.WithModel(model.GPT52))
 ```
 
 ## Chat & Streaming
@@ -120,20 +119,34 @@ for event := range stream {
 }
 ```
 
-## Tool Calling
+## Schema Generation
 
-Define tools using the fluent schema builder:
+Define schemas using struct tags. The library auto-generates JSON schemas from Go structs:
 
 ```go
-import "github.com/spetersoncode/gains/schema"
+type WeatherArgs struct {
+    Location string `json:"location" desc:"City name" required:"true"`
+    Unit     string `json:"unit" enum:"celsius,fahrenheit"`
+    Days     int    `json:"days" min:"1" max:"7"`
+}
+
+// Generate schema from struct tags
+schema := ai.MustSchemaFor[WeatherArgs]()
+```
+
+Supported tags: `json`, `desc`, `required`, `enum`, `min`, `max`, `minLength`, `maxLength`, `pattern`, `default`, `minItems`, `maxItems`
+
+## Tool Calling
+
+```go
+type SearchArgs struct {
+    Query string `json:"query" desc:"Search query" required:"true"`
+}
 
 tools := []ai.Tool{{
-    Name:        "get_weather",
-    Description: "Get current weather for a location",
-    Parameters: schema.Object().
-        Field("location", schema.String().Desc("The city name").Required()).
-        Field("unit", schema.String().Desc("Temperature unit").Enum("celsius", "fahrenheit")).
-        MustBuild(),
+    Name:        "search",
+    Description: "Search the web",
+    Parameters:  ai.MustSchemaFor[SearchArgs](),
 }}
 
 resp, _ := c.Chat(ctx, messages, ai.WithTools(tools))
@@ -145,26 +158,23 @@ for _, call := range resp.ToolCalls {
 
 ## Agent Orchestration
 
-The agent package handles autonomous tool-calling loops with typed handlers:
+The agent package handles autonomous tool-calling loops:
 
 ```go
 import (
     "github.com/spetersoncode/gains/agent"
-    "github.com/spetersoncode/gains/schema"
+    "github.com/spetersoncode/gains/tool"
 )
 
 type SearchArgs struct {
     Query string `json:"query"`
 }
 
-// Create a tool registry with typed handler
-registry := agent.NewRegistry()
-agent.MustRegisterFunc(registry, "search", "Search the web",
-    schema.Object().
-        Field("query", schema.String().Desc("Search query").Required()).
-        MustBuild(),
+// Create a tool registry
+registry := tool.NewRegistry()
+tool.MustRegisterFunc(registry, "search", "Search the web",
     func(ctx context.Context, args SearchArgs) (string, error) {
-        return results, nil
+        return "search results for: " + args.Query, nil
     },
 )
 
@@ -183,8 +193,6 @@ fmt.Println(result.Response.Content)
 Require approval for sensitive operations:
 
 ```go
-a := agent.New(c, registry)
-
 result, _ := a.Run(ctx, messages,
     agent.WithApprovalRequired("delete_file", "send_email"),
     agent.WithApprover(func(ctx context.Context, call ai.ToolCall) (bool, string) {
@@ -209,28 +217,22 @@ chain := workflow.NewChain("pipeline",
 )
 
 // Parallel - concurrent execution
-parallel := workflow.NewParallel("multi-analysis",
+parallel := workflow.NewParallel("research",
     []workflow.Step{step1, step2, step3},
     aggregator,
 )
 
 // Router - conditional branching
-router := workflow.NewRouter("classifier",
+router := workflow.NewRouter("route",
     []workflow.Route{
-        {
-            Name:      "question",
-            Condition: func(ctx context.Context, s *workflow.State) bool {
-                return s.GetString("type") == "question"
-            },
-            Step: questionHandler,
-        },
+        {Name: "question", Condition: isQuestion, Step: questionHandler},
     },
     defaultHandler,
 )
 
 // Execute workflow
 wf := workflow.New("my-workflow", chain)
-result, _ := wf.Run(ctx, initialState)
+result, _ := wf.Run(ctx, workflow.NewState(nil))
 ```
 
 ### Typed Workflow Steps
@@ -240,118 +242,108 @@ Use `TypedPromptStep[T]` with `Key[T]` for compile-time type safety:
 ```go
 type Analysis struct {
     Sentiment  string   `json:"sentiment"`
-    Confidence float64  `json:"confidence"`
     Keywords   []string `json:"keywords"`
 }
 
-// Define typed key - single source of truth for key-type mapping
+// Define typed key
 var KeyAnalysis = workflow.NewKey[*Analysis]("analysis")
 
-// Define schema
-analysisSchema := ai.ResponseSchema{
-    Name: "analysis",
-    Schema: schema.Object().
-        Field("sentiment", schema.String().Enum("positive", "negative", "neutral").Required()).
-        Field("confidence", schema.Number().Min(0).Max(1).Required()).
-        Field("keywords", schema.Array(schema.String()).Required()).
-        MustBuild(),
-}
-
-// Create typed step with typed key - result is automatically unmarshaled
+// Create typed step - result auto-unmarshaled
 step := workflow.NewTypedPromptStepWithKey(
-    "analyze", c, promptFn, analysisSchema, KeyAnalysis,
+    "analyze", c, promptFn, responseSchema, KeyAnalysis,
 )
 
-// After execution, access with type-safe getters (type inferred from key)
+// Type-safe state access
 analysis, ok := workflow.Get(state, KeyAnalysis)
-analysis := workflow.MustGet(state, KeyAnalysis)           // panics if missing
-count := workflow.GetOr(state, workflow.IntKey("count"), 0)  // with default
+analysis = workflow.MustGet(state, KeyAnalysis)
 ```
 
-## Embeddings
+## Built-in Tools
+
+The `tool` package provides ready-to-use tools:
 
 ```go
+import "github.com/spetersoncode/gains/tool"
+
+// File tools: read_file, write_file, list_directory, edit_file
+fileTools := tool.FileTools(tool.WithBasePath("/allowed/path"))
+
+// HTTP tool: http_request
+httpTool := tool.WebTools(tool.WithAllowedHosts("api.example.com"))
+
+// Search tool: search_files
+searchTools := tool.SearchTools()
+
+// Client tools: generate_image, embed_text, ask_assistant
+clientTools := tool.ClientTools(c)
+
+// Register all tools
+tool.RegisterAll(registry, tool.StandardTools())
+```
+
+## AG-UI Protocol
+
+The `agui` package maps gains events to AG-UI format for frontend integration:
+
+```go
+import "github.com/spetersoncode/gains/agui"
+
+mapper := agui.NewMapper(threadID, runID)
+writeEvent(mapper.RunStarted())
+
+for event := range agent.RunStream(ctx, messages) {
+    for _, aguiEvent := range mapper.MapEvent(event) {
+        writeEvent(aguiEvent)
+    }
+}
+
+writeEvent(mapper.RunFinished())
+```
+
+## Structured Output
+
+```go
+type Result struct {
+    Name  string `json:"name" required:"true"`
+    Score int    `json:"score" min:"0" max:"100"`
+}
+
+resp, _ := c.Chat(ctx, messages,
+    ai.WithResponseSchema(ai.ResponseSchema{
+        Name:   "result",
+        Schema: ai.MustSchemaFor[Result](),
+    }),
+)
+```
+
+## Embeddings & Images
+
+```go
+// Embeddings
 resp, _ := c.Embed(ctx, []string{"Hello world"})
 fmt.Printf("Dimensions: %d\n", len(resp.Embeddings[0]))
-```
 
-## Image Generation
-
-```go
+// Image generation
 resp, _ := c.GenerateImage(ctx, "A sunset over mountains",
     ai.WithImageSize(ai.ImageSize1024x1024),
 )
 fmt.Println(resp.Images[0].URL)
 ```
 
-## Structured Output
-
-Force JSON output or use schema validation:
-
-```go
-import "github.com/spetersoncode/gains/schema"
-
-// Simple JSON mode
-resp, _ := c.Chat(ctx, messages, ai.WithJSONMode())
-
-// With schema validation
-resp, _ := c.Chat(ctx, messages,
-    ai.WithResponseSchema(ai.ResponseSchema{
-        Name: "result",
-        Schema: schema.Object().
-            Field("name", schema.String().Required()).
-            Field("score", schema.Number().Min(0).Max(100)).
-            MustBuild(),
-    }),
-)
-```
-
-## Schema Builder
-
-The `schema` package provides a fluent API for building JSON schemas:
-
-```go
-import "github.com/spetersoncode/gains/schema"
-
-// String with constraints
-schema.String().MinLength(1).MaxLength(100).Pattern(`^\w+$`)
-
-// Integer with range
-schema.Int().Min(1).Max(100).Default(10)
-
-// Enum values
-schema.String().Enum("low", "medium", "high")
-
-// Arrays
-schema.Array(schema.String()).MinItems(1).MaxItems(10).UniqueItems()
-
-// Complex objects
-schema.Object().
-    Field("query", schema.String().Desc("Search query").Required()).
-    Field("limit", schema.Int().Min(1).Max(100).Default(10)).
-    Field("filters", schema.Object().
-        Field("tags", schema.Array(schema.String())).
-        Field("active", schema.Bool().Default(true))).
-    MustBuild()
-```
-
-Use `Build()` for error handling or `MustBuild()` to panic on invalid schemas.
-
 ## Models
 
-The `model` package provides type-safe model selection with pricing info:
+The `model` package provides type-safe model selection:
 
 ```go
 import "github.com/spetersoncode/gains/model"
 
-// Auto-updating aliases (recommended)
-ai.WithModel(model.ClaudeSonnet45)    // Anthropic
-ai.WithModel(model.GPT52)             // OpenAI
-ai.WithModel(model.Gemini25Flash)     // Google
+// Auto-updating aliases
+ai.WithModel(model.ClaudeSonnet45)  // Anthropic
+ai.WithModel(model.GPT52)           // OpenAI
+ai.WithModel(model.Gemini25Flash)   // Google
 
-// Pinned versions for production stability
+// Pinned versions for stability
 ai.WithModel(model.ClaudeSonnet45_20250929)
-ai.WithModel(model.Gemini3Pro)
 ```
 
 ## Request Options
@@ -366,7 +358,9 @@ resp, _ := c.Chat(ctx, messages,
 )
 ```
 
-## Retry Configuration
+## Configuration
+
+### Retry
 
 ```go
 c := client.New(client.Config{
@@ -379,12 +373,9 @@ c := client.New(client.Config{
 })
 ```
 
-## Events
-
-Observe operations at multiple levels:
+### Events
 
 ```go
-// Client events via channel
 events := make(chan client.Event, 100)
 c := client.New(client.Config{
     APIKeys: client.APIKeys{OpenAI: os.Getenv("OPENAI_API_KEY")},
@@ -396,18 +387,6 @@ go func() {
         fmt.Printf("[%s] %s %v\n", e.Type, e.Operation, e.Duration)
     }
 }()
-
-// Agent events via streaming
-a := agent.New(c, registry)
-stream := a.RunStream(ctx, messages)
-for event := range stream {
-    switch event.Type {
-    case agent.EventToolCallStarted:
-        fmt.Printf("Calling tool: %s\n", event.ToolCall.Name)
-    case agent.EventStreamDelta:
-        fmt.Print(event.Delta)
-    }
-}
 ```
 
 ## Environment Variables
@@ -420,7 +399,14 @@ for event := range stream {
 
 ## Examples
 
-See the [`cmd/demo`](cmd/demo) directory for complete examples.
+See the [`cmd/demo`](cmd/demo) directory for complete examples including:
+- Basic chat and streaming
+- Tool calling and agents
+- Multi-agent scenarios
+- Workflow patterns (chain, parallel, router, loop)
+- AG-UI integration
+- Structured output
+- Vision and embeddings
 
 ## License
 
