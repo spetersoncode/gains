@@ -21,14 +21,16 @@ func convertMessages(messages []ai.Message) ([]openai.ChatCompletionMessageParam
 				if err != nil {
 					return nil, err
 				}
-				result = append(result, openai.ChatCompletionMessageParamUnion{
-					OfUser: &openai.ChatCompletionUserMessageParam{
-						Content: openai.ChatCompletionUserMessageParamContentUnion{
-							OfArrayOfContentParts: contentParts,
+				if len(contentParts) > 0 {
+					result = append(result, openai.ChatCompletionMessageParamUnion{
+						OfUser: &openai.ChatCompletionUserMessageParam{
+							Content: openai.ChatCompletionUserMessageParamContentUnion{
+								OfArrayOfContentParts: contentParts,
+							},
 						},
-					},
-				})
-			} else {
+					})
+				}
+			} else if msg.Content != "" {
 				result = append(result, openai.UserMessage(msg.Content))
 			}
 		case ai.RoleAssistant:
@@ -47,21 +49,30 @@ func convertMessages(messages []ai.Message) ([]openai.ChatCompletionMessageParam
 				assistantMsg := openai.ChatCompletionAssistantMessageParam{
 					ToolCalls: toolCalls,
 				}
+				if msg.Content != "" {
+					assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{
+						OfString: openai.String(msg.Content),
+					}
+				}
 				result = append(result, openai.ChatCompletionMessageParamUnion{
 					OfAssistant: &assistantMsg,
 				})
-			} else {
+			} else if msg.Content != "" {
 				result = append(result, openai.AssistantMessage(msg.Content))
 			}
 		case ai.RoleSystem:
-			result = append(result, openai.SystemMessage(msg.Content))
+			if msg.Content != "" {
+				result = append(result, openai.SystemMessage(msg.Content))
+			}
 		case ai.RoleTool:
 			// Tool result messages - one message per tool result
 			for _, tr := range msg.ToolResults {
 				result = append(result, openai.ToolMessage(tr.Content, tr.ToolCallID))
 			}
 		default:
-			result = append(result, openai.UserMessage(msg.Content))
+			if msg.Content != "" {
+				result = append(result, openai.UserMessage(msg.Content))
+			}
 		}
 	}
 	return result, nil
@@ -72,7 +83,9 @@ func convertPartsToOpenAIParts(parts []ai.ContentPart) ([]openai.ChatCompletionC
 	for _, part := range parts {
 		switch part.Type {
 		case ai.ContentPartTypeText:
-			result = append(result, openai.TextContentPart(part.Text))
+			if part.Text != "" {
+				result = append(result, openai.TextContentPart(part.Text))
+			}
 		case ai.ContentPartTypeImage:
 			var imageURL string
 			if part.Base64 != "" {

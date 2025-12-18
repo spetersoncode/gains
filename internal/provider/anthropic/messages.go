@@ -14,15 +14,21 @@ func convertMessages(messages []ai.Message) ([]anthropic.MessageParam, []anthrop
 	for _, msg := range messages {
 		switch msg.Role {
 		case ai.RoleSystem:
-			system = append(system, anthropic.TextBlockParam{Text: msg.Content})
+			// Skip empty system messages - Anthropic API rejects empty text blocks
+			if msg.Content != "" {
+				system = append(system, anthropic.TextBlockParam{Text: msg.Content})
+			}
 		case ai.RoleUser:
 			if msg.HasParts() {
 				blocks := convertPartsToAnthropicBlocks(msg.Parts)
-				result = append(result, anthropic.MessageParam{
-					Role:    anthropic.MessageParamRoleUser,
-					Content: blocks,
-				})
-			} else {
+				if len(blocks) > 0 {
+					result = append(result, anthropic.MessageParam{
+						Role:    anthropic.MessageParamRoleUser,
+						Content: blocks,
+					})
+				}
+			} else if msg.Content != "" {
+				// Skip empty user messages - Anthropic API rejects empty text blocks
 				result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
 			}
 		case ai.RoleAssistant:
@@ -41,7 +47,8 @@ func convertMessages(messages []ai.Message) ([]anthropic.MessageParam, []anthrop
 					Role:    anthropic.MessageParamRoleAssistant,
 					Content: blocks,
 				})
-			} else {
+			} else if msg.Content != "" {
+				// Skip empty assistant messages - Anthropic API rejects empty text blocks
 				result = append(result, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
 			}
 		case ai.RoleTool:
@@ -50,12 +57,17 @@ func convertMessages(messages []ai.Message) ([]anthropic.MessageParam, []anthrop
 			for _, tr := range msg.ToolResults {
 				blocks = append(blocks, anthropic.NewToolResultBlock(tr.ToolCallID, tr.Content, tr.IsError))
 			}
-			result = append(result, anthropic.MessageParam{
-				Role:    anthropic.MessageParamRoleUser,
-				Content: blocks,
-			})
+			if len(blocks) > 0 {
+				result = append(result, anthropic.MessageParam{
+					Role:    anthropic.MessageParamRoleUser,
+					Content: blocks,
+				})
+			}
 		default:
-			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+			// Skip empty messages in default case
+			if msg.Content != "" {
+				result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+			}
 		}
 	}
 
@@ -67,7 +79,10 @@ func convertPartsToAnthropicBlocks(parts []ai.ContentPart) []anthropic.ContentBl
 	for _, part := range parts {
 		switch part.Type {
 		case ai.ContentPartTypeText:
-			blocks = append(blocks, anthropic.NewTextBlock(part.Text))
+			// Skip empty text parts - Anthropic API rejects empty text blocks
+			if part.Text != "" {
+				blocks = append(blocks, anthropic.NewTextBlock(part.Text))
+			}
 		case ai.ContentPartTypeImage:
 			if part.ImageURL != "" {
 				// URL-based image

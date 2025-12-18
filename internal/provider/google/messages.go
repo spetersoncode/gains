@@ -87,7 +87,9 @@ func convertPartsToGoogleParts(parts []ai.ContentPart) ([]*genai.Part, error) {
 	for _, part := range parts {
 		switch part.Type {
 		case ai.ContentPartTypeText:
-			result = append(result, &genai.Part{Text: part.Text})
+			if part.Text != "" {
+				result = append(result, &genai.Part{Text: part.Text})
+			}
 		case ai.ContentPartTypeImage:
 			if part.Base64 != "" {
 				// Decode base64 to bytes
