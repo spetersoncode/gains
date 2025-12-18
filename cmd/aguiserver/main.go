@@ -6,7 +6,8 @@
 //
 // Configuration is via environment variables:
 //
-//	AGUI_PORT         - Server port (default: 8080)
+//	AGUI_PORT         - Server port (default: 8000)
+//	AGUI_LOG_LEVEL    - Log level: debug, info, warn, error (default: info)
 //	GAINS_PROVIDER    - Provider: anthropic, openai, or google (required)
 //	GAINS_MODEL       - Model override (optional, uses provider default)
 //	GAINS_MAX_STEPS   - Max agent iterations (default: 10)
@@ -19,15 +20,20 @@
 // Usage:
 //
 //	GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
+//
+// Debug logging (shows all events):
+//
+//	AGUI_LOG_LEVEL=debug GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
 package main
 
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -42,20 +48,26 @@ func main() {
 	// Load configuration
 	cfg, err := LoadConfig()
 	if err != nil {
-		log.Fatalf("Configuration error: %v", err)
+		slog.Error("configuration error", "error", err)
+		os.Exit(1)
 	}
+
+	// Setup structured logger
+	logger := setupLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
 
 	// Create gains client
 	gainsClient, err := createClient(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("failed to create client", "error", err)
+		os.Exit(1)
 	}
 
 	// Create tool registry
 	registry := tool.NewRegistry()
 	if cfg.EnableDemoTools {
 		SetupDemoTools(registry)
-		log.Printf("Registered %d demo tools", registry.Len())
+		slog.Info("registered demo tools", "count", registry.Len())
 	}
 
 	// Create agent
@@ -84,26 +96,30 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 
-		log.Println("Shutting down...")
+		slog.Info("shutting down")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("Shutdown error: %v", err)
+			slog.Error("shutdown error", "error", err)
 		}
 	}()
 
 	// Start server
-	log.Printf("AG-UI server starting on :%s", cfg.Port)
-	log.Printf("Provider: %s", cfg.Provider)
-	log.Printf("Endpoint: POST http://localhost:%s/api/agent", cfg.Port)
-	log.Printf("Health:   GET  http://localhost:%s/health", cfg.Port)
+	slog.Info("server starting",
+		"port", cfg.Port,
+		"provider", cfg.Provider,
+		"log_level", cfg.LogLevel,
+		"endpoint", fmt.Sprintf("POST http://localhost:%s/api/agent", cfg.Port),
+		"health", fmt.Sprintf("GET http://localhost:%s/health", cfg.Port),
+	)
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }
 
 func createClient(cfg *Config) (*client.Client, error) {
@@ -135,4 +151,25 @@ func createClient(cfg *Config) (*client.Client, error) {
 			Chat: defaultChat,
 		},
 	}), nil
+}
+
+// setupLogger creates a structured logger with the specified level.
+func setupLogger(level string) *slog.Logger {
+	var logLevel slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+	}
+
+	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }

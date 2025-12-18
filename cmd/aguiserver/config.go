@@ -12,7 +12,8 @@ import (
 // Config holds the server configuration loaded from environment variables.
 type Config struct {
 	// Server
-	Port string
+	Port     string
+	LogLevel string // debug, info, warn, error
 
 	// Provider selection
 	Provider string
@@ -36,6 +37,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		Port:            getEnvOrDefault("AGUI_PORT", "8000"),
+		LogLevel:        getEnvOrDefault("AGUI_LOG_LEVEL", "info"),
 		Provider:        os.Getenv("GAINS_PROVIDER"),
 		Model:           os.Getenv("GAINS_MODEL"),
 		AnthropicKey:    os.Getenv("ANTHROPIC_API_KEY"),
