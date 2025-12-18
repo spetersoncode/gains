@@ -188,3 +188,79 @@ func (r *Registry) Execute(ctx context.Context, call ai.ToolCall) (ai.ToolResult
 		IsError:    false,
 	}, nil
 }
+
+// Registration holds a tool and its handler for fluent registration.
+type Registration struct {
+	Tool    ai.Tool
+	Handler Handler
+}
+
+// Func creates a Registration with automatic schema generation from the typed handler.
+// Panics if schema generation fails.
+//
+// Example:
+//
+//	registry := tool.NewRegistry().Add(
+//	    tool.Func("weather", "Get weather", func(ctx context.Context, args WeatherArgs) (string, error) {
+//	        return getWeather(args.Location), nil
+//	    }),
+//	    tool.Func("search", "Search web", searchHandler),
+//	)
+func Func[T any](name, description string, fn TypedHandler[T]) Registration {
+	schema := MustSchemaFor[T]()
+	handler := func(ctx context.Context, call ai.ToolCall) (string, error) {
+		var args T
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return "", err
+		}
+		return fn(ctx, args)
+	}
+	return Registration{
+		Tool: ai.Tool{
+			Name:        name,
+			Description: description,
+			Parameters:  schema,
+		},
+		Handler: handler,
+	}
+}
+
+// WithHandler creates a Registration from a Handler and schema.
+// Use this when you have a pre-built Handler implementation.
+func WithHandler(name, description string, schema json.RawMessage, h Handler) Registration {
+	return Registration{
+		Tool: ai.Tool{
+			Name:        name,
+			Description: description,
+			Parameters:  schema,
+		},
+		Handler: h,
+	}
+}
+
+// WithTool creates a Registration from an existing Tool and Handler.
+// Use this when you have pre-built tool definitions.
+func WithTool(t ai.Tool, h Handler) Registration {
+	return Registration{
+		Tool:    t,
+		Handler: h,
+	}
+}
+
+// Add registers one or more tools to the registry.
+// Panics if any tool is already registered.
+// Returns the registry for fluent chaining.
+//
+// Example:
+//
+//	registry := tool.NewRegistry().Add(
+//	    tool.Func("weather", "Get weather", weatherFn),
+//	    tool.Func("search", "Search web", searchFn),
+//	    tool.Func("calc", "Calculate", calcFn),
+//	)
+func (r *Registry) Add(regs ...Registration) *Registry {
+	for _, reg := range regs {
+		r.MustRegister(reg.Tool, reg.Handler)
+	}
+	return r
+}
