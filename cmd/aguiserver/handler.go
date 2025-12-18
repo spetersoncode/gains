@@ -12,6 +12,7 @@ import (
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/agui"
 	"github.com/spetersoncode/gains/event"
+	"github.com/spetersoncode/gains/tool"
 )
 
 // RunAgentInput represents the AG-UI request body for running an agent.
@@ -20,7 +21,7 @@ type RunAgentInput struct {
 	ThreadID       string                `json:"thread_id"`
 	RunID          string                `json:"run_id"`
 	Messages       []aguievents.Message  `json:"messages"`
-	Tools          []any                 `json:"tools,omitempty"`    // Frontend-provided tools (not used by this server)
+	Tools          []any                 `json:"tools,omitempty"`    // Frontend-provided tools
 	Context        []any                 `json:"context,omitempty"`  // Context items (not used by this server)
 	State          any                   `json:"state,omitempty"`    // State (not used by this server)
 	ForwardedProps any                   `json:"forwarded_props,omitempty"`
@@ -28,13 +29,14 @@ type RunAgentInput struct {
 
 // AgentHandler handles AG-UI agent requests over SSE.
 type AgentHandler struct {
-	agent  *agent.Agent
-	config *Config
+	agent    *agent.Agent
+	registry *tool.Registry
+	config   *Config
 }
 
-// NewAgentHandler creates a new handler for the given agent.
-func NewAgentHandler(a *agent.Agent, cfg *Config) *AgentHandler {
-	return &AgentHandler{agent: a, config: cfg}
+// NewAgentHandler creates a new handler for the given agent and registry.
+func NewAgentHandler(a *agent.Agent, r *tool.Registry, cfg *Config) *AgentHandler {
+	return &AgentHandler{agent: a, registry: r, config: cfg}
 }
 
 // ServeHTTP handles POST requests to run the agent and stream events via SSE.
@@ -61,6 +63,33 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"run_id", input.RunID,
 		"thread_id", input.ThreadID,
 	)
+
+	// Parse and register frontend tools
+	var clientToolNames []string
+	if len(input.Tools) > 0 {
+		frontendTools, err := agui.ParseTools(input.Tools)
+		if err != nil {
+			log.Warn("failed to parse frontend tools", "error", err)
+		} else if len(frontendTools) > 0 {
+			gainsTools := agui.ToGainsTools(frontendTools)
+			if err := h.registry.RegisterClientTools(gainsTools); err != nil {
+				log.Warn("failed to register frontend tools", "error", err)
+			} else {
+				clientToolNames = agui.ToolNames(frontendTools)
+				log.Info("registered frontend tools", "count", len(clientToolNames), "names", clientToolNames)
+			}
+		}
+	}
+
+	// Ensure cleanup of client tools after request
+	defer func() {
+		for _, name := range clientToolNames {
+			h.registry.Unregister(name)
+		}
+		if len(clientToolNames) > 0 {
+			log.Debug("unregistered frontend tools", "count", len(clientToolNames))
+		}
+	}()
 
 	// Convert AG-UI messages to gains messages
 	messages := agui.ToGainsMessages(input.Messages)

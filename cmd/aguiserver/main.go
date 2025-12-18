@@ -74,7 +74,7 @@ func main() {
 	a := agent.New(gainsClient, registry)
 
 	// Create HTTP handler
-	handler := NewAgentHandler(a, cfg)
+	handler := NewAgentHandler(a, registry, cfg)
 
 	// Setup routes
 	mux := http.NewServeMux()

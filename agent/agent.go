@@ -172,7 +172,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 		}
 
 		// Process tool calls
-		toolResults, allRejected := a.processToolCalls(ctx, response.ToolCalls, options, step, eventCh)
+		processResult := a.processToolCalls(ctx, response.ToolCalls, options, step, eventCh)
 
 		// Append assistant message with tool calls to history
 		history.Append(ai.Message{
@@ -181,11 +181,22 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 			ToolCalls: response.ToolCalls,
 		})
 
+		// If there are client tool calls, terminate and let frontend handle
+		if processResult.hasClientTools {
+			// Don't append tool results for client tools - frontend will provide them
+			// Only append results for any backend tools that were executed
+			if len(processResult.results) > 0 {
+				history.Append(ai.NewToolResultMessage(processResult.results...))
+			}
+			a.emitClientToolCall(eventCh, step, response, processResult.clientToolCalls)
+			return
+		}
+
 		// Append tool results to history
-		history.Append(ai.NewToolResultMessage(toolResults...))
+		history.Append(ai.NewToolResultMessage(processResult.results...))
 
 		// If all tools were rejected, stop
-		if allRejected {
+		if processResult.allRejected {
 			a.emitComplete(eventCh, step, response, TerminationRejected)
 			return
 		}
@@ -259,24 +270,57 @@ func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts
 	return response, nil
 }
 
-func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) ([]ai.ToolResult, bool) {
-	// First, emit requested events and handle approval
+// toolCallProcessResult contains the outcome of processing tool calls.
+type toolCallProcessResult struct {
+	results          []ai.ToolResult
+	allRejected      bool
+	hasClientTools   bool
+	clientToolCalls  []ai.ToolCall
+}
+
+func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) toolCallProcessResult {
+	// Separate client tools from backend tools
+	var clientToolCalls []ai.ToolCall
+	var backendToolCalls []ai.ToolCall
+
+	for _, tc := range toolCalls {
+		if a.registry.IsClientTool(tc.Name) {
+			clientToolCalls = append(clientToolCalls, tc)
+		} else {
+			backendToolCalls = append(backendToolCalls, tc)
+		}
+	}
+
+	// First, emit requested events and handle approval for ALL tool calls
 	type approvalResult struct {
 		call     ai.ToolCall
 		approved bool
 		reason   string
+		isClient bool
 	}
 
 	approvals := make([]approvalResult, len(toolCalls))
 
 	for i, tc := range toolCalls {
+		isClient := a.registry.IsClientTool(tc.Name)
+
 		// Emit tool call start (name only) and args (arguments)
 		event.Emit(eventCh, Event{Type: event.ToolCallStart, Step: step, ToolCall: &tc})
 		event.Emit(eventCh, Event{Type: event.ToolCallArgs, Step: step, ToolCall: &tc})
 
+		// Client tools are always "approved" from the backend's perspective
+		// The frontend will handle approval if needed
+		if isClient {
+			approvals[i] = approvalResult{call: tc, approved: true, isClient: true}
+			event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
+			// Emit end for client tools - they're "done" from backend perspective
+			event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+			continue
+		}
+
 		if a.requiresApproval(tc.Name, options) {
 			approved, reason := options.Approver(ctx, tc)
-			approvals[i] = approvalResult{call: tc, approved: approved, reason: reason}
+			approvals[i] = approvalResult{call: tc, approved: approved, reason: reason, isClient: false}
 
 			if approved {
 				event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
@@ -285,18 +329,21 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 			}
 		} else {
 			// Auto-approved
-			approvals[i] = approvalResult{call: tc, approved: true}
+			approvals[i] = approvalResult{call: tc, approved: true, isClient: false}
 			event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 		}
 	}
 
-	// Collect approved and rejected
-	var approvedCalls []ai.ToolCall
+	// Collect approved backend calls and rejected results
+	var approvedBackendCalls []ai.ToolCall
 	var rejectedResults []ai.ToolResult
 
 	for _, ar := range approvals {
+		if ar.isClient {
+			continue // Client tools handled separately
+		}
 		if ar.approved {
-			approvedCalls = append(approvedCalls, ar.call)
+			approvedBackendCalls = append(approvedBackendCalls, ar.call)
 		} else {
 			reason := ar.reason
 			if reason == "" {
@@ -310,31 +357,36 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 		}
 	}
 
-	// If all rejected, return early
-	if len(approvedCalls) == 0 {
+	// If all backend tools were rejected and no client tools, return early
+	if len(approvedBackendCalls) == 0 && len(clientToolCalls) == 0 {
 		for i := range rejectedResults {
-			tc := toolCalls[i]
+			tc := backendToolCalls[i]
 			event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
 			event.Emit(eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &rejectedResults[i]})
 		}
-		return rejectedResults, true
+		return toolCallProcessResult{results: rejectedResults, allRejected: true}
 	}
 
-	// Execute approved tool calls
+	// Execute approved backend tool calls
 	var executedResults []ai.ToolResult
 
-	if options.ParallelToolCalls && len(approvedCalls) > 1 {
-		executedResults = a.executeToolCallsParallel(ctx, approvedCalls, options, step, eventCh)
-	} else {
-		executedResults = a.executeToolCallsSequential(ctx, approvedCalls, options, step, eventCh)
+	if len(approvedBackendCalls) > 0 {
+		if options.ParallelToolCalls && len(approvedBackendCalls) > 1 {
+			executedResults = a.executeToolCallsParallel(ctx, approvedBackendCalls, options, step, eventCh)
+		} else {
+			executedResults = a.executeToolCallsSequential(ctx, approvedBackendCalls, options, step, eventCh)
+		}
 	}
 
-	// Combine results in original order
-	results := make([]ai.ToolResult, 0, len(toolCalls))
+	// Combine results in original order (only for backend tools)
+	results := make([]ai.ToolResult, 0, len(backendToolCalls))
 	approvedIdx := 0
 	rejectedIdx := 0
 
 	for _, ar := range approvals {
+		if ar.isClient {
+			continue // Client tools don't have results from the backend
+		}
 		if ar.approved {
 			results = append(results, executedResults[approvedIdx])
 			approvedIdx++
@@ -344,7 +396,12 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 		}
 	}
 
-	return results, false
+	return toolCallProcessResult{
+		results:         results,
+		allRejected:     false,
+		hasClientTools:  len(clientToolCalls) > 0,
+		clientToolCalls: clientToolCalls,
+	}
 }
 
 func (a *Agent) executeToolCallsSequential(ctx context.Context, toolCalls []ai.ToolCall, options *Options, step int, eventCh chan<- Event) []ai.ToolResult {
@@ -437,5 +494,15 @@ func (a *Agent) emitComplete(ch chan<- Event, step int, response *ai.Response, r
 		Step:     step,
 		Response: response,
 		Message:  string(reason),
+	})
+}
+
+func (a *Agent) emitClientToolCall(ch chan<- Event, step int, response *ai.Response, clientToolCalls []ai.ToolCall) {
+	event.Emit(ch, Event{
+		Type:            event.RunEnd,
+		Step:            step,
+		Response:        response,
+		Message:         string(TerminationClientToolCall),
+		PendingToolCalls: clientToolCalls,
 	})
 }

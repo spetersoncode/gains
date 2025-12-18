@@ -37,3 +37,14 @@ type ErrToolAlreadyRegistered struct {
 func (e *ErrToolAlreadyRegistered) Error() string {
 	return fmt.Sprintf("tool: already registered: %s", e.Name)
 }
+
+// ErrClientTool is returned when Execute is called on a client-side tool.
+// Client tools should be executed by the frontend, not the backend.
+type ErrClientTool struct {
+	Name string
+}
+
+// Error returns a formatted error message indicating this is a client tool.
+func (e *ErrClientTool) Error() string {
+	return fmt.Sprintf("tool: client-side tool requires frontend execution: %s", e.Name)
+}

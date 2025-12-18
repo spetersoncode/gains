@@ -129,6 +129,10 @@ type Event struct {
 	// Message contains additional context (e.g., rejection reason, termination reason).
 	Message string
 
+	// PendingToolCalls contains tool calls awaiting client-side execution.
+	// Set on RunEnd events when termination is due to client tool calls.
+	PendingToolCalls []ai.ToolCall
+
 	// Timestamp is when the event occurred.
 	Timestamp time.Time
 }

@@ -10,8 +10,9 @@ import (
 
 // registeredTool combines a tool definition with its handler.
 type registeredTool struct {
-	tool    ai.Tool
-	handler Handler
+	tool     ai.Tool
+	handler  Handler
+	isClient bool // true for client-side tools that have no local handler
 }
 
 // Registry manages registered tools and their handlers.
@@ -50,6 +51,59 @@ func (r *Registry) MustRegister(tool ai.Tool, handler Handler) {
 	if err := r.Register(tool, handler); err != nil {
 		panic(err)
 	}
+}
+
+// RegisterClientTool registers a tool definition without a handler.
+// Client tools are executed by the frontend/client, not the backend.
+// When the agent encounters a call to a client tool, it emits events
+// but does not execute locally.
+func (r *Registry) RegisterClientTool(tool ai.Tool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.tools[tool.Name]; exists {
+		return &ErrToolAlreadyRegistered{Name: tool.Name}
+	}
+
+	r.tools[tool.Name] = registeredTool{
+		tool:     tool,
+		handler:  nil,
+		isClient: true,
+	}
+	return nil
+}
+
+// RegisterClientTools registers multiple client tool definitions.
+func (r *Registry) RegisterClientTools(tools []ai.Tool) error {
+	for _, t := range tools {
+		if err := r.RegisterClientTool(t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// IsClientTool returns true if the named tool is a client-side tool.
+func (r *Registry) IsClientTool(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rt, ok := r.tools[name]
+	return ok && rt.isClient
+}
+
+// ClientToolNames returns the names of all registered client tools.
+func (r *Registry) ClientToolNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var names []string
+	for name, rt := range r.tools {
+		if rt.isClient {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // Unregister removes a tool from the registry.
@@ -164,15 +218,23 @@ func MustRegisterFunc[T any](r *Registry, name, description string, fn TypedHand
 
 // Execute runs the handler for a tool call and returns a ToolResult.
 // If the tool is not found, returns ErrToolNotFound.
+// If the tool is a client-side tool, returns ErrClientTool.
 // If the handler returns an error, the error is captured in ToolResult.IsError
 // and the error message is returned as the content (allowing the model to recover).
 func (r *Registry) Execute(ctx context.Context, call ai.ToolCall) (ai.ToolResult, error) {
-	handler, ok := r.Get(call.Name)
+	r.mu.RLock()
+	rt, ok := r.tools[call.Name]
+	r.mu.RUnlock()
+
 	if !ok {
 		return ai.ToolResult{}, &ErrToolNotFound{Name: call.Name}
 	}
 
-	content, err := handler(ctx, call)
+	if rt.isClient {
+		return ai.ToolResult{}, &ErrClientTool{Name: call.Name}
+	}
+
+	content, err := rt.handler(ctx, call)
 	if err != nil {
 		// Return error as tool result so model can potentially recover
 		return ai.ToolResult{

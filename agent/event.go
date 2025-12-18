@@ -39,6 +39,10 @@ const (
 
 	// TerminationCancelled indicates context cancellation.
 	TerminationCancelled TerminationReason = "cancelled"
+
+	// TerminationClientToolCall indicates the model called a client-side tool.
+	// The frontend should execute the tool and resume with the result.
+	TerminationClientToolCall TerminationReason = "client_tool_call"
 )
 
 // Result represents the final outcome of an agent execution.
@@ -60,6 +64,10 @@ type Result struct {
 
 	// Error contains any error that caused termination (if applicable).
 	Error error
+
+	// PendingClientToolCalls contains tool calls awaiting client execution.
+	// These are set when Termination is TerminationClientToolCall.
+	PendingClientToolCalls []ai.ToolCall
 }
 
 // Messages returns the conversation history as a slice.
