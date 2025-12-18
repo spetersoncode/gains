@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/spetersoncode/gains"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -260,4 +261,34 @@ func TestIsTransientWithWrappedError(t *testing.T) {
 	wrappedErr := fmt.Errorf("operation failed: %w", innerErr)
 
 	assert.True(t, IsTransient(wrappedErr))
+}
+
+func TestIsTransientWithCategorizedError(t *testing.T) {
+	t.Run("transient categorized error", func(t *testing.T) {
+		err := gains.NewTransientError("rate limited", 429, nil)
+		assert.True(t, IsTransient(err))
+	})
+
+	t.Run("permanent categorized error", func(t *testing.T) {
+		err := gains.NewPermanentError("unauthorized", 401, nil)
+		assert.False(t, IsTransient(err))
+	})
+
+	t.Run("user input categorized error", func(t *testing.T) {
+		err := gains.NewUserInputError("bad request", 400, nil)
+		assert.False(t, IsTransient(err))
+	})
+
+	t.Run("wrapped categorized error", func(t *testing.T) {
+		inner := gains.NewTransientError("rate limited", 429, nil)
+		wrapped := fmt.Errorf("failed: %w", inner)
+		assert.True(t, IsTransient(wrapped))
+	})
+
+	t.Run("categorized error takes precedence over status code heuristics", func(t *testing.T) {
+		// A 429 status code would normally be transient via heuristics,
+		// but explicit permanent categorization should override that
+		err := gains.NewPermanentError("rate limit but don't retry", 429, nil)
+		assert.False(t, IsTransient(err))
+	})
 }

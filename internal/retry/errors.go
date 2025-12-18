@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"syscall"
+
+	"github.com/spetersoncode/gains"
 )
 
 // statusCoder is an interface for errors that have an HTTP status code.
@@ -15,7 +17,8 @@ type statusCoder interface {
 }
 
 // IsTransient determines if an error is transient and should be retried.
-// It checks for:
+// It first checks if the error implements gains.CategorizedError for explicit
+// categorization. If not, it falls back to heuristic detection:
 // - Rate limits (HTTP 429)
 // - Server errors (HTTP 5xx)
 // - Network timeouts
@@ -25,6 +28,14 @@ func IsTransient(err error) bool {
 	if err == nil {
 		return false
 	}
+
+	// First, check if error implements CategorizedError for explicit categorization
+	var ce gains.CategorizedError
+	if errors.As(err, &ce) {
+		return ce.Category() == gains.ErrorTransient
+	}
+
+	// Fall back to heuristic detection for uncategorized errors
 
 	// Check for API errors with status codes (works with Anthropic/OpenAI SDKs)
 	var sc statusCoder
