@@ -83,26 +83,6 @@
 //	    ai.WithTemperature(0.7),
 //	)
 //
-// # Tool Calling
-//
-// Define tools that the model can invoke:
-//
-//	tools := []ai.Tool{
-//	    {
-//	        Name:        "get_weather",
-//	        Description: "Get current weather for a location",
-//	        Parameters:  json.RawMessage(`{
-//	            "type": "object",
-//	            "properties": {
-//	                "location": {"type": "string", "description": "City name"}
-//	            },
-//	            "required": ["location"]
-//	        }`),
-//	    },
-//	}
-//
-//	resp, err := c.Chat(ctx, messages, ai.WithTools(tools))
-//
 // # Higher-Level Abstractions
 //
 // For more complex use cases, see:

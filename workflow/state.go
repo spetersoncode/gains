@@ -7,14 +7,19 @@ import (
 // State provides thread-safe key-value state management for workflows.
 // This is the primary state container passed through workflow steps.
 //
-// State supports reading and writing values of any type:
+// For type-safe state access, use the typed Key[T] API:
 //
-//	state := workflow.NewState(nil)
-//	state.Set("count", 42)
-//	state.Set("name", "example")
+//	var KeyCount = workflow.NewKey[int]("count")
+//	var KeyName = workflow.NewKey[string]("name")
 //
-//	count := state.GetInt("count")   // 42
-//	name := state.GetString("name")  // "example"
+//	workflow.Set(state, KeyCount, 42)
+//	workflow.Set(state, KeyName, "example")
+//
+//	count, ok := workflow.Get(state, KeyCount)  // 42, true
+//	name := workflow.MustGet(state, KeyName)    // "example"
+//
+// The typed API provides compile-time type checking. See [Key], [Get], [Set],
+// [MustGet], and [GetOr] for the full typed API.
 type State = store.Store
 
 // StateAdapter defines the interface for persistence backends.

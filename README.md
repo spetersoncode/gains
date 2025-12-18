@@ -136,26 +136,6 @@ schema := ai.MustSchemaFor[WeatherArgs]()
 
 Supported tags: `json`, `desc`, `required`, `enum`, `min`, `max`, `minLength`, `maxLength`, `pattern`, `default`, `minItems`, `maxItems`
 
-## Tool Calling
-
-```go
-type SearchArgs struct {
-    Query string `json:"query" desc:"Search query" required:"true"`
-}
-
-tools := []ai.Tool{{
-    Name:        "search",
-    Description: "Search the web",
-    Parameters:  ai.MustSchemaFor[SearchArgs](),
-}}
-
-resp, _ := c.Chat(ctx, messages, ai.WithTools(tools))
-
-for _, call := range resp.ToolCalls {
-    fmt.Printf("Tool: %s, Args: %s\n", call.Name, call.Arguments)
-}
-```
-
 ## Agent Orchestration
 
 The agent package handles autonomous tool-calling loops:
@@ -401,7 +381,7 @@ go func() {
 
 See the [`cmd/demo`](cmd/demo) directory for complete examples including:
 - Basic chat and streaming
-- Tool calling and agents
+- Agent orchestration
 - Multi-agent scenarios
 - Workflow patterns (chain, parallel, router, loop)
 - AG-UI integration

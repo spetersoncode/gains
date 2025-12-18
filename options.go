@@ -68,6 +68,8 @@ func WithTemperature(t float64) Option {
 }
 
 // WithTools sets the tools available to the model.
+// This is used internally by the agent package. For tool-calling use cases,
+// prefer [github.com/spetersoncode/gains/agent] which handles the tool loop.
 func WithTools(tools []Tool) Option {
 	return func(o *Options) {
 		o.Tools = tools

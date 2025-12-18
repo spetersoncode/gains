@@ -47,7 +47,6 @@ var demos = []Demo{
 	{Name: "image-gen", Description: "Image generation", Category: CategoryChat, Feature: client.FeatureImage, Run: demoImageGeneration},
 
 	// Tools & Agents
-	{Name: "tools", Description: "Tool/function calling", Category: CategoryTools, Run: demoToolCalling},
 	{Name: "agent", Description: "Agent with tool execution", Category: CategoryTools, Run: demoAgent},
 	{Name: "agent-stream", Description: "Agent with streaming events", Category: CategoryTools, Run: demoAgentStream},
 	{Name: "research", Description: "Research agent with approval workflow", Category: CategoryTools, Run: demoAgentResearch},
