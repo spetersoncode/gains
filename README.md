@@ -8,6 +8,14 @@
 
 gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
 
+## Principles
+
+- **Go Idiomatic** - Follows Go conventions: interfaces, functional options, channels, context
+- **Type Safe** - Generics and typed keys wherever possible to catch errors at compile time
+- **Composable** - Small, focused components that combine into larger systems
+- **Flexible** - Sensible defaults with full control when you need it
+- **Easy to Use** - Trivial for simple cases, capable for complex problems
+
 ## Features
 
 - **Model-Centric Routing** - Models know their provider; client routes automatically
@@ -185,7 +193,7 @@ result, _ := a.Run(ctx, messages,
 
 ## Workflows
 
-Build complex pipelines with composable patterns:
+Build complex pipelines with composable patterns. See [docs/workflows.md](docs/workflows.md) for comprehensive documentation.
 
 ```go
 import "github.com/spetersoncode/gains/workflow"
@@ -390,7 +398,15 @@ See the [`cmd/demo`](cmd/demo) directory for complete examples including:
 
 ### AG-UI Server (Experimental)
 
-The [`cmd/aguiserver`](cmd/aguiserver) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE. This is experimental and in progress.
+The [`cmd/aguiserver`](cmd/aguiserver) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE.
+
+**Progress:**
+- ✅ Chat streaming
+- ✅ Client-side tools
+- ✅ Server-side tools
+- ✅ Generative UI elements
+- 🚧 Shared state (in progress)
+- ⏳ Human in the loop (pending)
 
 ```bash
 GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
