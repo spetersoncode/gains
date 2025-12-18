@@ -8,6 +8,8 @@
 
 gains provides a unified interface for building AI applications across Anthropic, OpenAI, and Google. Built from the ground up for Go with first-class streaming, tool orchestration, and composable workflows.
 
+Most AI agent frameworks either don't support Go or treat it as an afterthought. gains was built to give Go developers a first-class experience.
+
 ## Principles
 
 - **Go Idiomatic** - Follows Go conventions: interfaces, functional options, channels, context
