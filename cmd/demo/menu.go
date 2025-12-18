@@ -54,7 +54,7 @@ var demos = []Demo{
 	{Name: "combat", Description: "RPG combat with dice rolling", Category: CategoryTools, Run: demoAgentCombat},
 
 	// Structured Output
-	{Name: "json", Description: "JSON mode / structured output", Category: CategoryOutput, Run: demoJSONMode},
+	{Name: "chat-typed", Description: "ChatTyped helper for structured output", Category: CategoryOutput, Run: demoChatTyped},
 	{Name: "embeddings", Description: "Text embeddings & similarity", Category: CategoryOutput, Feature: client.FeatureEmbedding, Run: demoEmbeddings},
 
 	// Workflows
