@@ -10,6 +10,7 @@
 // This package provides:
 //   - [Mapper]: Stateful event converter that handles AG-UI's Start-Content-End pattern
 //   - Message conversion utilities: [ToGainsMessages], [FromGainsMessages]
+//   - State management: [DecodeState], [MustDecodeState] for typed frontend state access
 //
 // The package does NOT provide HTTP handlers or transport implementations. Users
 // are responsible for implementing their own server using the AG-UI SDK's SSE
@@ -55,6 +56,44 @@
 // Use [FromGainsMessages] to convert gains messages to AG-UI format for snapshots:
 //
 //	snapshot := events.NewMessagesSnapshotEvent(agui.FromGainsMessages(history))
+//
+// # Shared State
+//
+// AG-UI supports bidirectional state synchronization between agents and frontends.
+// The frontend can send state with each run via RunAgentInput.State, and agents
+// can emit state updates via STATE_SNAPSHOT and STATE_DELTA events.
+//
+// Reading frontend state:
+//
+//	type MyState struct {
+//	    Progress int      `json:"progress"`
+//	    Items    []string `json:"items"`
+//	}
+//
+//	prepared, _ := input.Prepare()
+//	state, err := agui.DecodeState[MyState](prepared)
+//	// or: state := agui.MustDecodeState[MyState](prepared)
+//
+// Emitting state to frontend:
+//
+//	// Full state snapshot
+//	writeEvent(mapper.StateSnapshot(map[string]any{
+//	    "progress": 50,
+//	    "items": []string{"a", "b"},
+//	}))
+//
+//	// Incremental delta (JSON Patch RFC 6902)
+//	writeEvent(mapper.StateDelta(
+//	    event.Replace("/progress", 75),
+//	    event.Add("/items/-", "c"),
+//	))
+//
+// Or via gains events for integration with RunStream:
+//
+//	events <- event.NewStateSnapshot(state)
+//	events <- event.NewStateDelta(
+//	    event.Replace("/progress", 100),
+//	)
 //
 // # Thread Safety
 //

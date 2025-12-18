@@ -336,6 +336,78 @@ func TestMapper_MapStream(t *testing.T) {
 	})
 }
 
+func TestMapper_StateEvents(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("StateSnapshot helper", func(t *testing.T) {
+		state := map[string]any{
+			"progress": 50,
+			"items":    []string{"a", "b"},
+		}
+
+		ev := m.StateSnapshot(state)
+		if ev.Type() != events.EventTypeStateSnapshot {
+			t.Errorf("expected STATE_SNAPSHOT, got %s", ev.Type())
+		}
+	})
+
+	t.Run("StateDelta helper", func(t *testing.T) {
+		ev := m.StateDelta(
+			event.Replace("/progress", 75),
+			event.Add("/items/-", "c"),
+		)
+		if ev.Type() != events.EventTypeStateDelta {
+			t.Errorf("expected STATE_DELTA, got %s", ev.Type())
+		}
+	})
+}
+
+func TestMapper_MapEvent_State(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("StateSnapshot maps to STATE_SNAPSHOT", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type:  event.StateSnapshot,
+			State: map[string]any{"progress": 100},
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeStateSnapshot {
+			t.Errorf("expected STATE_SNAPSHOT, got %s", result.Type())
+		}
+	})
+
+	t.Run("StateDelta maps to STATE_DELTA", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type: event.StateDelta,
+			StatePatches: []event.JSONPatch{
+				{Op: event.PatchReplace, Path: "/progress", Value: 50},
+				{Op: event.PatchAdd, Path: "/items/-", Value: "new"},
+			},
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeStateDelta {
+			t.Errorf("expected STATE_DELTA, got %s", result.Type())
+		}
+	})
+
+	t.Run("StateDelta with empty patches", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type:         event.StateDelta,
+			StatePatches: nil,
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeStateDelta {
+			t.Errorf("expected STATE_DELTA, got %s", result.Type())
+		}
+	})
+}
+
 func TestToGainsMessage(t *testing.T) {
 	t.Run("user message", func(t *testing.T) {
 		content := "Hello"

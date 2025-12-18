@@ -144,6 +144,130 @@ func TestPreparedInput_GainsTools(t *testing.T) {
 	})
 }
 
+func TestDecodeState(t *testing.T) {
+	type MyState struct {
+		Progress int      `json:"progress"`
+		Items    []string `json:"items"`
+	}
+
+	t.Run("decodes state into struct", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: map[string]any{
+				"progress": float64(50), // JSON numbers are float64
+				"items":    []any{"a", "b"},
+			},
+		}
+
+		state, err := DecodeState[MyState](prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Progress != 50 {
+			t.Errorf("Progress = %d, want 50", state.Progress)
+		}
+		if len(state.Items) != 2 || state.Items[0] != "a" {
+			t.Errorf("Items = %v, want [a b]", state.Items)
+		}
+	})
+
+	t.Run("nil state returns zero value", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: nil,
+		}
+
+		state, err := DecodeState[MyState](prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Progress != 0 {
+			t.Errorf("Progress = %d, want 0", state.Progress)
+		}
+		if state.Items != nil {
+			t.Errorf("Items = %v, want nil", state.Items)
+		}
+	})
+
+	t.Run("decodes into map", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: map[string]any{
+				"key": "value",
+			},
+		}
+
+		state, err := DecodeState[map[string]string](prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state["key"] != "value" {
+			t.Errorf("state[key] = %q, want %q", state["key"], "value")
+		}
+	})
+}
+
+func TestMustDecodeState(t *testing.T) {
+	type MyState struct {
+		Progress int `json:"progress"`
+	}
+
+	t.Run("returns decoded state", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: map[string]any{"progress": float64(100)},
+		}
+
+		state := MustDecodeState[MyState](prepared)
+		if state.Progress != 100 {
+			t.Errorf("Progress = %d, want 100", state.Progress)
+		}
+	})
+
+	t.Run("panics on invalid state", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: func() {}, // Functions can't be marshaled
+		}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+
+		MustDecodeState[MyState](prepared)
+	})
+}
+
+func TestPreparedInput_State(t *testing.T) {
+	t.Run("Prepare includes state", func(t *testing.T) {
+		content := "Hello"
+		input := RunAgentInput{
+			ThreadID: "thread-1",
+			RunID:    "run-1",
+			Messages: []events.Message{
+				{ID: "msg-1", Role: "user", Content: &content},
+			},
+			State: map[string]any{
+				"progress": 0,
+			},
+		}
+
+		prepared, err := input.Prepare()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if prepared.State == nil {
+			t.Error("expected State to be set")
+		}
+
+		stateMap, ok := prepared.State.(map[string]any)
+		if !ok {
+			t.Fatalf("State is not map[string]any")
+		}
+		if stateMap["progress"] != 0 {
+			t.Errorf("State[progress] = %v, want 0", stateMap["progress"])
+		}
+	})
+}
+
 func TestRunAgentInput_JSON(t *testing.T) {
 	// Test that the struct marshals/unmarshals correctly
 	jsonData := `{

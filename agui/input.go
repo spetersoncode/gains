@@ -1,6 +1,7 @@
 package agui
 
 import (
+	"encoding/json"
 	"errors"
 
 	ai "github.com/spetersoncode/gains"
@@ -27,6 +28,7 @@ type PreparedInput struct {
 	Messages  []ai.Message
 	Tools     []Tool   // Parsed frontend tools
 	ToolNames []string // Tool names for cleanup tracking
+	State     any      // Raw state from frontend
 }
 
 // ErrNoMessages is returned when the input contains no messages.
@@ -46,6 +48,7 @@ func (r *RunAgentInput) Prepare() (*PreparedInput, error) {
 		ThreadID: r.ThreadID,
 		RunID:    r.RunID,
 		Messages: messages,
+		State:    r.State,
 	}
 
 	// Parse frontend tools if provided
@@ -65,4 +68,34 @@ func (r *RunAgentInput) Prepare() (*PreparedInput, error) {
 // Returns nil if no tools were parsed.
 func (p *PreparedInput) GainsTools() []ai.Tool {
 	return ToGainsTools(p.Tools)
+}
+
+// DecodeState decodes the raw state into a typed struct.
+// Returns the zero value of T if State is nil.
+func DecodeState[T any](input *PreparedInput) (T, error) {
+	var result T
+	if input.State == nil {
+		return result, nil
+	}
+
+	// Re-marshal and unmarshal to get proper typing
+	data, err := json.Marshal(input.State)
+	if err != nil {
+		return result, err
+	}
+
+	if err := json.Unmarshal(data, &result); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// MustDecodeState is like DecodeState but panics on error.
+func MustDecodeState[T any](input *PreparedInput) T {
+	result, err := DecodeState[T](input)
+	if err != nil {
+		panic("agui: failed to decode state: " + err.Error())
+	}
+	return result
 }

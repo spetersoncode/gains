@@ -61,6 +61,16 @@ func (m *Mapper) RunError(err error) events.Event {
 	return events.NewRunErrorEvent(msg)
 }
 
+// StateSnapshot returns a STATE_SNAPSHOT event with the given state.
+func (m *Mapper) StateSnapshot(state any) events.Event {
+	return events.NewStateSnapshotEvent(state)
+}
+
+// StateDelta returns a STATE_DELTA event with the given JSON Patch operations.
+func (m *Mapper) StateDelta(patches ...event.JSONPatch) events.Event {
+	return events.NewStateDeltaEvent(toAGUIPatches(patches))
+}
+
 // MapStream wraps a gains event channel and yields AG-UI events.
 // Events that have no AG-UI equivalent (returning nil from MapEvent) are filtered out.
 // The returned channel closes when the input channel closes.
@@ -149,7 +159,30 @@ func (m *Mapper) MapEvent(e event.Event) events.Event {
 		// No direct AG-UI equivalent, could use custom event
 		return nil
 
+	// State synchronization
+	case event.StateSnapshot:
+		return events.NewStateSnapshotEvent(e.State)
+	case event.StateDelta:
+		return events.NewStateDeltaEvent(toAGUIPatches(e.StatePatches))
+
 	default:
 		return nil
 	}
+}
+
+// toAGUIPatches converts gains JSONPatch operations to AG-UI JSONPatchOperation.
+func toAGUIPatches(patches []event.JSONPatch) []events.JSONPatchOperation {
+	if len(patches) == 0 {
+		return nil
+	}
+	result := make([]events.JSONPatchOperation, len(patches))
+	for i, p := range patches {
+		result[i] = events.JSONPatchOperation{
+			Op:    string(p.Op),
+			Path:  p.Path,
+			Value: p.Value,
+			From:  p.From,
+		}
+	}
+	return result
 }

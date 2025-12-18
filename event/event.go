@@ -90,6 +90,36 @@ const (
 	LoopIteration Type = "loop_iteration"
 )
 
+// State synchronization events (AG-UI shared state)
+const (
+	// StateSnapshot fires to send the complete state to the frontend.
+	StateSnapshot Type = "state_snapshot"
+
+	// StateDelta fires to send incremental state changes using JSON Patch.
+	StateDelta Type = "state_delta"
+)
+
+// PatchOp represents a JSON Patch operation type (RFC 6902).
+type PatchOp string
+
+// JSON Patch operation types.
+const (
+	PatchAdd     PatchOp = "add"
+	PatchRemove  PatchOp = "remove"
+	PatchReplace PatchOp = "replace"
+	PatchMove    PatchOp = "move"
+	PatchCopy    PatchOp = "copy"
+	PatchTest    PatchOp = "test"
+)
+
+// JSONPatch represents a JSON Patch operation (RFC 6902).
+type JSONPatch struct {
+	Op    PatchOp `json:"op"`              // Operation type
+	Path  string  `json:"path"`            // JSON Pointer path
+	Value any     `json:"value,omitempty"` // Value for add, replace, test
+	From  string  `json:"from,omitempty"`  // Source path for move, copy
+}
+
 // Event represents an observable occurrence during streaming execution.
 // This unified type is used by client, agent, and workflow packages.
 type Event struct {
@@ -133,6 +163,12 @@ type Event struct {
 	// Set on RunEnd events when termination is due to client tool calls.
 	PendingToolCalls []ai.ToolCall
 
+	// State contains the full state for StateSnapshot events.
+	State any
+
+	// StatePatches contains JSON Patch operations for StateDelta events.
+	StatePatches []JSONPatch
+
 	// Timestamp is when the event occurred.
 	Timestamp time.Time
 }
@@ -150,4 +186,50 @@ func Emit(ch chan<- Event, e Event) {
 // NewChannel creates a buffered event channel with standard capacity.
 func NewChannel() chan Event {
 	return make(chan Event, 100)
+}
+
+// NewStateSnapshot creates a StateSnapshot event with the given state.
+func NewStateSnapshot(state any) Event {
+	return Event{
+		Type:  StateSnapshot,
+		State: state,
+	}
+}
+
+// NewStateDelta creates a StateDelta event with the given patches.
+func NewStateDelta(patches ...JSONPatch) Event {
+	return Event{
+		Type:         StateDelta,
+		StatePatches: patches,
+	}
+}
+
+// Replace creates a JSON Patch replace operation.
+func Replace(path string, value any) JSONPatch {
+	return JSONPatch{Op: PatchReplace, Path: path, Value: value}
+}
+
+// Add creates a JSON Patch add operation.
+func Add(path string, value any) JSONPatch {
+	return JSONPatch{Op: PatchAdd, Path: path, Value: value}
+}
+
+// Remove creates a JSON Patch remove operation.
+func Remove(path string) JSONPatch {
+	return JSONPatch{Op: PatchRemove, Path: path}
+}
+
+// Move creates a JSON Patch move operation.
+func Move(from, path string) JSONPatch {
+	return JSONPatch{Op: PatchMove, From: from, Path: path}
+}
+
+// Copy creates a JSON Patch copy operation.
+func Copy(from, path string) JSONPatch {
+	return JSONPatch{Op: PatchCopy, From: from, Path: path}
+}
+
+// Test creates a JSON Patch test operation.
+func Test(path string, value any) JSONPatch {
+	return JSONPatch{Op: PatchTest, Path: path, Value: value}
 }
