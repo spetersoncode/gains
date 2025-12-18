@@ -15,18 +15,6 @@ import (
 	"github.com/spetersoncode/gains/tool"
 )
 
-// RunAgentInput represents the AG-UI request body for running an agent.
-// This mirrors the AG-UI protocol specification.
-type RunAgentInput struct {
-	ThreadID       string                `json:"thread_id"`
-	RunID          string                `json:"run_id"`
-	Messages       []aguievents.Message  `json:"messages"`
-	Tools          []any                 `json:"tools,omitempty"`    // Frontend-provided tools
-	Context        []any                 `json:"context,omitempty"`  // Context items (not used by this server)
-	State          any                   `json:"state,omitempty"`    // State (not used by this server)
-	ForwardedProps any                   `json:"forwarded_props,omitempty"`
-}
-
 // AgentHandler handles AG-UI agent requests over SSE.
 type AgentHandler struct {
 	agent    *agent.Agent
@@ -51,7 +39,7 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse request body
-	var input RunAgentInput
+	var input agui.RunAgentInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		slog.Warn("invalid request body", "error", err)
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -64,42 +52,35 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"thread_id", input.ThreadID,
 	)
 
-	// Parse and register frontend tools
-	var clientToolNames []string
-	if len(input.Tools) > 0 {
-		frontendTools, err := agui.ParseTools(input.Tools)
-		if err != nil {
-			log.Warn("failed to parse frontend tools", "error", err)
-		} else if len(frontendTools) > 0 {
-			gainsTools := agui.ToGainsTools(frontendTools)
-			if err := h.registry.RegisterClientTools(gainsTools); err != nil {
-				log.Warn("failed to register frontend tools", "error", err)
-			} else {
-				clientToolNames = agui.ToolNames(frontendTools)
-				log.Info("registered frontend tools", "count", len(clientToolNames), "names", clientToolNames)
-			}
+	// Validate and convert input
+	prepared, err := input.Prepare()
+	if err != nil {
+		log.Warn("invalid input", "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Register frontend tools if provided
+	if len(prepared.Tools) > 0 {
+		gainsTools := prepared.GainsTools()
+		if err := h.registry.RegisterClientTools(gainsTools); err != nil {
+			log.Warn("failed to register frontend tools", "error", err)
+		} else {
+			log.Info("registered frontend tools", "count", len(prepared.ToolNames), "names", prepared.ToolNames)
 		}
 	}
 
 	// Ensure cleanup of client tools after request
 	defer func() {
-		for _, name := range clientToolNames {
+		for _, name := range prepared.ToolNames {
 			h.registry.Unregister(name)
 		}
-		if len(clientToolNames) > 0 {
-			log.Debug("unregistered frontend tools", "count", len(clientToolNames))
+		if len(prepared.ToolNames) > 0 {
+			log.Debug("unregistered frontend tools", "count", len(prepared.ToolNames))
 		}
 	}()
 
-	// Convert AG-UI messages to gains messages
-	messages := agui.ToGainsMessages(input.Messages)
-	if len(messages) == 0 {
-		log.Warn("no messages provided")
-		http.Error(w, "No messages provided", http.StatusBadRequest)
-		return
-	}
-
-	log.Info("request started", "message_count", len(messages))
+	log.Info("request started", "message_count", len(prepared.Messages))
 
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -115,11 +96,11 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create mapper for this run
-	mapper := agui.NewMapper(input.ThreadID, input.RunID)
+	mapper := agui.NewMapper(prepared.ThreadID, prepared.RunID)
 
 	// Run agent with streaming
 	ctx := r.Context()
-	eventCh := h.agent.RunStream(ctx, messages,
+	eventCh := h.agent.RunStream(ctx, prepared.Messages,
 		agent.WithMaxSteps(h.config.MaxSteps),
 		agent.WithTimeout(h.config.Timeout),
 	)
@@ -138,7 +119,7 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		eventCount++
 		slog.Debug("sending SSE event",
-			"run_id", input.RunID,
+			"run_id", prepared.RunID,
 			"event_type", aguiEvent.Type(),
 			"event_num", eventCount,
 		)
