@@ -263,6 +263,79 @@ func TestMapper_MapEvent_ApprovalEventsReturnNil(t *testing.T) {
 	})
 }
 
+func TestMapper_MapStream(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("maps events and filters nils", func(t *testing.T) {
+		input := make(chan event.Event, 10)
+
+		// Send mix of mappable and non-mappable events
+		input <- event.Event{Type: event.RunStart}
+		input <- event.Event{Type: event.ToolCallApproved} // maps to nil
+		input <- event.Event{Type: event.MessageStart, MessageID: "msg-1"}
+		input <- event.Event{Type: event.ToolCallExecuting} // maps to nil
+		input <- event.Event{Type: event.MessageDelta, MessageID: "msg-1", Delta: "Hello"}
+		input <- event.Event{Type: event.RouteSelected} // maps to nil
+		input <- event.Event{Type: event.MessageEnd, MessageID: "msg-1"}
+		input <- event.Event{Type: event.RunEnd}
+		close(input)
+
+		output := m.MapStream(input)
+
+		var received []events.EventType
+		for ev := range output {
+			received = append(received, ev.Type())
+		}
+
+		expected := []events.EventType{
+			events.EventTypeRunStarted,
+			events.EventTypeTextMessageStart,
+			events.EventTypeTextMessageContent,
+			events.EventTypeTextMessageEnd,
+			events.EventTypeRunFinished,
+		}
+
+		if len(received) != len(expected) {
+			t.Fatalf("expected %d events, got %d: %v", len(expected), len(received), received)
+		}
+
+		for i, e := range expected {
+			if received[i] != e {
+				t.Errorf("event %d: expected %s, got %s", i, e, received[i])
+			}
+		}
+	})
+
+	t.Run("closes output when input closes", func(t *testing.T) {
+		input := make(chan event.Event)
+		output := m.MapStream(input)
+
+		close(input)
+
+		// Output should close after input closes
+		_, open := <-output
+		if open {
+			t.Error("expected output channel to be closed")
+		}
+	})
+
+	t.Run("handles empty input", func(t *testing.T) {
+		input := make(chan event.Event)
+		close(input)
+
+		output := m.MapStream(input)
+
+		var count int
+		for range output {
+			count++
+		}
+
+		if count != 0 {
+			t.Errorf("expected 0 events, got %d", count)
+		}
+	})
+}
+
 func TestToGainsMessage(t *testing.T) {
 	t.Run("user message", func(t *testing.T) {
 		content := "Hello"

@@ -11,7 +11,6 @@ import (
 
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/agui"
-	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -100,26 +99,17 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Run agent with streaming
 	ctx := r.Context()
-	eventCh := h.agent.RunStream(ctx, prepared.Messages,
+	gainsEvents := h.agent.RunStream(ctx, prepared.Messages,
 		agent.WithMaxSteps(h.config.MaxSteps),
 		agent.WithTimeout(h.config.Timeout),
 	)
 
-	// Stream events as SSE
+	// Stream events as SSE using the mapper's filtered stream
 	var eventCount int
 	var lastError error
-	for ev := range eventCh {
-		// Log the gains event at debug level
-		logGainsEvent(log, ev)
-
-		aguiEvent := mapper.MapEvent(ev)
-		if aguiEvent == nil {
-			continue // Skip events with no AG-UI equivalent
-		}
-
+	for aguiEvent := range mapper.MapStream(gainsEvents) {
 		eventCount++
-		slog.Debug("sending SSE event",
-			"run_id", prepared.RunID,
+		log.Debug("sending SSE event",
 			"event_type", aguiEvent.Type(),
 			"event_num", eventCount,
 		)
@@ -160,49 +150,6 @@ func writeSSE(w http.ResponseWriter, flusher http.Flusher, ev aguievents.Event) 
 
 	flusher.Flush()
 	return nil
-}
-
-// logGainsEvent logs a gains event at debug level with relevant details.
-func logGainsEvent(log *slog.Logger, ev event.Event) {
-	attrs := []any{
-		"type", string(ev.Type),
-	}
-
-	switch ev.Type {
-	case event.RunStart:
-		// Run started
-	case event.RunEnd:
-		if ev.Error != nil {
-			attrs = append(attrs, "error", ev.Error.Error())
-		}
-	case event.MessageStart:
-		attrs = append(attrs, "message_id", ev.MessageID)
-	case event.MessageDelta:
-		if len(ev.Delta) > 0 {
-			preview := ev.Delta
-			if len(preview) > 50 {
-				preview = preview[:50] + "..."
-			}
-			attrs = append(attrs, "content_preview", preview)
-		}
-	case event.MessageEnd:
-		attrs = append(attrs, "message_id", ev.MessageID)
-	case event.ToolCallStart, event.ToolCallEnd, event.ToolCallArgs:
-		if ev.ToolCall != nil {
-			attrs = append(attrs, "tool", ev.ToolCall.Name, "call_id", ev.ToolCall.ID)
-		}
-	case event.ToolCallResult:
-		if ev.ToolResult != nil {
-			attrs = append(attrs, "call_id", ev.ToolResult.ToolCallID)
-			if ev.ToolResult.IsError {
-				attrs = append(attrs, "is_error", true)
-			}
-		}
-	case event.StepStart, event.StepEnd:
-		attrs = append(attrs, "step", ev.StepName)
-	}
-
-	log.Debug("gains event", attrs...)
 }
 
 // corsMiddleware adds CORS headers for cross-origin frontend requests.

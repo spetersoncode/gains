@@ -61,6 +61,22 @@ func (m *Mapper) RunError(err error) events.Event {
 	return events.NewRunErrorEvent(msg)
 }
 
+// MapStream wraps a gains event channel and yields AG-UI events.
+// Events that have no AG-UI equivalent (returning nil from MapEvent) are filtered out.
+// The returned channel closes when the input channel closes.
+func (m *Mapper) MapStream(input <-chan event.Event) <-chan events.Event {
+	output := make(chan events.Event, 100)
+	go func() {
+		defer close(output)
+		for e := range input {
+			if aguiEvent := m.MapEvent(e); aguiEvent != nil {
+				output <- aguiEvent
+			}
+		}
+	}()
+	return output
+}
+
 // MapEvent converts a unified gains event to an AG-UI event.
 // This is a true 1:1 mapping - each gains event maps to exactly one AG-UI event.
 // Returns nil for events that have no AG-UI equivalent.
