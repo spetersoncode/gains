@@ -17,24 +17,43 @@ import (
 // Create a new Mapper for each run using NewMapper. The Mapper is not
 // safe for concurrent use - each goroutine should have its own Mapper.
 type Mapper struct {
-	threadID string
-	runID    string
-	runDepth int // Tracks nesting depth of runs
+	threadID     string
+	runID        string
+	runDepth     int  // Tracks nesting depth of runs
+	initialState any  // Optional initial state to emit after first RunStart
+	stateEmitted bool // Track whether initial state has been emitted
+}
+
+// MapperOption configures a Mapper.
+type MapperOption func(*Mapper)
+
+// WithInitialState configures the mapper to emit a STATE_SNAPSHOT event
+// with the given state immediately after RUN_STARTED. This ensures the
+// frontend has the initial state for shared state synchronization.
+func WithInitialState(state any) MapperOption {
+	return func(m *Mapper) {
+		m.initialState = state
+	}
 }
 
 // NewMapper creates a new Mapper for a single run.
 // The threadID and runID are used in lifecycle events (RUN_STARTED, RUN_FINISHED).
-func NewMapper(threadID, runID string) *Mapper {
+// Use WithInitialState to emit an initial STATE_SNAPSHOT after RUN_STARTED.
+func NewMapper(threadID, runID string, opts ...MapperOption) *Mapper {
 	if threadID == "" {
 		threadID = events.GenerateThreadID()
 	}
 	if runID == "" {
 		runID = events.GenerateRunID()
 	}
-	return &Mapper{
+	m := &Mapper{
 		threadID: threadID,
 		runID:    runID,
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // ThreadID returns the thread ID for this mapper.
@@ -85,6 +104,9 @@ func (m *Mapper) StateDelta(patches ...event.JSONPatch) events.Event {
 // MapStream wraps a gains event channel and yields AG-UI events.
 // Events that have no AG-UI equivalent (returning nil from MapEvent) are filtered out.
 // The returned channel closes when the input channel closes.
+//
+// If the mapper was created with WithInitialState, a STATE_SNAPSHOT event is
+// automatically emitted after the first RUN_STARTED event.
 func (m *Mapper) MapStream(input <-chan event.Event) <-chan events.Event {
 	output := make(chan events.Event, 100)
 	go func() {
@@ -92,6 +114,12 @@ func (m *Mapper) MapStream(input <-chan event.Event) <-chan events.Event {
 		for e := range input {
 			if aguiEvent := m.MapEvent(e); aguiEvent != nil {
 				output <- aguiEvent
+
+				// Emit initial state snapshot after first RUN_STARTED
+				if aguiEvent.Type() == events.EventTypeRunStarted && m.initialState != nil && !m.stateEmitted {
+					m.stateEmitted = true
+					output <- m.StateSnapshot(m.initialState)
+				}
 			}
 		}
 	}()

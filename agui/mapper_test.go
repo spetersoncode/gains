@@ -201,6 +201,97 @@ func TestMapper_NestedRuns(t *testing.T) {
 	})
 }
 
+func TestMapper_WithInitialState(t *testing.T) {
+	t.Run("emits STATE_SNAPSHOT after RUN_STARTED", func(t *testing.T) {
+		initialState := map[string]any{
+			"progress": 0,
+			"items":    []string{},
+		}
+		m := NewMapper("thread-1", "run-1", WithInitialState(initialState))
+
+		input := make(chan event.Event, 10)
+		input <- event.Event{Type: event.RunStart}
+		input <- event.Event{Type: event.MessageStart, MessageID: "msg-1"}
+		input <- event.Event{Type: event.MessageEnd, MessageID: "msg-1"}
+		input <- event.Event{Type: event.RunEnd}
+		close(input)
+
+		output := m.MapStream(input)
+
+		var received []events.EventType
+		for ev := range output {
+			received = append(received, ev.Type())
+		}
+
+		expected := []events.EventType{
+			events.EventTypeRunStarted,
+			events.EventTypeStateSnapshot, // Emitted after RUN_STARTED
+			events.EventTypeTextMessageStart,
+			events.EventTypeTextMessageEnd,
+			events.EventTypeRunFinished,
+		}
+
+		if len(received) != len(expected) {
+			t.Fatalf("expected %d events, got %d: %v", len(expected), len(received), received)
+		}
+
+		for i, e := range expected {
+			if received[i] != e {
+				t.Errorf("event %d: expected %s, got %s", i, e, received[i])
+			}
+		}
+	})
+
+	t.Run("only emits once for nested runs", func(t *testing.T) {
+		m := NewMapper("thread-1", "run-1", WithInitialState(map[string]any{"x": 1}))
+
+		input := make(chan event.Event, 20)
+		input <- event.Event{Type: event.RunStart}  // outer - triggers snapshot
+		input <- event.Event{Type: event.RunStart}  // nested - filtered
+		input <- event.Event{Type: event.RunEnd}    // nested end - filtered
+		input <- event.Event{Type: event.RunEnd}    // outer end
+		close(input)
+
+		output := m.MapStream(input)
+
+		var stateSnapshots int
+		for ev := range output {
+			if ev.Type() == events.EventTypeStateSnapshot {
+				stateSnapshots++
+			}
+		}
+
+		if stateSnapshots != 1 {
+			t.Errorf("expected 1 STATE_SNAPSHOT, got %d", stateSnapshots)
+		}
+	})
+
+	t.Run("no snapshot without WithInitialState", func(t *testing.T) {
+		m := NewMapper("thread-1", "run-1") // No initial state
+
+		input := make(chan event.Event, 10)
+		input <- event.Event{Type: event.RunStart}
+		input <- event.Event{Type: event.RunEnd}
+		close(input)
+
+		output := m.MapStream(input)
+
+		var received []events.EventType
+		for ev := range output {
+			received = append(received, ev.Type())
+		}
+
+		expected := []events.EventType{
+			events.EventTypeRunStarted,
+			events.EventTypeRunFinished,
+		}
+
+		if len(received) != len(expected) {
+			t.Fatalf("expected %d events, got %d: %v", len(expected), len(received), received)
+		}
+	})
+}
+
 func TestMapper_MapEvent_MessageLifecycle(t *testing.T) {
 	m := NewMapper("thread-1", "run-1")
 
