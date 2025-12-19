@@ -183,3 +183,42 @@ func TestResponseFormatConstants(t *testing.T) {
 	assert.Equal(t, ResponseFormat("text"), ResponseFormatText)
 	assert.Equal(t, ResponseFormat("json"), ResponseFormatJSON)
 }
+
+func TestWithRetry(t *testing.T) {
+	t.Run("sets retry config", func(t *testing.T) {
+		cfg := NewRetryConfig(5, 100, 1000, 1.5, 0.2)
+		opts := ApplyOptions(WithRetry(cfg))
+
+		require.NotNil(t, opts.RetryConfig)
+		assert.Equal(t, 5, opts.RetryConfig.MaxAttempts)
+		assert.Equal(t, 1.5, opts.RetryConfig.Multiplier)
+	})
+
+	t.Run("default retry config unchanged when nil", func(t *testing.T) {
+		opts := ApplyOptions()
+		assert.Nil(t, opts.RetryConfig)
+	})
+}
+
+func TestWithRetryDisabled(t *testing.T) {
+	t.Run("sets retry config with max attempts 1", func(t *testing.T) {
+		opts := ApplyOptions(WithRetryDisabled())
+
+		require.NotNil(t, opts.RetryConfig)
+		assert.Equal(t, 1, opts.RetryConfig.MaxAttempts)
+	})
+}
+
+func TestDefaultRetryConfig(t *testing.T) {
+	cfg := DefaultRetryConfig()
+
+	assert.Equal(t, 10, cfg.MaxAttempts)
+	assert.Equal(t, 2.0, cfg.Multiplier)
+	assert.Equal(t, 0.1, cfg.Jitter)
+}
+
+func TestDisabledRetryConfig(t *testing.T) {
+	cfg := DisabledRetryConfig()
+
+	assert.Equal(t, 1, cfg.MaxAttempts)
+}

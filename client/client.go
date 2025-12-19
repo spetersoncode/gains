@@ -354,7 +354,13 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		go c.forwardRetryEvents(retryEvents, "chat", provider)
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.Response, error) {
+	// Use per-call retry config if specified, otherwise use client default
+	retryConfig := c.retryConfig
+	if options.RetryConfig != nil {
+		retryConfig = toInternalRetryConfig(options.RetryConfig)
+	}
+
+	resp, err := retry.DoWithEvents(ctx, retryConfig, retryEvents, func() (*ai.Response, error) {
 		return chatProvider.Chat(ctx, messages, opts...)
 	})
 
@@ -431,7 +437,13 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		go c.forwardRetryEvents(retryEvents, "chat_stream", provider)
 	}
 
-	providerCh, err := retry.DoStreamWithEvents(ctx, c.retryConfig, retryEvents, func() (<-chan ai.StreamEvent, error) {
+	// Use per-call retry config if specified, otherwise use client default
+	retryConfig := c.retryConfig
+	if options.RetryConfig != nil {
+		retryConfig = toInternalRetryConfig(options.RetryConfig)
+	}
+
+	providerCh, err := retry.DoStreamWithEvents(ctx, retryConfig, retryEvents, func() (<-chan ai.StreamEvent, error) {
 		return chatProvider.ChatStream(ctx, messages, opts...)
 	})
 
@@ -585,7 +597,13 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.Im
 		go c.forwardRetryEvents(retryEvents, "image", provider)
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.ImageResponse, error) {
+	// Use per-call retry config if specified, otherwise use client default
+	retryConfig := c.retryConfig
+	if options.RetryConfig != nil {
+		retryConfig = toInternalRetryConfig(options.RetryConfig)
+	}
+
+	resp, err := retry.DoWithEvents(ctx, retryConfig, retryEvents, func() (*ai.ImageResponse, error) {
 		return imageProvider.GenerateImage(ctx, prompt, opts...)
 	})
 
@@ -674,7 +692,13 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 		go c.forwardRetryEvents(retryEvents, "embed", provider)
 	}
 
-	resp, err := retry.DoWithEvents(ctx, c.retryConfig, retryEvents, func() (*ai.EmbeddingResponse, error) {
+	// Use per-call retry config if specified, otherwise use client default
+	retryConfig := c.retryConfig
+	if options.RetryConfig != nil {
+		retryConfig = toInternalRetryConfig(options.RetryConfig)
+	}
+
+	resp, err := retry.DoWithEvents(ctx, retryConfig, retryEvents, func() (*ai.EmbeddingResponse, error) {
 		return embedProvider.Embed(ctx, texts, opts...)
 	})
 

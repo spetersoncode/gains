@@ -3,11 +3,23 @@ package client
 import (
 	"time"
 
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/internal/retry"
 )
 
 // RetryConfig holds retry configuration parameters.
 type RetryConfig = retry.Config
+
+// toInternalRetryConfig converts a gains.RetryConfig to internal retry.Config.
+func toInternalRetryConfig(cfg *ai.RetryConfig) retry.Config {
+	return retry.Config{
+		MaxAttempts:  cfg.MaxAttempts,
+		InitialDelay: cfg.InitialDelay,
+		MaxDelay:     cfg.MaxDelay,
+		Multiplier:   cfg.Multiplier,
+		Jitter:       cfg.Jitter,
+	}
+}
 
 // RetryEvent represents an observable occurrence during retry execution.
 type RetryEvent = retry.Event

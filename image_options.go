@@ -2,12 +2,13 @@ package gains
 
 // ImageOptions contains configuration for an image generation request.
 type ImageOptions struct {
-	Model   Model
-	Size    ImageSize
-	Count   int
-	Quality ImageQuality
-	Style   ImageStyle
-	Format  ImageFormat
+	Model       Model
+	Size        ImageSize
+	Count       int
+	Quality     ImageQuality
+	Style       ImageStyle
+	Format      ImageFormat
+	RetryConfig *RetryConfig // Per-call retry config override (nil = use client default)
 }
 
 // ImageOption is a functional option for configuring image generation requests.
@@ -58,6 +59,21 @@ func WithImageStyle(s ImageStyle) ImageOption {
 func WithImageFormat(f ImageFormat) ImageOption {
 	return func(o *ImageOptions) {
 		o.Format = f
+	}
+}
+
+// WithImageRetry overrides the client's default retry configuration for this request.
+func WithImageRetry(cfg RetryConfig) ImageOption {
+	return func(o *ImageOptions) {
+		o.RetryConfig = &cfg
+	}
+}
+
+// WithImageRetryDisabled disables retry for this request (single attempt).
+func WithImageRetryDisabled() ImageOption {
+	return func(o *ImageOptions) {
+		disabled := DisabledRetryConfig()
+		o.RetryConfig = &disabled
 	}
 }
 

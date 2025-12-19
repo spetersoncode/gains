@@ -2,9 +2,10 @@ package gains
 
 // EmbeddingOptions contains configuration for an embedding request.
 type EmbeddingOptions struct {
-	Model      Model
-	Dimensions int
-	TaskType   EmbeddingTaskType
+	Model       Model
+	Dimensions  int
+	TaskType    EmbeddingTaskType
+	RetryConfig *RetryConfig // Per-call retry config override (nil = use client default)
 }
 
 // EmbeddingOption is a functional option for configuring embedding requests.
@@ -32,6 +33,21 @@ func WithEmbeddingDimensions(dims int) EmbeddingOption {
 func WithEmbeddingTaskType(taskType EmbeddingTaskType) EmbeddingOption {
 	return func(o *EmbeddingOptions) {
 		o.TaskType = taskType
+	}
+}
+
+// WithEmbeddingRetry overrides the client's default retry configuration for this request.
+func WithEmbeddingRetry(cfg RetryConfig) EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		o.RetryConfig = &cfg
+	}
+}
+
+// WithEmbeddingRetryDisabled disables retry for this request (single attempt).
+func WithEmbeddingRetryDisabled() EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		disabled := DisabledRetryConfig()
+		o.RetryConfig = &disabled
 	}
 }
 

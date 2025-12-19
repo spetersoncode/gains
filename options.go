@@ -41,6 +41,7 @@ type Options struct {
 	ToolChoice     ToolChoice
 	ResponseFormat ResponseFormat
 	ResponseSchema *ResponseSchema
+	RetryConfig    *RetryConfig // Per-call retry config override (nil = use client default)
 }
 
 // Option is a functional option for configuring chat requests.
@@ -97,6 +98,22 @@ func WithResponseSchema(schema ResponseSchema) Option {
 	return func(o *Options) {
 		o.ResponseFormat = ResponseFormatJSON
 		o.ResponseSchema = &schema
+	}
+}
+
+// WithRetry overrides the client's default retry configuration for this request.
+// Use DefaultRetryConfig(), DisabledRetryConfig(), or NewRetryConfig() to create configs.
+func WithRetry(cfg RetryConfig) Option {
+	return func(o *Options) {
+		o.RetryConfig = &cfg
+	}
+}
+
+// WithRetryDisabled disables retry for this request (single attempt).
+func WithRetryDisabled() Option {
+	return func(o *Options) {
+		disabled := DisabledRetryConfig()
+		o.RetryConfig = &disabled
 	}
 }
 
