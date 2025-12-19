@@ -1,8 +1,7 @@
 // Package store provides pluggable state management for gains workflows and agents.
 //
-// The package offers three main types:
+// The package offers two main types:
 //   - [Store]: A generic key-value store with map[string]any semantics
-//   - [TypedStore]: A type-safe wrapper for managing specific state structs
 //   - [MessageStore]: A specialized store for conversation history
 //
 // All types support pluggable persistence through the [Adapter] interface,
@@ -18,26 +17,6 @@
 //
 //	name := s.GetString("name")  // "Alice"
 //	count := s.GetInt("count")   // 42
-//
-// # Type-Safe Store
-//
-// Use TypedStore for structured state:
-//
-//	type WorkflowState struct {
-//	    Input    string
-//	    Results  []string
-//	    Complete bool
-//	}
-//
-//	s := store.NewTyped(WorkflowState{Input: "hello"}, nil)
-//
-//	// Read state
-//	state := s.Get()
-//
-//	// Update state
-//	s.Update(func(state *WorkflowState) {
-//	    state.Results = append(state.Results, "result1")
-//	})
 //
 // # Message Store
 //
