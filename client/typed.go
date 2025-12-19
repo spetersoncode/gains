@@ -75,7 +75,7 @@ func ChatTyped[T any](ctx context.Context, c *Client, msgs []ai.Message, opts ..
 	// Unmarshal the response
 	var result T
 	if err := json.Unmarshal([]byte(resp.Content), &result); err != nil {
-		return zero, &UnmarshalError{
+		return zero, &ai.UnmarshalError{
 			Content:    resp.Content,
 			TargetType: t.String(),
 			Err:        err,
@@ -83,22 +83,6 @@ func ChatTyped[T any](ctx context.Context, c *Client, msgs []ai.Message, opts ..
 	}
 
 	return result, nil
-}
-
-// UnmarshalError is returned when the LLM response cannot be unmarshaled
-// into the target type.
-type UnmarshalError struct {
-	Content    string
-	TargetType string
-	Err        error
-}
-
-func (e *UnmarshalError) Error() string {
-	return fmt.Sprintf("failed to unmarshal response into %s: %v", e.TargetType, e.Err)
-}
-
-func (e *UnmarshalError) Unwrap() error {
-	return e.Err
 }
 
 // toSnakeCase converts a CamelCase string to snake_case.

@@ -1,7 +1,6 @@
 package client
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,27 +30,4 @@ func TestToSnakeCase(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
-}
-
-func TestUnmarshalError(t *testing.T) {
-	t.Run("Error returns formatted message", func(t *testing.T) {
-		err := &UnmarshalError{
-			Content:    `{"invalid": json`,
-			TargetType: "BookInfo",
-			Err:        errors.New("unexpected end of JSON input"),
-		}
-		expected := "failed to unmarshal response into BookInfo: unexpected end of JSON input"
-		assert.Equal(t, expected, err.Error())
-	})
-
-	t.Run("Unwrap returns underlying error", func(t *testing.T) {
-		underlying := errors.New("parse error")
-		err := &UnmarshalError{
-			Content:    "invalid",
-			TargetType: "TestType",
-			Err:        underlying,
-		}
-		assert.Equal(t, underlying, err.Unwrap())
-		assert.True(t, errors.Is(err, underlying))
-	})
 }

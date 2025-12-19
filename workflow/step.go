@@ -262,8 +262,8 @@ func (p *TypedPromptStep[T]) Run(ctx context.Context, state *State, opts ...Opti
 	// Unmarshal response content into T
 	var result T
 	if err := json.Unmarshal([]byte(resp.Content), &result); err != nil {
-		return nil, &UnmarshalError{
-			StepName:   p.name,
+		return nil, &ai.UnmarshalError{
+			Context:    fmt.Sprintf("workflow: step %q", p.name),
 			Content:    resp.Content,
 			TargetType: fmt.Sprintf("%T", result),
 			Err:        err,
@@ -328,8 +328,8 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 				event.Emit(ch, Event{
 					Type:     event.RunError,
 					StepName: p.name,
-					Error: &UnmarshalError{
-						StepName:   p.name,
+					Error: &ai.UnmarshalError{
+						Context:    fmt.Sprintf("workflow: step %q", p.name),
 						Content:    response.Content,
 						TargetType: fmt.Sprintf("%T", result),
 						Err:        err,

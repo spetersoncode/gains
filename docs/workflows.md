@@ -1115,11 +1115,10 @@ if errors.As(err, &parallelErr) {
 }
 
 // Structured output unmarshaling failed
-var unmarshalErr *workflow.UnmarshalError
+var unmarshalErr *gains.UnmarshalError
 if errors.As(err, &unmarshalErr) {
-    fmt.Printf("Failed to parse %s response as %s: %v\nContent: %s\n",
-        unmarshalErr.StepName, unmarshalErr.TargetType,
-        unmarshalErr.Err, unmarshalErr.Content)
+    fmt.Printf("Failed to parse response as %s: %v\nContent: %s\n",
+        unmarshalErr.TargetType, unmarshalErr.Err, unmarshalErr.Content)
 }
 
 // Tool execution failed

@@ -166,6 +166,28 @@ func RetryAfterOf(err error) time.Duration {
 	return 0
 }
 
+// UnmarshalError is returned when an LLM response cannot be unmarshaled
+// into the expected type.
+type UnmarshalError struct {
+	Content    string // Raw response content for debugging
+	TargetType string // The type we tried to unmarshal into
+	Context    string // Optional context (e.g., step name) for error messages
+	Err        error  // The underlying unmarshal error
+}
+
+// Error returns a formatted error message.
+func (e *UnmarshalError) Error() string {
+	if e.Context != "" {
+		return fmt.Sprintf("%s: failed to unmarshal response into %s: %v", e.Context, e.TargetType, e.Err)
+	}
+	return fmt.Sprintf("failed to unmarshal response into %s: %v", e.TargetType, e.Err)
+}
+
+// Unwrap returns the underlying error for use with errors.Is and errors.As.
+func (e *UnmarshalError) Unwrap() error {
+	return e.Err
+}
+
 // ImageError represents an error during image processing.
 type ImageError struct {
 	Op  string // "decode" or "fetch"

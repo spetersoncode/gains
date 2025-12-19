@@ -81,6 +81,40 @@ func TestImageError(t *testing.T) {
 	})
 }
 
+func TestUnmarshalError(t *testing.T) {
+	t.Run("Error without context", func(t *testing.T) {
+		err := &UnmarshalError{
+			Content:    `{"invalid": json}`,
+			TargetType: "BookInfo",
+			Err:        errors.New("unexpected end of JSON input"),
+		}
+		expected := "failed to unmarshal response into BookInfo: unexpected end of JSON input"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("Error with context", func(t *testing.T) {
+		err := &UnmarshalError{
+			Context:    "workflow: step \"parse\"",
+			Content:    `{"invalid": json}`,
+			TargetType: "BookInfo",
+			Err:        errors.New("unexpected end of JSON input"),
+		}
+		expected := "workflow: step \"parse\": failed to unmarshal response into BookInfo: unexpected end of JSON input"
+		assert.Equal(t, expected, err.Error())
+	})
+
+	t.Run("Unwrap returns underlying error", func(t *testing.T) {
+		underlying := errors.New("parse error")
+		err := &UnmarshalError{
+			Content:    "invalid",
+			TargetType: "TestType",
+			Err:        underlying,
+		}
+		assert.Equal(t, underlying, err.Unwrap())
+		assert.True(t, errors.Is(err, underlying))
+	})
+}
+
 func TestErrorCategory(t *testing.T) {
 	t.Run("constants have expected values", func(t *testing.T) {
 		assert.Equal(t, ErrorCategory("transient"), ErrorTransient)
