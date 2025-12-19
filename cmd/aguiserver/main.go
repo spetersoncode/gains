@@ -73,12 +73,18 @@ func main() {
 	// Create agent
 	a := agent.New(gainsClient, registry)
 
-	// Create HTTP handler
+	// Create workflow registry with demo workflows
+	workflowRegistry := SetupDemoWorkflows(gainsClient)
+	slog.Info("registered demo workflows", "count", workflowRegistry.Len(), "names", workflowRegistry.Names())
+
+	// Create HTTP handlers
 	handler := NewAgentHandler(a, registry, cfg)
+	workflowHandler := NewWorkflowHandler(workflowRegistry, cfg)
 
 	// Setup routes
 	mux := http.NewServeMux()
 	mux.Handle("/api/agent", corsMiddleware(handler))
+	mux.Handle("/api/workflow", corsMiddleware(workflowHandler))
 	mux.HandleFunc("/health", healthHandler)
 
 	// Create server
@@ -110,7 +116,8 @@ func main() {
 		"port", cfg.Port,
 		"provider", cfg.Provider,
 		"log_level", cfg.LogLevel,
-		"endpoint", fmt.Sprintf("POST http://localhost:%s/api/agent", cfg.Port),
+		"agent_endpoint", fmt.Sprintf("POST http://localhost:%s/api/agent", cfg.Port),
+		"workflow_endpoint", fmt.Sprintf("POST http://localhost:%s/api/workflow", cfg.Port),
 		"health", fmt.Sprintf("GET http://localhost:%s/health", cfg.Port),
 	)
 

@@ -452,3 +452,137 @@ func TestRunAgentInput_JSON(t *testing.T) {
 		t.Errorf("len(Tools) = %d, want 1", len(input.Tools))
 	}
 }
+
+func TestRunWorkflowInput_Prepare(t *testing.T) {
+	t.Run("valid input with workflow name", func(t *testing.T) {
+		input := RunWorkflowInput{
+			ThreadID:     "thread-1",
+			RunID:        "run-1",
+			WorkflowName: "my-workflow",
+			State: map[string]any{
+				"query": "test query",
+			},
+		}
+
+		prepared, err := input.Prepare()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if prepared.ThreadID != "thread-1" {
+			t.Errorf("ThreadID = %q, want %q", prepared.ThreadID, "thread-1")
+		}
+		if prepared.RunID != "run-1" {
+			t.Errorf("RunID = %q, want %q", prepared.RunID, "run-1")
+		}
+		if prepared.WorkflowName != "my-workflow" {
+			t.Errorf("WorkflowName = %q, want %q", prepared.WorkflowName, "my-workflow")
+		}
+		if prepared.State == nil {
+			t.Error("State should not be nil")
+		}
+	})
+
+	t.Run("empty workflow name returns error", func(t *testing.T) {
+		input := RunWorkflowInput{
+			ThreadID: "thread-1",
+			RunID:    "run-1",
+		}
+
+		_, err := input.Prepare()
+		if err != ErrNoWorkflowName {
+			t.Errorf("error = %v, want ErrNoWorkflowName", err)
+		}
+	})
+
+	t.Run("state is optional", func(t *testing.T) {
+		input := RunWorkflowInput{
+			ThreadID:     "thread-1",
+			RunID:        "run-1",
+			WorkflowName: "my-workflow",
+		}
+
+		prepared, err := input.Prepare()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if prepared.State != nil {
+			t.Error("State should be nil when not provided")
+		}
+	})
+}
+
+func TestDecodeWorkflowState(t *testing.T) {
+	type TestState struct {
+		Query   string   `json:"query"`
+		Results []string `json:"results"`
+	}
+
+	t.Run("decodes state into struct", func(t *testing.T) {
+		input := &PreparedWorkflowInput{
+			State: map[string]any{
+				"query":   "test",
+				"results": []any{"a", "b"},
+			},
+		}
+
+		state, err := DecodeWorkflowState[TestState](input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if state.Query != "test" {
+			t.Errorf("Query = %q, want %q", state.Query, "test")
+		}
+		if len(state.Results) != 2 {
+			t.Errorf("len(Results) = %d, want 2", len(state.Results))
+		}
+	})
+
+	t.Run("nil state returns zero value", func(t *testing.T) {
+		input := &PreparedWorkflowInput{
+			State: nil,
+		}
+
+		state, err := DecodeWorkflowState[TestState](input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if state.Query != "" {
+			t.Errorf("Query = %q, want empty string", state.Query)
+		}
+	})
+}
+
+func TestMustDecodeWorkflowState(t *testing.T) {
+	type TestState struct {
+		Value int `json:"value"`
+	}
+
+	t.Run("returns decoded state", func(t *testing.T) {
+		input := &PreparedWorkflowInput{
+			State: map[string]any{"value": 42},
+		}
+
+		state := MustDecodeWorkflowState[TestState](input)
+		if state.Value != 42 {
+			t.Errorf("Value = %d, want 42", state.Value)
+		}
+	})
+
+	t.Run("panics on invalid state", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+
+		input := &PreparedWorkflowInput{
+			State: func() {}, // Functions can't be marshaled
+		}
+
+		_ = MustDecodeWorkflowState[TestState](input)
+	})
+}

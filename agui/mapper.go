@@ -119,6 +119,16 @@ func (m *Mapper) MessagesSnapshot(messages []ai.Message) events.Event {
 	return events.NewMessagesSnapshotEvent(FromGainsMessages(messages))
 }
 
+// ActivitySnapshot returns an ACTIVITY_SNAPSHOT event.
+func (m *Mapper) ActivitySnapshot(activityID string, activityType event.ActivityType, content any) events.Event {
+	return events.NewActivitySnapshotEvent(activityID, string(activityType), content)
+}
+
+// ActivityDelta returns an ACTIVITY_DELTA event.
+func (m *Mapper) ActivityDelta(activityID string, activityType event.ActivityType, patches []event.JSONPatch) events.Event {
+	return events.NewActivityDeltaEvent(activityID, string(activityType), toAGUIPatches(patches))
+}
+
 // MapStream wraps a gains event channel and yields AG-UI events.
 // Events that have no AG-UI equivalent (returning nil from MapEvent) are filtered out.
 // The returned channel closes when the input channel closes.
@@ -245,6 +255,12 @@ func (m *Mapper) MapEvent(e event.Event) events.Event {
 		return events.NewStateDeltaEvent(toAGUIPatches(e.StatePatches))
 	case event.MessagesSnapshot:
 		return events.NewMessagesSnapshotEvent(FromGainsMessages(e.Messages))
+
+	// Activity events (human-in-the-loop)
+	case event.ActivitySnapshot:
+		return events.NewActivitySnapshotEvent(e.ActivityID, string(e.Activity), e.ActivityContent)
+	case event.ActivityDelta:
+		return events.NewActivityDeltaEvent(e.ActivityID, string(e.Activity), toAGUIPatches(e.ActivityPatches))
 
 	default:
 		return nil

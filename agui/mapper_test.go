@@ -785,3 +785,86 @@ func TestFromGainsMessage(t *testing.T) {
 		}
 	})
 }
+
+func TestMapper_ActivityEvents(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("ActivitySnapshot maps to ACTIVITY_SNAPSHOT", func(t *testing.T) {
+		gainsEvent := event.NewToolApprovalPending("call-123", "run_command", `{"cmd": "ls"}`)
+		aguiEvent := m.MapEvent(gainsEvent)
+
+		if aguiEvent == nil {
+			t.Fatal("expected non-nil event")
+		}
+		if aguiEvent.Type() != events.EventTypeActivitySnapshot {
+			t.Errorf("expected ACTIVITY_SNAPSHOT, got %s", aguiEvent.Type())
+		}
+
+		snapshot, ok := aguiEvent.(*events.ActivitySnapshotEvent)
+		if !ok {
+			t.Fatal("expected ActivitySnapshotEvent")
+		}
+		if snapshot.MessageID != "call-123" {
+			t.Errorf("expected messageId 'call-123', got %q", snapshot.MessageID)
+		}
+		if snapshot.ActivityType != "tool_approval" {
+			t.Errorf("expected activityType 'tool_approval', got %q", snapshot.ActivityType)
+		}
+	})
+
+	t.Run("ActivityDelta maps to ACTIVITY_DELTA", func(t *testing.T) {
+		gainsEvent := event.NewToolApprovalApproved("call-123")
+		aguiEvent := m.MapEvent(gainsEvent)
+
+		if aguiEvent == nil {
+			t.Fatal("expected non-nil event")
+		}
+		if aguiEvent.Type() != events.EventTypeActivityDelta {
+			t.Errorf("expected ACTIVITY_DELTA, got %s", aguiEvent.Type())
+		}
+
+		delta, ok := aguiEvent.(*events.ActivityDeltaEvent)
+		if !ok {
+			t.Fatal("expected ActivityDeltaEvent")
+		}
+		if delta.MessageID != "call-123" {
+			t.Errorf("expected messageId 'call-123', got %q", delta.MessageID)
+		}
+		if delta.ActivityType != "tool_approval" {
+			t.Errorf("expected activityType 'tool_approval', got %q", delta.ActivityType)
+		}
+		if len(delta.Patch) == 0 {
+			t.Error("expected patch operations")
+		}
+	})
+
+	t.Run("ActivityDelta rejected includes reason patch", func(t *testing.T) {
+		gainsEvent := event.NewToolApprovalRejected("call-456", "dangerous operation")
+		aguiEvent := m.MapEvent(gainsEvent)
+
+		delta, ok := aguiEvent.(*events.ActivityDeltaEvent)
+		if !ok {
+			t.Fatal("expected ActivityDeltaEvent")
+		}
+		if len(delta.Patch) != 2 {
+			t.Errorf("expected 2 patch operations, got %d", len(delta.Patch))
+		}
+
+		// Check that both status and reason patches are present
+		var hasStatus, hasReason bool
+		for _, p := range delta.Patch {
+			if p.Path == "/status" {
+				hasStatus = true
+			}
+			if p.Path == "/reason" {
+				hasReason = true
+			}
+		}
+		if !hasStatus {
+			t.Error("expected /status patch")
+		}
+		if !hasReason {
+			t.Error("expected /reason patch")
+		}
+	})
+}

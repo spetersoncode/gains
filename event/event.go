@@ -120,6 +120,51 @@ const (
 	MessagesSnapshot Type = "messages_snapshot"
 )
 
+// Activity events (AG-UI human-in-the-loop)
+const (
+	// ActivitySnapshot fires to send the complete activity state to the frontend.
+	// Used for tool approval UI, loading states, and other transient activities.
+	ActivitySnapshot Type = "activity_snapshot"
+
+	// ActivityDelta fires to send incremental activity state changes.
+	ActivityDelta Type = "activity_delta"
+)
+
+// ActivityType categorizes activities for AG-UI ACTIVITY events.
+type ActivityType string
+
+// Activity type constants for human-in-the-loop interactions.
+const (
+	// ActivityToolApproval indicates a tool call awaiting user approval.
+	ActivityToolApproval ActivityType = "tool_approval"
+
+	// ActivityLoading indicates a loading/processing state.
+	ActivityLoading ActivityType = "loading"
+
+	// ActivityUserInput indicates a request for user input.
+	ActivityUserInput ActivityType = "user_input"
+)
+
+// ApprovalStatus represents the status of a tool approval request.
+type ApprovalStatus string
+
+// Approval status constants.
+const (
+	ApprovalPending  ApprovalStatus = "pending"
+	ApprovalApproved ApprovalStatus = "approved"
+	ApprovalRejected ApprovalStatus = "rejected"
+)
+
+// ToolApprovalActivity represents the state of a tool approval request.
+// This is the content structure for ActivityToolApproval events.
+type ToolApprovalActivity struct {
+	ToolCallID string         `json:"toolCallId"`
+	ToolName   string         `json:"toolName"`
+	Arguments  string         `json:"arguments"`
+	Status     ApprovalStatus `json:"status"`
+	Reason     string         `json:"reason,omitempty"` // Reason for rejection
+}
+
 // PatchOp represents a JSON Patch operation type (RFC 6902).
 type PatchOp string
 
@@ -195,6 +240,12 @@ type Event struct {
 
 	// Messages contains the complete message history for MessagesSnapshot events.
 	Messages []ai.Message
+
+	// Activity fields for ActivitySnapshot and ActivityDelta events.
+	ActivityID      string       // Unique ID for activity correlation
+	Activity        ActivityType // Type of activity (tool_approval, loading, etc.)
+	ActivityContent any          // Content for the activity (e.g., ToolApprovalActivity)
+	ActivityPatches []JSONPatch  // Patches for ActivityDelta events
 
 	// Timestamp is when the event occurred.
 	Timestamp time.Time
@@ -306,4 +357,68 @@ func NewMessagesSnapshot(messages []ai.Message) Event {
 //	event.EmitMessagesSnapshot(eventCh, conversation.Messages())
 func EmitMessagesSnapshot(ch chan<- Event, messages []ai.Message) {
 	Emit(ch, NewMessagesSnapshot(messages))
+}
+
+// NewActivitySnapshot creates an ActivitySnapshot event.
+// The activityID should be unique for each activity instance and is used
+// for correlation between snapshot and delta events.
+func NewActivitySnapshot(activityID string, activityType ActivityType, content any) Event {
+	return Event{
+		Type:            ActivitySnapshot,
+		ActivityID:      activityID,
+		Activity:        activityType,
+		ActivityContent: content,
+	}
+}
+
+// NewActivityDelta creates an ActivityDelta event.
+// Use the same activityID as the corresponding ActivitySnapshot to update it.
+func NewActivityDelta(activityID string, activityType ActivityType, patches ...JSONPatch) Event {
+	return Event{
+		Type:            ActivityDelta,
+		ActivityID:      activityID,
+		Activity:        activityType,
+		ActivityPatches: patches,
+	}
+}
+
+// NewToolApprovalPending creates an ActivitySnapshot event for a pending tool approval.
+// The frontend will display this as a tool approval request with approve/reject buttons.
+func NewToolApprovalPending(toolCallID, toolName, arguments string) Event {
+	return NewActivitySnapshot(toolCallID, ActivityToolApproval, ToolApprovalActivity{
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+		Arguments:  arguments,
+		Status:     ApprovalPending,
+	})
+}
+
+// NewToolApprovalApproved creates an ActivityDelta event to mark a tool as approved.
+func NewToolApprovalApproved(toolCallID string) Event {
+	return NewActivityDelta(toolCallID, ActivityToolApproval,
+		Replace("/status", string(ApprovalApproved)),
+	)
+}
+
+// NewToolApprovalRejected creates an ActivityDelta event to mark a tool as rejected.
+func NewToolApprovalRejected(toolCallID, reason string) Event {
+	return NewActivityDelta(toolCallID, ActivityToolApproval,
+		Replace("/status", string(ApprovalRejected)),
+		Replace("/reason", reason),
+	)
+}
+
+// EmitToolApprovalPending emits a tool approval pending activity.
+func EmitToolApprovalPending(ch chan<- Event, toolCallID, toolName, arguments string) {
+	Emit(ch, NewToolApprovalPending(toolCallID, toolName, arguments))
+}
+
+// EmitToolApprovalApproved emits a tool approval approved activity update.
+func EmitToolApprovalApproved(ch chan<- Event, toolCallID string) {
+	Emit(ch, NewToolApprovalApproved(toolCallID))
+}
+
+// EmitToolApprovalRejected emits a tool approval rejected activity update.
+func EmitToolApprovalRejected(ch chan<- Event, toolCallID, reason string) {
+	Emit(ch, NewToolApprovalRejected(toolCallID, reason))
 }

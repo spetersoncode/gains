@@ -315,12 +315,19 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 		}
 
 		if a.requiresApproval(tc.Name, options) {
+			// Emit activity snapshot for pending approval (enables AG-UI approval UI)
+			event.EmitToolApprovalPending(eventCh, tc.ID, tc.Name, tc.Arguments)
+
 			approved, reason := options.Approver(ctx, tc)
 			approvals[i] = approvalResult{call: tc, approved: approved, reason: reason, isClient: false}
 
 			if approved {
+				// Emit activity delta to update approval status
+				event.EmitToolApprovalApproved(eventCh, tc.ID)
 				event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 			} else {
+				// Emit activity delta to update rejection status
+				event.EmitToolApprovalRejected(eventCh, tc.ID, reason)
 				event.Emit(eventCh, Event{Type: event.ToolCallRejected, Step: step, ToolCall: &tc, Message: reason})
 			}
 		} else {

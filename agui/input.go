@@ -148,3 +148,68 @@ func MustMergeState[T any](state *T, input *PreparedInput) {
 		panic("agui: failed to merge state: " + err.Error())
 	}
 }
+
+// RunWorkflowInput represents the AG-UI protocol request for running a workflow.
+// This is designed for dispatching workflows by name with typed state.
+type RunWorkflowInput struct {
+	ThreadID       string `json:"thread_id"`
+	RunID          string `json:"run_id"`
+	WorkflowName   string `json:"workflow_name"`           // Name of workflow to execute
+	State          any    `json:"state,omitempty"`         // Initial workflow state
+	ForwardedProps any    `json:"forwarded_props,omitempty"`
+}
+
+// PreparedWorkflowInput contains validated workflow input ready for execution.
+type PreparedWorkflowInput struct {
+	ThreadID     string
+	RunID        string
+	WorkflowName string
+	State        any // Raw state for workflow initialization
+}
+
+// ErrNoWorkflowName is returned when the workflow name is empty.
+var ErrNoWorkflowName = errors.New("no workflow name provided")
+
+// Prepare validates the workflow input.
+// Returns ErrNoWorkflowName if WorkflowName is empty.
+func (r *RunWorkflowInput) Prepare() (*PreparedWorkflowInput, error) {
+	if r.WorkflowName == "" {
+		return nil, ErrNoWorkflowName
+	}
+
+	return &PreparedWorkflowInput{
+		ThreadID:     r.ThreadID,
+		RunID:        r.RunID,
+		WorkflowName: r.WorkflowName,
+		State:        r.State,
+	}, nil
+}
+
+// DecodeWorkflowState decodes the raw state into a typed struct.
+// Returns the zero value of T if State is nil.
+func DecodeWorkflowState[T any](input *PreparedWorkflowInput) (T, error) {
+	var result T
+	if input.State == nil {
+		return result, nil
+	}
+
+	data, err := json.Marshal(input.State)
+	if err != nil {
+		return result, err
+	}
+
+	if err := json.Unmarshal(data, &result); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// MustDecodeWorkflowState is like DecodeWorkflowState but panics on error.
+func MustDecodeWorkflowState[T any](input *PreparedWorkflowInput) T {
+	result, err := DecodeWorkflowState[T](input)
+	if err != nil {
+		panic("agui: failed to decode workflow state: " + err.Error())
+	}
+	return result
+}

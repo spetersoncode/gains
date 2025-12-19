@@ -12,6 +12,7 @@ import (
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/agui"
 	"github.com/spetersoncode/gains/tool"
+	"github.com/spetersoncode/gains/workflow"
 )
 
 // AgentHandler handles AG-UI agent requests over SSE.
@@ -172,4 +173,112 @@ func corsMiddleware(next http.Handler) http.Handler {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// WorkflowHandler handles AG-UI workflow requests over SSE.
+type WorkflowHandler struct {
+	registry *workflow.Registry
+	config   *Config
+}
+
+// NewWorkflowHandler creates a new handler for the given workflow registry.
+func NewWorkflowHandler(r *workflow.Registry, cfg *Config) *WorkflowHandler {
+	return &WorkflowHandler{registry: r, config: cfg}
+}
+
+// ServeHTTP handles POST requests to run a workflow and stream events via SSE.
+func (h *WorkflowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	// Only accept POST
+	if r.Method != http.MethodPost {
+		slog.Warn("method not allowed", "method", r.Method, "path", r.URL.Path)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var input agui.RunWorkflowInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		slog.Warn("invalid request body", "error", err)
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create request-scoped logger
+	log := slog.With(
+		"run_id", input.RunID,
+		"thread_id", input.ThreadID,
+		"workflow", input.WorkflowName,
+	)
+
+	// Validate input
+	prepared, err := input.Prepare()
+	if err != nil {
+		log.Warn("invalid input", "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check workflow exists
+	if !h.registry.Has(prepared.WorkflowName) {
+		log.Warn("workflow not found", "workflow", prepared.WorkflowName)
+		http.Error(w, fmt.Sprintf("workflow not found: %s", prepared.WorkflowName), http.StatusNotFound)
+		return
+	}
+
+	log.Info("workflow request started")
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// Get flusher for streaming
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		log.Error("streaming not supported")
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Create mapper for this run
+	mapper := agui.NewMapper(prepared.ThreadID, prepared.RunID,
+		agui.WithInitialState(prepared.State),
+	)
+
+	// Run workflow with streaming
+	ctx := r.Context()
+	gainsEvents := h.registry.RunStream(ctx, prepared.WorkflowName, prepared.State)
+
+	// Stream events as SSE using the mapper's filtered stream
+	var eventCount int
+	var lastError error
+	for aguiEvent := range mapper.MapStream(gainsEvents) {
+		eventCount++
+		log.Debug("sending SSE event",
+			"event_type", aguiEvent.Type(),
+			"event_num", eventCount,
+		)
+
+		if err := writeSSE(w, flusher, aguiEvent); err != nil {
+			log.Error("failed to write SSE event", "error", err, "event_type", aguiEvent.Type())
+			lastError = err
+			return
+		}
+	}
+
+	duration := time.Since(start)
+	if lastError != nil {
+		log.Error("workflow request failed",
+			"duration_ms", duration.Milliseconds(),
+			"events_sent", eventCount,
+			"error", lastError,
+		)
+	} else {
+		log.Info("workflow request completed",
+			"duration_ms", duration.Milliseconds(),
+			"events_sent", eventCount,
+		)
+	}
 }
