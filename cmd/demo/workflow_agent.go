@@ -63,7 +63,7 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 		"lookup-constant",
 		registry,
 		"lookup",
-		func(s *workflow.State) (any, error) {
+		func(s *workflow.State) (LookupArgs, error) {
 			return LookupArgs{Key: s.GetString("lookup_key")}, nil
 		},
 		"constant_value",

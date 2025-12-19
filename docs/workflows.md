@@ -30,7 +30,6 @@ All workflow types implement the `Step` interface, enabling arbitrary nesting an
   - [Loop](#loop)
 - [Tool Integration](#tool-integration)
   - [ToolStep](#toolstep)
-  - [TypedToolStep](#typedtoolstep)
   - [AgentStep](#agentstep)
 - [Advanced Examples](#advanced-examples)
   - [Nested Workflows](#nested-workflows)
@@ -657,15 +656,17 @@ tool.MustRegisterFunc(registry, "lookup", "Look up data by key",
     },
 )
 
-// Create tool step
+// Create tool step with typed arguments
+type LookupArgs struct {
+    Key string `json:"key"`
+}
+
 toolStep := workflow.NewToolStep(
     "lookup-constant",
     registry,
     "lookup",
-    func(s *workflow.State) (any, error) {
-        return struct {
-            Key string `json:"key"`
-        }{Key: s.GetString("lookup_key")}, nil
+    func(s *workflow.State) (LookupArgs, error) {
+        return LookupArgs{Key: s.GetString("lookup_key")}, nil
     },
     "constant_value",  // Output key
 )
@@ -686,28 +687,6 @@ chain := workflow.NewChain("tool-chain",
         },
         "explanation",
     ),
-)
-```
-
-### TypedToolStep
-
-Type-safe tool execution with typed arguments:
-
-```go
-type LookupArgs struct {
-    Key string `json:"key" desc:"The key to look up" required:"true"`
-}
-
-var KeyToolResult = workflow.StringKey("tool_result")
-
-toolStep := workflow.NewTypedToolStepWithKey(
-    "lookup",
-    registry,
-    "lookup",
-    func(s *workflow.State) (LookupArgs, error) {
-        return LookupArgs{Key: s.GetString("key")}, nil
-    },
-    KeyToolResult,
 )
 ```
 
