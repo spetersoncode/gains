@@ -384,42 +384,44 @@ var KeyScoreMap = workflow.NewKey[map[string]int]("score_map")
 parallel := workflow.NewParallel("steps", steps, workflow.CollectMap(KeyScore, KeyScoreMap))
 ```
 
-#### TypedParallel
+#### Typed Collection
 
-For homogeneous branches that all produce the same type, use `TypedParallel`:
+For homogeneous branches that all produce the same type, use `CollectInto`:
 
 ```go
 var KeyChunkResult = workflow.NewKey[*ChunkAnalysis]("chunk_result")
 var KeyAllResults = workflow.NewKey[[]*ChunkAnalysis]("all_results")
 
 // Each branch writes to KeyChunkResult; results collected into KeyAllResults
-parallel := workflow.NewTypedParallel(
+parallel := workflow.NewParallel(
     "analyze-chunks",
     chunkSteps,
-    KeyChunkResult,  // Input: each branch writes here
-    KeyAllResults,   // Output: collected as slice
+    workflow.CollectInto(KeyChunkResult, KeyAllResults),
 )
 
 // After execution:
 results := workflow.MustGet(state, KeyAllResults)  // []*ChunkAnalysis
 ```
 
-For custom aggregation of typed results:
+For custom aggregation with typed results:
 
 ```go
 var KeyScore = workflow.NewKey[int]("score")
 var KeyTotal = workflow.NewKey[int]("total")
 
-parallel := workflow.NewTypedParallelWithAggregator(
+parallel := workflow.NewParallel(
     "sum-scores",
     scoreSteps,
-    KeyScore,
-    func(scores []int) int {
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
         sum := 0
-        for _, s := range scores { sum += s }
-        return sum
+        for _, result := range results {
+            if score, ok := workflow.GetFromBranch(result, KeyScore); ok {
+                sum += score
+            }
+        }
+        workflow.Set(state, KeyTotal, sum)
+        return nil
     },
-    KeyTotal,
 )
 ```
 
