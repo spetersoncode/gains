@@ -445,3 +445,78 @@ func ForwardChannelFromContext(ctx context.Context) chan<- Event {
 	ch, _ := ctx.Value(forwardChannelKey{}).(chan<- Event)
 	return ch
 }
+
+// User input activity types and helpers
+
+// UserInputActivity represents the state of a user input request.
+// This is the content structure for ActivityUserInput events.
+type UserInputActivity struct {
+	RequestID   string   `json:"requestId"`
+	Type        string   `json:"type"`                  // "confirm", "text", "choice"
+	Title       string   `json:"title,omitempty"`
+	Message     string   `json:"message"`
+	Choices     []string `json:"choices,omitempty"`
+	Default     string   `json:"default,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Status      string   `json:"status"` // "pending", "responded", "cancelled", "timeout"
+	Value       string   `json:"value,omitempty"`
+	Confirmed   bool     `json:"confirmed,omitempty"`
+}
+
+// NewUserInputPending creates an ActivitySnapshot event for a pending user input request.
+// The frontend will display this as an input dialog appropriate for the type.
+func NewUserInputPending(requestID, inputType, title, message string, choices []string, defaultVal, placeholder string) Event {
+	return NewActivitySnapshot(requestID, ActivityUserInput, UserInputActivity{
+		RequestID:   requestID,
+		Type:        inputType,
+		Title:       title,
+		Message:     message,
+		Choices:     choices,
+		Default:     defaultVal,
+		Placeholder: placeholder,
+		Status:      "pending",
+	})
+}
+
+// NewUserInputResponded creates an ActivityDelta event to mark an input as responded.
+func NewUserInputResponded(requestID, value string, confirmed bool) Event {
+	return NewActivityDelta(requestID, ActivityUserInput,
+		Replace("/status", "responded"),
+		Replace("/value", value),
+		Replace("/confirmed", confirmed),
+	)
+}
+
+// NewUserInputCancelled creates an ActivityDelta event to mark an input as cancelled.
+func NewUserInputCancelled(requestID string) Event {
+	return NewActivityDelta(requestID, ActivityUserInput,
+		Replace("/status", "cancelled"),
+	)
+}
+
+// NewUserInputTimeout creates an ActivityDelta event to mark an input as timed out.
+func NewUserInputTimeout(requestID string) Event {
+	return NewActivityDelta(requestID, ActivityUserInput,
+		Replace("/status", "timeout"),
+	)
+}
+
+// EmitUserInputPending emits a user input pending activity.
+func EmitUserInputPending(ch chan<- Event, requestID, inputType, title, message string, choices []string, defaultVal, placeholder string) {
+	Emit(ch, NewUserInputPending(requestID, inputType, title, message, choices, defaultVal, placeholder))
+}
+
+// EmitUserInputResponded emits a user input responded activity update.
+func EmitUserInputResponded(ch chan<- Event, requestID, value string, confirmed bool) {
+	Emit(ch, NewUserInputResponded(requestID, value, confirmed))
+}
+
+// EmitUserInputCancelled emits a user input cancelled activity update.
+func EmitUserInputCancelled(ch chan<- Event, requestID string) {
+	Emit(ch, NewUserInputCancelled(requestID))
+}
+
+// EmitUserInputTimeout emits a user input timeout activity update.
+func EmitUserInputTimeout(ch chan<- Event, requestID string) {
+	Emit(ch, NewUserInputTimeout(requestID))
+}
