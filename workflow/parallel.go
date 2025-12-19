@@ -173,12 +173,16 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 
 				for ev := range stepEvents {
 					mu.Lock()
-					if ev.Type == event.StepEnd && ev.Response != nil {
-						results[s.Name()] = &StepResult{
+					if ev.Type == event.StepEnd {
+						result := &StepResult{
 							StepName: s.Name(),
-							Response: ev.Response,
-							Usage:    ev.Response.Usage,
+							Metadata: map[string]any{"branch_state": branchState},
 						}
+						if ev.Response != nil {
+							result.Response = ev.Response
+							result.Usage = ev.Response.Usage
+						}
+						results[s.Name()] = result
 						branchStates[s.Name()] = branchState
 					}
 					if ev.Type == event.RunError {
