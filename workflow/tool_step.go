@@ -11,26 +11,33 @@ import (
 	"github.com/spetersoncode/gains/tool"
 )
 
-// ToolStep executes a single tool with arguments from state.
-// Use for direct tool invocations where the arguments are known.
-type ToolStep[S any] struct {
+// ToolStepOutput holds both the typed arguments and string result
+// from a tool execution.
+type ToolStepOutput[T any] struct {
+	Args   T      // Original typed arguments
+	Result string // Tool execution result
+}
+
+// ToolStep executes a single tool with typed arguments.
+// The typed arguments are preserved in the output, allowing downstream
+// steps to access the original structured args.
+type ToolStep[S, T any] struct {
 	name     string
 	registry *tool.Registry
 	toolName string
-	argsFunc func(*S) (any, error)
-	setter   func(*S, string)
+	argsFunc func(*S) (T, error)
+	setter   func(*S, *ToolStepOutput[T])
 }
 
-// NewToolStep creates a step that executes a tool.
-// The argsFunc builds tool arguments from state (any JSON-serializable value).
-// The setter receives the tool result as a string.
+// NewToolStep creates a step that executes a tool with typed arguments.
+// The setter receives both the typed arguments and the result string.
 //
 // Parameters:
 //   - name: Unique identifier for the step
 //   - registry: Tool registry containing the tool handler
 //   - toolName: Name of the tool to execute
-//   - argsFunc: Function that builds tool arguments from state
-//   - setter: Function that stores the result in state
+//   - argsFunc: Function that builds typed tool arguments from state
+//   - setter: Function that stores the output in state
 //
 // Example:
 //
@@ -39,20 +46,23 @@ type ToolStep[S any] struct {
 //	    Limit int    `json:"limit"`
 //	}
 //
-//	step := NewToolStep[MyState]("search", registry, "web_search",
-//	    func(s *MyState) (any, error) {
+//	step := NewToolStep[MyState, SearchArgs]("search", registry, "web_search",
+//	    func(s *MyState) (SearchArgs, error) {
 //	        return SearchArgs{Query: s.Topic, Limit: 10}, nil
 //	    },
-//	    func(s *MyState, result string) { s.SearchResult = result },
+//	    func(s *MyState, out *ToolStepOutput[SearchArgs]) {
+//	        s.SearchResult = out.Result
+//	        s.LastQuery = out.Args.Query  // Access typed args
+//	    },
 //	)
-func NewToolStep[S any](
+func NewToolStep[S, T any](
 	name string,
 	registry *tool.Registry,
 	toolName string,
-	argsFunc func(*S) (any, error),
-	setter func(*S, string),
-) *ToolStep[S] {
-	return &ToolStep[S]{
+	argsFunc func(*S) (T, error),
+	setter func(*S, *ToolStepOutput[T]),
+) *ToolStep[S, T] {
+	return &ToolStep[S, T]{
 		name:     name,
 		registry: registry,
 		toolName: toolName,
@@ -62,10 +72,10 @@ func NewToolStep[S any](
 }
 
 // Name returns the step name.
-func (t *ToolStep[S]) Name() string { return t.name }
+func (t *ToolStep[S, T]) Name() string { return t.name }
 
 // Run executes the tool.
-func (t *ToolStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
+func (t *ToolStep[S, T]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	// Apply step timeout
@@ -75,7 +85,7 @@ func (t *ToolStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 		defer cancel()
 	}
 
-	// Build arguments
+	// Build typed arguments
 	args, err := t.argsFunc(state)
 	if err != nil {
 		return &StepError{StepName: t.name, Err: fmt.Errorf("building arguments: %w", err)}
@@ -108,16 +118,19 @@ func (t *ToolStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 		}
 	}
 
-	// Store result via setter
+	// Store output via setter (includes both args and result)
 	if t.setter != nil {
-		t.setter(state, result.Content)
+		t.setter(state, &ToolStepOutput[T]{
+			Args:   args,
+			Result: result.Content,
+		})
 	}
 
 	return nil
 }
 
 // RunStream executes the tool and emits events.
-func (t *ToolStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
+func (t *ToolStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 10)
 
 	go func() {

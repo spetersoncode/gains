@@ -73,15 +73,15 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	})
 
 	// Step 2: Execute the tool directly
-	step2 := workflow.NewToolStep[ToolStepState](
+	step2 := workflow.NewToolStep[ToolStepState, LookupArgs](
 		"lookup-constant",
 		registry,
 		"lookup",
-		func(s *ToolStepState) (any, error) {
+		func(s *ToolStepState) (LookupArgs, error) {
 			return LookupArgs{Key: s.LookupKey}, nil
 		},
-		func(s *ToolStepState, result string) {
-			s.ConstantValue = result
+		func(s *ToolStepState, out *workflow.ToolStepOutput[LookupArgs]) {
+			s.ConstantValue = out.Result
 		},
 	)
 
