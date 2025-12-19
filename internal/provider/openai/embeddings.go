@@ -38,7 +38,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 	// Make API call
 	resp, err := c.client.Embeddings.New(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	// Convert response - embeddings are returned in order

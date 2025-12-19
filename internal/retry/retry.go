@@ -2,8 +2,30 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/spetersoncode/gains"
 )
+
+// retryAfterFromError extracts the RetryAfter duration from a CategorizedError.
+// Returns 0 if the error doesn't implement CategorizedError or has no RetryAfter.
+func retryAfterFromError(err error) time.Duration {
+	var ce gains.CategorizedError
+	if errors.As(err, &ce) {
+		return ce.RetryAfter()
+	}
+	return 0
+}
+
+// effectiveDelay returns the delay to use, honoring server's Retry-After if larger.
+func effectiveDelay(configuredDelay time.Duration, err error) time.Duration {
+	serverDelay := retryAfterFromError(err)
+	if serverDelay > configuredDelay {
+		return serverDelay
+	}
+	return configuredDelay
+}
 
 // Do executes the given function with retry logic.
 // It respects context cancellation during backoff waits.
@@ -27,7 +49,7 @@ func Do[T any](ctx context.Context, cfg Config, fn func() (T, error)) (T, error)
 
 		// Don't sleep after the last attempt
 		if attempt < cfg.MaxAttempts-1 {
-			delay := cfg.Delay(attempt)
+			delay := effectiveDelay(cfg.Delay(attempt), err)
 
 			// Respect context cancellation during sleep
 			select {
@@ -62,7 +84,7 @@ func DoStream[T any](ctx context.Context, cfg Config, fn func() (<-chan T, error
 
 		// Don't sleep after the last attempt
 		if attempt < cfg.MaxAttempts-1 {
-			delay := cfg.Delay(attempt)
+			delay := effectiveDelay(cfg.Delay(attempt), err)
 
 			select {
 			case <-ctx.Done():
@@ -118,7 +140,7 @@ func DoWithEvents[T any](ctx context.Context, cfg Config, events chan<- Event, f
 
 		// Don't sleep after the last attempt
 		if attempt < cfg.MaxAttempts-1 {
-			delay := cfg.Delay(attempt)
+			delay := effectiveDelay(cfg.Delay(attempt), err)
 
 			emit(events, Event{
 				Type:        EventRetrying,
@@ -188,7 +210,7 @@ func DoStreamWithEvents[T any](ctx context.Context, cfg Config, events chan<- Ev
 
 		// Don't sleep after the last attempt
 		if attempt < cfg.MaxAttempts-1 {
-			delay := cfg.Delay(attempt)
+			delay := effectiveDelay(cfg.Delay(attempt), err)
 
 			emit(events, Event{
 				Type:        EventRetrying,

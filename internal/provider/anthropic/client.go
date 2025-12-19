@@ -84,7 +84,7 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 
 	resp, err := c.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	content := ""
@@ -185,7 +185,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		}
 
 		if err := stream.Err(); err != nil {
-			ch <- ai.StreamEvent{Err: err}
+			ch <- ai.StreamEvent{Err: wrapError(err)}
 			return
 		}
 

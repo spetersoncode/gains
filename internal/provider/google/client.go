@@ -81,7 +81,7 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 
 	resp, err := c.client.Models.GenerateContent(ctx, model.String(), contents, config)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	content := ""
@@ -164,7 +164,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		for resp, err := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
 			iterCount++
 			if err != nil {
-				ch <- ai.StreamEvent{Err: fmt.Errorf("stream error at iteration %d: %w", iterCount, err)}
+				ch <- ai.StreamEvent{Err: wrapError(fmt.Errorf("stream error at iteration %d: %w", iterCount, err))}
 				return
 			}
 
