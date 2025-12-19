@@ -477,8 +477,13 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 }
 
 // wrapProviderStream converts provider StreamEvents to unified events.
+// Emits: RunStart -> MessageStart -> MessageDelta* -> MessageEnd -> RunEnd
+// Or on error: RunStart -> RunError
 func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh chan<- event.Event) {
 	defer close(eventCh)
+
+	// Emit RunStart at the beginning
+	event.Emit(eventCh, event.Event{Type: event.RunStart})
 
 	messageID := generateMessageID()
 	messageStarted := false
@@ -525,6 +530,12 @@ func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh ch
 				Type:      event.MessageEnd,
 				MessageID: messageID,
 				Response:  se.Response,
+			})
+
+			// Emit RunEnd with the response
+			event.Emit(eventCh, event.Event{
+				Type:     event.RunEnd,
+				Response: se.Response,
 			})
 			return
 		}
