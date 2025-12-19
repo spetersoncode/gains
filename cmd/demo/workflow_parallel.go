@@ -13,6 +13,15 @@ import (
 	"github.com/spetersoncode/gains/workflow"
 )
 
+// ParallelState is the state struct for the parallel workflow demo.
+type ParallelState struct {
+	Topic            string
+	Scientific       string
+	Historical       string
+	Cultural         string
+	CombinedAnalysis string
+}
+
 func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│        Workflow Parallel Demo           │")
@@ -26,45 +35,74 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	fmt.Printf("\nTopic: %s\n", topic)
 
 	// Create parallel analysis steps
-	perspectives := []struct {
-		name   string
-		prompt string
-	}{
-		{"scientific", "From a scientific perspective, give 2 interesting facts about %s. Be concise (2-3 sentences)."},
-		{"historical", "From a historical perspective, share 2 interesting facts about %s. Be concise (2-3 sentences)."},
-		{"cultural", "From a cultural perspective, share 2 interesting facts about %s across different societies. Be concise (2-3 sentences)."},
-	}
+	scientificStep := workflow.NewPromptStep[ParallelState]("scientific", c,
+		func(s *ParallelState) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("From a scientific perspective, give 2 interesting facts about %s. Be concise (2-3 sentences).", s.Topic)},
+			}
+		},
+		func(s *ParallelState, content string) {
+			s.Scientific = content
+		},
+	)
 
-	var steps []workflow.Step
-	for _, p := range perspectives {
-		perspective := p // capture for closure
-		steps = append(steps, workflow.NewPromptStep(
-			perspective.name,
-			c,
-			func(s *workflow.State) []ai.Message {
-				return []ai.Message{
-					{Role: ai.RoleUser, Content: fmt.Sprintf(perspective.prompt, s.GetString("topic"))},
-				}
-			},
-			perspective.name+"_analysis",
-		))
-	}
+	historicalStep := workflow.NewPromptStep[ParallelState]("historical", c,
+		func(s *ParallelState) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("From a historical perspective, share 2 interesting facts about %s. Be concise (2-3 sentences).", s.Topic)},
+			}
+		},
+		func(s *ParallelState, content string) {
+			s.Historical = content
+		},
+	)
+
+	culturalStep := workflow.NewPromptStep[ParallelState]("cultural", c,
+		func(s *ParallelState) []ai.Message {
+			return []ai.Message{
+				{Role: ai.RoleUser, Content: fmt.Sprintf("From a cultural perspective, share 2 interesting facts about %s across different societies. Be concise (2-3 sentences).", s.Topic)},
+			}
+		},
+		func(s *ParallelState, content string) {
+			s.Cultural = content
+		},
+	)
+
+	steps := []workflow.Step[ParallelState]{scientificStep, historicalStep, culturalStep}
 
 	// Aggregator combines all perspectives
-	aggregator := func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
+	aggregator := func(state *ParallelState, branches map[string]*ParallelState, errors map[string]error) error {
 		var combined strings.Builder
 		combined.WriteString("## Multi-Perspective Analysis\n\n")
+
+		perspectives := []struct {
+			name  string
+			field *string
+		}{
+			{"scientific", &state.Scientific},
+			{"historical", &state.Historical},
+			{"cultural", &state.Cultural},
+		}
+
 		for _, p := range perspectives {
-			if result, ok := results[p.name]; ok {
+			if br, ok := branches[p.name]; ok {
+				// Copy result from branch state to main state
+				switch p.name {
+				case "scientific":
+					state.Scientific = br.Scientific
+				case "historical":
+					state.Historical = br.Historical
+				case "cultural":
+					state.Cultural = br.Cultural
+				}
 				combined.WriteString(fmt.Sprintf("### %s\n%s\n\n",
-					strings.Title(p.name),
-					result.Output))
+					strings.Title(p.name), *p.field))
 			} else if err, ok := errors[p.name]; ok {
 				combined.WriteString(fmt.Sprintf("### %s\n[Error: %v]\n\n",
 					strings.Title(p.name), err))
 			}
 		}
-		state.Set("combined_analysis", combined.String())
+		state.CombinedAnalysis = combined.String()
 		return nil
 	}
 
@@ -73,7 +111,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 
 	// Run
 	fmt.Println("\n--- Executing Parallel Analysis ---")
-	state := workflow.NewStateFrom(map[string]any{"topic": topic})
+	state := &ParallelState{Topic: topic}
 	events := wf.RunStream(ctx, state,
 		workflow.WithTimeout(2*time.Minute),
 		workflow.WithMaxConcurrency(3),
@@ -88,7 +126,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 			fmt.Printf("  [%s] Analyzing...\n", ev.StepName)
 		case event.StepEnd:
 			completedSteps[ev.StepName] = true
-			fmt.Printf("  [%s] Done (%d/%d)\n", ev.StepName, len(completedSteps), len(perspectives))
+			fmt.Printf("  [%s] Done (%d/%d)\n", ev.StepName, len(completedSteps), 3)
 		case event.ParallelEnd:
 			fmt.Println("All perspectives complete!")
 		case event.RunError:
@@ -98,5 +136,5 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Println("\n--- Combined Results ---")
-	fmt.Println(state.GetString("combined_analysis"))
+	fmt.Println(state.CombinedAnalysis)
 }

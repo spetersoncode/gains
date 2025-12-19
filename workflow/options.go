@@ -11,9 +11,6 @@ import (
 // Return nil to suppress the error, or return an error to propagate it.
 type ErrorHandler func(ctx context.Context, stepName string, err error) error
 
-// StepCallback is called after each step completes.
-type StepCallback func(ctx context.Context, result *StepResult)
-
 // Options contains configuration for workflow execution.
 type Options struct {
 	// Timeout sets a deadline for the entire workflow.
@@ -27,9 +24,6 @@ type Options struct {
 
 	// ErrorHandler is called on step errors.
 	ErrorHandler ErrorHandler
-
-	// OnStepComplete is called after each step.
-	OnStepComplete StepCallback
 
 	// ContinueOnError allows workflow to continue after step errors.
 	ContinueOnError bool
@@ -67,13 +61,6 @@ func WithMaxConcurrency(n int) Option {
 func WithErrorHandler(fn ErrorHandler) Option {
 	return func(o *Options) {
 		o.ErrorHandler = fn
-	}
-}
-
-// WithOnStepComplete sets a callback for step completion.
-func WithOnStepComplete(fn StepCallback) Option {
-	return func(o *Options) {
-		o.OnStepComplete = fn
 	}
 }
 

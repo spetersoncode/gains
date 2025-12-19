@@ -13,6 +13,14 @@ import (
 	"github.com/spetersoncode/gains/workflow"
 )
 
+// LoopState is the state struct for the loop workflow demo.
+type LoopState struct {
+	Iteration int
+	Draft     string
+	Feedback  string
+	Approved  bool
+}
+
 func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│          Workflow Loop Demo             │")
@@ -23,12 +31,9 @@ func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 	fmt.Println("  3. Loop continues until approved (max 3 iterations)")
 
 	// Step 1: Writer creates/revises content based on feedback
-	writer := workflow.NewPromptStep("writer", c,
-		func(s *workflow.State) []ai.Message {
-			iteration := s.GetInt("content-loop_iteration")
-			feedback := s.GetString("feedback")
-
-			if iteration <= 1 || feedback == "" {
+	writer := workflow.NewPromptStep[LoopState]("writer", c,
+		func(s *LoopState) []ai.Message {
+			if s.Iteration <= 1 || s.Feedback == "" {
 				// First iteration - create initial content
 				return []ai.Message{
 					{Role: ai.RoleUser, Content: "Write a very short 2-line poem about a sunset. Be creative but keep it brief."},
@@ -36,20 +41,20 @@ func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 			}
 
 			// Subsequent iterations - revise based on feedback
-			draft := s.GetString("draft")
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"Here's your previous poem:\n\n%s\n\nEditor feedback: %s\n\nPlease revise the poem based on this feedback. Keep it to 2 lines.",
-					draft, feedback)},
+					s.Draft, s.Feedback)},
 			}
 		},
-		"draft",
+		func(s *LoopState, content string) {
+			s.Draft = content
+		},
 	)
 
 	// Step 2: Editor reviews and either approves or provides feedback
-	editor := workflow.NewPromptStep("editor", c,
-		func(s *workflow.State) []ai.Message {
-			draft := s.GetString("draft")
+	editor := workflow.NewPromptStep[LoopState]("editor", c,
+		func(s *LoopState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					`Review this poem:
@@ -58,20 +63,22 @@ func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 
 If the poem is creative and well-crafted, respond with exactly "APPROVED" followed by brief praise.
 If it needs improvement, provide specific constructive feedback (1-2 sentences) to make it better.
-Be a tough but fair editor - only approve truly good work.`, draft)},
+Be a tough but fair editor - only approve truly good work.`, s.Draft)},
 			}
 		},
-		"feedback",
+		func(s *LoopState, content string) {
+			s.Feedback = content
+			s.Approved = strings.Contains(strings.ToUpper(content), "APPROVED")
+		},
 	)
 
 	// Create the review cycle chain
 	reviewCycle := workflow.NewChain("review-cycle", writer, editor)
 
-	// Create the loop with exit condition
-	loop := workflow.NewLoop("content-loop", reviewCycle,
-		func(ctx context.Context, s *workflow.State) bool {
-			feedback := s.GetString("feedback")
-			return strings.Contains(strings.ToUpper(feedback), "APPROVED")
+	// Create the loop that exits when approved
+	loop := workflow.NewLoopUntil("content-loop", reviewCycle,
+		func(s *LoopState) bool {
+			return s.Approved
 		},
 		workflow.WithMaxIterations(3),
 	)
@@ -80,13 +87,14 @@ Be a tough but fair editor - only approve truly good work.`, draft)},
 
 	// Run with streaming
 	fmt.Println("\n--- Starting Content Loop ---")
-	state := workflow.NewState(nil)
+	state := &LoopState{}
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(3*time.Minute))
 
 	currentStep := ""
 	for ev := range events {
 		switch ev.Type {
 		case event.LoopIteration:
+			state.Iteration = ev.Iteration
 			fmt.Printf("\n═══ Iteration %d ═══\n", ev.Iteration)
 		case event.StepStart:
 			currentStep = ev.StepName
@@ -112,7 +120,7 @@ Be a tough but fair editor - only approve truly good work.`, draft)},
 	}
 
 	fmt.Println("\n--- Final Results ---")
-	fmt.Printf("Total iterations: %d\n", state.GetInt("content-loop_iteration"))
-	fmt.Printf("\nFinal poem:\n%s\n", state.GetString("draft"))
-	fmt.Printf("\nFinal feedback:\n%s\n", state.GetString("feedback"))
+	fmt.Printf("Total iterations: %d\n", state.Iteration)
+	fmt.Printf("\nFinal poem:\n%s\n", state.Draft)
+	fmt.Printf("\nFinal feedback:\n%s\n", state.Feedback)
 }

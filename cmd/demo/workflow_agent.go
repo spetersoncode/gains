@@ -24,6 +24,20 @@ type LookupArgs struct {
 	Key string `json:"key" desc:"The key to look up" required:"true"`
 }
 
+// ToolStepState is the state struct for the ToolStep workflow demo.
+type ToolStepState struct {
+	LookupKey     string
+	ConstantValue string
+	Explanation   string
+}
+
+// AgentStepState is the state struct for the AgentStep workflow demo.
+type AgentStepState struct {
+	Problem     string
+	AgentResult *workflow.AgentResult
+	Summary     string
+}
+
 func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│       Workflow ToolStep Demo            │")
@@ -52,36 +66,38 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	)
 
 	// Step 1: Set which key to look up
-	step1 := workflow.NewFuncStep("setup", func(ctx context.Context, state *workflow.State) error {
-		state.Set("lookup_key", "phi")
-		fmt.Println("  Set lookup_key = 'phi'")
+	step1 := workflow.NewFuncStep[ToolStepState]("setup", func(ctx context.Context, state *ToolStepState) error {
+		state.LookupKey = "phi"
+		fmt.Println("  Set LookupKey = 'phi'")
 		return nil
 	})
 
 	// Step 2: Execute the tool directly
-	step2 := workflow.NewToolStep(
+	step2 := workflow.NewToolStep[ToolStepState](
 		"lookup-constant",
 		registry,
 		"lookup",
-		func(s *workflow.State) (LookupArgs, error) {
-			return LookupArgs{Key: s.GetString("lookup_key")}, nil
+		func(s *ToolStepState) (any, error) {
+			return LookupArgs{Key: s.LookupKey}, nil
 		},
-		"constant_value",
+		func(s *ToolStepState, result string) {
+			s.ConstantValue = result
+		},
 	)
 
 	// Step 3: Use the result
-	step3 := workflow.NewPromptStep("explain", c,
-		func(s *workflow.State) []ai.Message {
-			key := s.GetString("lookup_key")
-			value := s.GetString("constant_value")
+	step3 := workflow.NewPromptStep[ToolStepState]("explain", c,
+		func(s *ToolStepState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"The mathematical constant '%s' has the value %s. In one sentence, explain what this constant represents.",
-					key, value,
+					s.LookupKey, s.ConstantValue,
 				)},
 			}
 		},
-		"explanation",
+		func(s *ToolStepState, content string) {
+			s.Explanation = content
+		},
 	)
 
 	// Create the chain
@@ -90,7 +106,7 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 
 	// Run with streaming
 	fmt.Println("\n--- Executing Chain ---")
-	state := workflow.NewState(nil)
+	state := &ToolStepState{}
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(time.Minute))
 
 	for ev := range events {
@@ -102,7 +118,7 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 		case event.StepEnd:
 			if ev.StepName == "lookup-constant" {
 				// Tool result is stored in state
-				fmt.Printf("  Tool result: %v\n", state.GetString("constant_value"))
+				fmt.Printf("  Tool result: %v\n", state.ConstantValue)
 			}
 		case event.RunError:
 			fmt.Fprintf(os.Stderr, "\nError: %v\n", ev.Error)
@@ -111,9 +127,9 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Println("\n\n--- Results ---")
-	fmt.Printf("Key: %s\n", state.GetString("lookup_key"))
-	fmt.Printf("Value: %s\n", state.GetString("constant_value"))
-	fmt.Printf("Explanation: %s\n", state.GetString("explanation"))
+	fmt.Printf("Key: %s\n", state.LookupKey)
+	fmt.Printf("Value: %s\n", state.ConstantValue)
+	fmt.Printf("Explanation: %s\n", state.Explanation)
 }
 
 func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
@@ -162,42 +178,43 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 	)
 
 	// Step 1: Set up the problem
-	step1 := workflow.NewFuncStep("setup", func(ctx context.Context, state *workflow.State) error {
-		state.Set("problem", "Calculate the area of a rectangle with width 7.5 and height 12.3")
+	step1 := workflow.NewFuncStep[AgentStepState]("setup", func(ctx context.Context, state *AgentStepState) error {
+		state.Problem = "Calculate the area of a rectangle with width 7.5 and height 12.3"
 		return nil
 	})
 
 	// Step 2: Run the agent
-	step2 := workflow.NewAgentStep(
+	step2 := workflow.NewAgentStep[AgentStepState](
 		"solver",
 		c,
 		registry,
-		func(s *workflow.State) []ai.Message {
-			problem := s.GetString("problem")
+		func(s *AgentStepState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"Solve this problem using the calculator tool:\n\n%s\n\nShow your work by using the calculator, then provide the final answer.",
-					problem,
+					s.Problem,
 				)},
 			}
 		},
-		"agent_result",
+		func(s *AgentStepState, r *workflow.AgentResult) {
+			s.AgentResult = r
+		},
 		[]agent.Option{agent.WithMaxSteps(3)},
 	)
 
 	// Step 3: Summarize
-	step3 := workflow.NewPromptStep("summarize", c,
-		func(s *workflow.State) []ai.Message {
-			result, _ := s.Get("agent_result")
-			agentResult := result.(*workflow.AgentResult)
+	step3 := workflow.NewPromptStep[AgentStepState]("summarize", c,
+		func(s *AgentStepState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"The agent solved a math problem. It took %d steps and concluded: %s\n\nSummarize what happened in one sentence.",
-					agentResult.Steps, agentResult.Response.Content,
+					s.AgentResult.Steps, s.AgentResult.Response.Content,
 				)},
 			}
 		},
-		"summary",
+		func(s *AgentStepState, content string) {
+			s.Summary = content
+		},
 	)
 
 	// Create the chain
@@ -206,7 +223,7 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 
 	// Run with streaming
 	fmt.Println("\n--- Executing Chain ---")
-	state := workflow.NewState(nil)
+	state := &AgentStepState{}
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	currentStep := ""
@@ -223,11 +240,11 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 			fmt.Print(ev.Delta)
 		case event.ToolCallStart:
 			if ev.ToolCall != nil {
-				fmt.Printf("\n  📞 Tool call: %s(%s)\n", ev.ToolCall.Name, ev.ToolCall.Arguments)
+				fmt.Printf("\n  Tool call: %s(%s)\n", ev.ToolCall.Name, ev.ToolCall.Arguments)
 			}
 		case event.ToolCallResult:
 			if ev.ToolResult != nil {
-				fmt.Printf("  📋 Result: %s\n", ev.ToolResult.Content)
+				fmt.Printf("  Result: %s\n", ev.ToolResult.Content)
 			}
 		case event.StepEnd:
 			fmt.Println()
@@ -238,11 +255,10 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Println("\n--- Results ---")
-	fmt.Printf("Problem: %s\n", state.GetString("problem"))
-	if result, ok := state.Get("agent_result"); ok {
-		agentResult := result.(*workflow.AgentResult)
-		fmt.Printf("Agent steps: %d\n", agentResult.Steps)
-		fmt.Printf("Termination: %s\n", agentResult.Termination)
+	fmt.Printf("Problem: %s\n", state.Problem)
+	if state.AgentResult != nil {
+		fmt.Printf("Agent steps: %d\n", state.AgentResult.Steps)
+		fmt.Printf("Termination: %s\n", state.AgentResult.Termination)
 	}
-	fmt.Printf("Summary: %s\n", state.GetString("summary"))
+	fmt.Printf("Summary: %s\n", state.Summary)
 }

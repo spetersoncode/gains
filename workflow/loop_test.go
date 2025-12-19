@@ -8,322 +8,211 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Define typed keys for tests
-var (
-	keyDone       = NewKey[bool]("done")
-	keyStatus     = NewKey[string]("status")
-	keyRetry      = NewKey[bool]("retry")
-	keyLoopResult = NewKey[string]("loop_result")
-	keyReady      = NewKey[bool]("ready")
-	keyCount      = NewKey[int]("count")
-	keyItems      = NewKey[[]string]("items")
-)
+// Test state struct for loop tests
+type loopTestState struct {
+	Done       bool
+	Status     string
+	Retry      bool
+	LoopResult string
+	Ready      bool
+	Count      int
+	Items      []string
+}
 
 func TestNewLoopUntil(t *testing.T) {
-	t.Run("exits when key equals value", func(t *testing.T) {
+	t.Run("exits when predicate returns true", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
 			if iterations >= 3 {
-				Set(state, keyDone, true)
+				state.Done = true
 			}
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, keyDone, true)
-		state := NewState(nil)
+		loop := NewLoopUntil("test-loop", step, func(s *loopTestState) bool {
+			return s.Done
+		})
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, 3, iterations)
 	})
 
-	t.Run("continues when key has different value", func(t *testing.T) {
+	t.Run("continues when predicate returns false", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
-			Set(state, keyStatus, "pending")
+			state.Status = "pending"
 			if iterations >= 2 {
-				Set(state, keyStatus, "complete")
+				state.Status = "complete"
 			}
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, keyStatus, "complete")
-		state := NewState(nil)
+		loop := NewLoopUntil("test-loop", step, func(s *loopTestState) bool {
+			return s.Status == "complete"
+		})
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, 2, iterations)
 	})
 
 	t.Run("respects max iterations", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("never-done", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("never-done", func(ctx context.Context, state *loopTestState) error {
 			iterations++
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, keyDone, true, WithMaxIterations(5))
-		state := NewState(nil)
+		loop := NewLoopUntil("test-loop", step,
+			func(s *loopTestState) bool { return s.Done },
+			WithMaxIterations(5),
+		)
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		assert.ErrorIs(t, err, ErrMaxIterationsExceeded)
 		assert.Equal(t, 5, iterations)
 	})
 }
 
 func TestNewLoopWhile(t *testing.T) {
-	t.Run("continues while key equals value", func(t *testing.T) {
+	t.Run("continues while predicate returns true", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
 			if iterations >= 3 {
-				Set(state, keyRetry, false)
+				state.Retry = false
 			}
 			return nil
 		})
 
-		loop := NewLoopWhile("test-loop", step, keyRetry, true)
-		state := NewState(nil)
-		Set(state, keyRetry, true)
+		loop := NewLoopWhile("test-loop", step, func(s *loopTestState) bool {
+			return s.Retry
+		})
+		state := &loopTestState{Retry: true}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, 3, iterations)
 	})
 
-	t.Run("exits immediately when key not set", func(t *testing.T) {
+	t.Run("exits immediately when predicate returns false", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
 			return nil
 		})
 
-		// Use a key that's not set - loop should exit after first iteration
-		nonexistent := NewKey[string]("nonexistent")
-		loop := NewLoopWhile("test-loop", step, nonexistent, "value")
-		state := NewState(nil)
+		loop := NewLoopWhile("test-loop", step, func(s *loopTestState) bool {
+			return s.Status == "running" // Status is empty, so false
+		})
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, 1, iterations) // runs once, then condition checked
 	})
 
-	t.Run("exits when key changes to different value", func(t *testing.T) {
+	t.Run("exits when predicate changes to false", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("change-status", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("change-status", func(ctx context.Context, state *loopTestState) error {
 			iterations++
 			if iterations >= 2 {
-				Set(state, keyStatus, "done")
+				state.Status = "done"
 			}
 			return nil
 		})
 
-		loop := NewLoopWhile("test-loop", step, keyStatus, "running")
-		state := NewState(nil)
-		Set(state, keyStatus, "running")
+		loop := NewLoopWhile("test-loop", step, func(s *loopTestState) bool {
+			return s.Status == "running"
+		})
+		state := &loopTestState{Status: "running"}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
 		assert.Equal(t, 2, iterations)
 	})
 }
 
-func TestNewLoopUntilSet(t *testing.T) {
-	t.Run("exits when key becomes truthy string", func(t *testing.T) {
+func TestNewLoopN(t *testing.T) {
+	t.Run("executes exactly n times", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("set-result", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
-			if iterations >= 2 {
-				Set(state, keyLoopResult, "success")
-			}
+			state.Count = iterations
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, keyLoopResult)
-		state := NewState(nil)
+		loop := NewLoopN("test-loop", step, 5)
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
-		assert.Equal(t, 2, iterations)
+		assert.Equal(t, 5, iterations)
+		assert.Equal(t, 5, state.Count)
 	})
 
-	t.Run("continues when key is empty string", func(t *testing.T) {
+	t.Run("executes once for n=1", func(t *testing.T) {
 		iterations := 0
-		step := NewFuncStep("set-result", func(ctx context.Context, state *State) error {
+		step := NewFuncStep[loopTestState]("increment", func(ctx context.Context, state *loopTestState) error {
 			iterations++
-			if iterations < 3 {
-				Set(state, keyLoopResult, "")
-			} else {
-				Set(state, keyLoopResult, "done")
-			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, keyLoopResult)
-		state := NewState(nil)
+		loop := NewLoopN("test-loop", step, 1)
+		state := &loopTestState{}
 
-		_, err := loop.Run(context.Background(), state)
+		err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
-		assert.Equal(t, 3, iterations)
-	})
-
-	t.Run("exits when key becomes true bool", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-flag", func(ctx context.Context, state *State) error {
-			iterations++
-			if iterations >= 2 {
-				Set(state, keyReady, true)
-			}
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyReady)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 2, iterations)
-	})
-
-	t.Run("continues when key is false bool", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-flag", func(ctx context.Context, state *State) error {
-			iterations++
-			Set(state, keyReady, iterations >= 3)
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyReady)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 3, iterations)
-	})
-
-	t.Run("exits when key becomes non-zero int", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-count", func(ctx context.Context, state *State) error {
-			iterations++
-			if iterations >= 2 {
-				Set(state, keyCount, 42)
-			}
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyCount)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 2, iterations)
-	})
-
-	t.Run("continues when key is zero int", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-count", func(ctx context.Context, state *State) error {
-			iterations++
-			if iterations < 3 {
-				Set(state, keyCount, 0)
-			} else {
-				Set(state, keyCount, 1)
-			}
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyCount)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 3, iterations)
-	})
-
-	t.Run("exits when key becomes non-empty slice", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-items", func(ctx context.Context, state *State) error {
-			iterations++
-			if iterations >= 2 {
-				Set(state, keyItems, []string{"a", "b"})
-			}
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyItems)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 2, iterations)
-	})
-
-	t.Run("continues when key is empty slice", func(t *testing.T) {
-		iterations := 0
-		step := NewFuncStep("set-items", func(ctx context.Context, state *State) error {
-			iterations++
-			if iterations < 3 {
-				Set(state, keyItems, []string{})
-			} else {
-				Set(state, keyItems, []string{"done"})
-			}
-			return nil
-		})
-
-		loop := NewLoopUntilSet("test-loop", step, keyItems)
-		state := NewState(nil)
-
-		_, err := loop.Run(context.Background(), state)
-		require.NoError(t, err)
-		assert.Equal(t, 3, iterations)
+		assert.Equal(t, 1, iterations)
 	})
 }
 
-func TestIsTruthy(t *testing.T) {
-	tests := []struct {
-		name     string
-		value    any
-		expected bool
-	}{
-		// Falsy values
-		{"nil", nil, false},
-		{"empty string", "", false},
-		{"false bool", false, false},
-		{"zero int", 0, false},
-		{"zero int64", int64(0), false},
-		{"zero float64", 0.0, false},
-		{"empty slice", []string{}, false},
-		{"empty map", map[string]int{}, false},
-
-		// Truthy values
-		{"non-empty string", "hello", true},
-		{"true bool", true, true},
-		{"positive int", 42, true},
-		{"negative int", -1, true},
-		{"positive int64", int64(100), true},
-		{"positive float64", 3.14, true},
-		{"negative float64", -2.5, true},
-		{"non-empty slice", []string{"a"}, true},
-		{"non-empty map", map[string]int{"a": 1}, true},
-		{"struct", struct{ X int }{1}, true},
-		{"pointer to zero", new(int), true}, // pointer exists, truthy
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			state := NewState(nil)
-			if tt.value != nil {
-				state.Set("key", tt.value)
-			}
-			result := isTruthy(state, "key")
-			assert.Equal(t, tt.expected, result)
+func TestNewLoopWithExitCondition(t *testing.T) {
+	t.Run("provides iteration count to condition", func(t *testing.T) {
+		var seenIterations []int
+		step := NewFuncStep[loopTestState]("track", func(ctx context.Context, state *loopTestState) error {
+			return nil
 		})
-	}
 
-	t.Run("missing key", func(t *testing.T) {
-		state := NewState(nil)
-		result := isTruthy(state, "nonexistent")
-		assert.False(t, result)
+		loop := NewLoopWithExitCondition("test-loop", step,
+			func(ctx context.Context, s *loopTestState, iter int) bool {
+				seenIterations = append(seenIterations, iter)
+				return iter >= 3
+			},
+		)
+		state := &loopTestState{}
+
+		err := loop.Run(context.Background(), state)
+		require.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3}, seenIterations)
+	})
+
+	t.Run("respects context cancellation", func(t *testing.T) {
+		step := NewFuncStep[loopTestState]("slow", func(ctx context.Context, state *loopTestState) error {
+			return nil
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		iterations := 0
+
+		loop := NewLoopWithExitCondition("test-loop", step,
+			func(ctx context.Context, s *loopTestState, iter int) bool {
+				iterations++
+				if iterations >= 2 {
+					cancel()
+				}
+				return false
+			},
+		)
+		state := &loopTestState{}
+
+		err := loop.Run(ctx, state)
+		assert.Error(t, err) // Should error due to context cancellation
 	})
 }

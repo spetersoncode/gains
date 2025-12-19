@@ -12,6 +12,12 @@ import (
 	"github.com/spetersoncode/gains/workflow"
 )
 
+// ClassifierState is the state struct for the classifier workflow demo.
+type ClassifierState struct {
+	Ticket   string
+	Response string
+}
+
 func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│      Workflow Classifier Demo           │")
@@ -22,45 +28,51 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	fmt.Println("  - general -> General handler")
 
 	// Define handlers for each category (concise responses)
-	billingHandler := workflow.NewPromptStep("billing-handler", c,
-		func(s *workflow.State) []ai.Message {
+	billingHandler := workflow.NewPromptStep[ClassifierState]("billing-handler", c,
+		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a billing support specialist. Respond in 2-3 sentences max."},
-				{Role: ai.RoleUser, Content: s.GetString("ticket")},
+				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		"response",
+		func(s *ClassifierState, content string) {
+			s.Response = content
+		},
 	)
 
-	technicalHandler := workflow.NewPromptStep("technical-handler", c,
-		func(s *workflow.State) []ai.Message {
+	technicalHandler := workflow.NewPromptStep[ClassifierState]("technical-handler", c,
+		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a technical support specialist. Respond in 2-3 sentences max."},
-				{Role: ai.RoleUser, Content: s.GetString("ticket")},
+				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		"response",
+		func(s *ClassifierState, content string) {
+			s.Response = content
+		},
 	)
 
-	generalHandler := workflow.NewPromptStep("general-handler", c,
-		func(s *workflow.State) []ai.Message {
+	generalHandler := workflow.NewPromptStep[ClassifierState]("general-handler", c,
+		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a general support agent. Respond in 2-3 sentences max."},
-				{Role: ai.RoleUser, Content: s.GetString("ticket")},
+				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		"response",
+		func(s *ClassifierState, content string) {
+			s.Response = content
+		},
 	)
 
 	// Create classifier router
 	classifier := workflow.NewClassifierRouter("ticket-classifier", c,
-		func(s *workflow.State) []ai.Message {
+		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "Classify the following support ticket into exactly one category. Respond with only one word: billing, technical, or general"},
-				{Role: ai.RoleUser, Content: s.GetString("ticket")},
+				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		map[string]workflow.Step{
+		map[string]workflow.Step[ClassifierState]{
 			"billing":   billingHandler,
 			"technical": technicalHandler,
 			"general":   generalHandler,
@@ -78,7 +90,7 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 
 	for _, ticket := range tickets {
 		fmt.Printf("\n--- Ticket ---\n%s\n\n", ticket)
-		state := workflow.NewStateFrom(map[string]any{"ticket": ticket})
+		state := &ClassifierState{Ticket: ticket}
 
 		events := wf.RunStream(ctx, state, workflow.WithTimeout(1*time.Minute))
 

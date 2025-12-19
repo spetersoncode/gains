@@ -3,26 +3,25 @@ package workflow
 import (
 	"context"
 
-	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/event"
 )
 
 // Chain executes steps sequentially, passing state between them.
-type Chain struct {
+type Chain[S any] struct {
 	name  string
-	steps []Step
+	steps []Step[S]
 }
 
 // NewChain creates a sequential workflow.
-func NewChain(name string, steps ...Step) *Chain {
-	return &Chain{name: name, steps: steps}
+func NewChain[S any](name string, steps ...Step[S]) *Chain[S] {
+	return &Chain[S]{name: name, steps: steps}
 }
 
 // Name returns the chain name.
-func (c *Chain) Name() string { return c.name }
+func (c *Chain[S]) Name() string { return c.name }
 
 // Run executes steps sequentially.
-func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (c *Chain[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -31,11 +30,9 @@ func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepRes
 		defer cancel()
 	}
 
-	var totalUsage ai.Usage
-
 	for _, step := range c.steps {
 		if err := ctx.Err(); err != nil {
-			return nil, &StepError{StepName: step.Name(), Err: err}
+			return &StepError{StepName: step.Name(), Err: err}
 		}
 
 		stepCtx := ctx
@@ -45,35 +42,25 @@ func (c *Chain) Run(ctx context.Context, state *State, opts ...Option) (*StepRes
 			defer cancel()
 		}
 
-		result, err := step.Run(stepCtx, state, opts...)
+		err := step.Run(stepCtx, state, opts...)
 		if err != nil {
 			if options.ErrorHandler != nil {
 				if handlerErr := options.ErrorHandler(ctx, step.Name(), err); handlerErr != nil {
-					return nil, &StepError{StepName: step.Name(), Err: handlerErr}
+					return &StepError{StepName: step.Name(), Err: handlerErr}
 				}
 				if options.ContinueOnError {
 					continue
 				}
 			}
-			return nil, &StepError{StepName: step.Name(), Err: err}
+			return &StepError{StepName: step.Name(), Err: err}
 		}
-
-		if options.OnStepComplete != nil {
-			options.OnStepComplete(ctx, result)
-		}
-
-		totalUsage.InputTokens += result.Usage.InputTokens
-		totalUsage.OutputTokens += result.Usage.OutputTokens
 	}
 
-	return &StepResult{
-		StepName: c.name,
-		Usage:    totalUsage,
-	}, nil
+	return nil
 }
 
 // RunStream executes steps sequentially and emits events.
-func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (c *Chain[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -87,8 +74,6 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 		}
 
 		event.Emit(ch, Event{Type: event.RunStart, StepName: c.name})
-
-		var totalUsage ai.Usage
 
 		for _, step := range c.steps {
 			if err := ctx.Err(); err != nil {
@@ -105,19 +90,10 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 
 			// Forward events from step
 			stepEvents := step.RunStream(stepCtx, state, opts...)
-			var stepResult *StepResult
 			var stepError error
 
 			for ev := range stepEvents {
 				ch <- ev
-
-				if ev.Type == event.StepEnd && ev.Response != nil {
-					stepResult = &StepResult{
-						StepName: step.Name(),
-						Response: ev.Response,
-						Usage:    ev.Response.Usage,
-					}
-				}
 				if ev.Type == event.RunError {
 					stepError = ev.Error
 				}
@@ -130,11 +106,6 @@ func (c *Chain) RunStream(ctx context.Context, state *State, opts ...Option) <-c
 					}
 				}
 				return
-			}
-
-			if stepResult != nil {
-				totalUsage.InputTokens += stepResult.Usage.InputTokens
-				totalUsage.OutputTokens += stepResult.Usage.OutputTokens
 			}
 		}
 

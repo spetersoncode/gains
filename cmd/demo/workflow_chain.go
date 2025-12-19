@@ -13,6 +13,13 @@ import (
 	"github.com/spetersoncode/gains/workflow"
 )
 
+// ChainState is the state struct for the chain workflow demo.
+type ChainState struct {
+	Topic       string
+	Haiku       string
+	Transformed string
+}
+
 func demoWorkflowChain(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│         Workflow Chain Demo             │")
@@ -23,35 +30,39 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 	fmt.Println("  3. Translate the haiku to another style")
 
 	// Step 1: Generate a random topic
-	step1 := workflow.NewPromptStep("generate-topic", c,
-		func(s *workflow.State) []ai.Message {
+	step1 := workflow.NewPromptStep[ChainState]("generate-topic", c,
+		func(s *ChainState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: "Give me one random nature topic in 1-2 words only. Just the topic, nothing else."},
 			}
 		},
-		"topic",
+		func(s *ChainState, content string) {
+			s.Topic = strings.TrimSpace(content)
+		},
 	)
 
 	// Step 2: Write a haiku about the topic
-	step2 := workflow.NewPromptStep("write-haiku", c,
-		func(s *workflow.State) []ai.Message {
-			topic := s.GetString("topic")
+	step2 := workflow.NewPromptStep[ChainState]("write-haiku", c,
+		func(s *ChainState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", topic)},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", s.Topic)},
 			}
 		},
-		"haiku",
+		func(s *ChainState, content string) {
+			s.Haiku = content
+		},
 	)
 
 	// Step 3: Transform the haiku
-	step3 := workflow.NewPromptStep("transform", c,
-		func(s *workflow.State) []ai.Message {
-			haiku := s.GetString("haiku")
+	step3 := workflow.NewPromptStep[ChainState]("transform", c,
+		func(s *ChainState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", haiku)},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", s.Haiku)},
 			}
 		},
-		"transformed",
+		func(s *ChainState, content string) {
+			s.Transformed = content
+		},
 	)
 
 	// Create the chain
@@ -60,7 +71,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 
 	// Run with streaming
 	fmt.Println("\n--- Executing Chain ---")
-	state := workflow.NewState(nil)
+	state := &ChainState{}
 	events := wf.RunStream(ctx, state, workflow.WithTimeout(2*time.Minute))
 
 	currentStep := ""
@@ -80,7 +91,7 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 	}
 
 	fmt.Println("\n--- Results ---")
-	fmt.Printf("Topic: %s\n", strings.TrimSpace(state.GetString("topic")))
-	fmt.Printf("\nOriginal Haiku:\n%s\n", state.GetString("haiku"))
-	fmt.Printf("\nModern Version:\n%s\n", state.GetString("transformed"))
+	fmt.Printf("Topic: %s\n", state.Topic)
+	fmt.Printf("\nOriginal Haiku:\n%s\n", state.Haiku)
+	fmt.Printf("\nModern Version:\n%s\n", state.Transformed)
 }

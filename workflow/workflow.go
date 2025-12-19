@@ -2,32 +2,28 @@ package workflow
 
 import (
 	"context"
-
-	"github.com/spetersoncode/gains/internal/store"
 )
 
 // Workflow is the top-level orchestrator that wraps a root step.
 // It provides the primary entry point for workflow execution.
-type Workflow struct {
+type Workflow[S any] struct {
 	name string
-	root Step
+	root Step[S]
 }
 
 // New creates a new workflow with a root step.
-func New(name string, root Step) *Workflow {
-	return &Workflow{name: name, root: root}
+func New[S any](name string, root Step[S]) *Workflow[S] {
+	return &Workflow[S]{name: name, root: root}
 }
 
 // Name returns the workflow name.
-func (w *Workflow) Name() string { return w.name }
+func (w *Workflow[S]) Name() string { return w.name }
 
 // Run executes the workflow synchronously.
-func (w *Workflow) Run(ctx context.Context, state *State, opts ...Option) (*Result, error) {
-	if state == nil {
-		state = store.New(nil)
-	}
-
-	stepResult, err := w.root.Run(ctx, state, opts...)
+// State is mutated in place - access results via state fields after completion.
+// The state parameter must not be nil.
+func (w *Workflow[S]) Run(ctx context.Context, state *S, opts ...Option) (*Result[S], error) {
+	err := w.root.Run(ctx, state, opts...)
 	if err != nil {
 		termination := TerminationError
 		if ctx.Err() == context.Canceled {
@@ -35,7 +31,7 @@ func (w *Workflow) Run(ctx context.Context, state *State, opts ...Option) (*Resu
 		} else if ctx.Err() == context.DeadlineExceeded {
 			termination = TerminationTimeout
 		}
-		return &Result{
+		return &Result[S]{
 			WorkflowName: w.name,
 			State:        state,
 			Error:        err,
@@ -43,20 +39,16 @@ func (w *Workflow) Run(ctx context.Context, state *State, opts ...Option) (*Resu
 		}, err
 	}
 
-	return &Result{
+	return &Result[S]{
 		WorkflowName: w.name,
 		State:        state,
-		Output:       stepResult.Output,
-		Usage:        stepResult.Usage,
 		Termination:  TerminationComplete,
 	}, nil
 }
 
 // RunStream executes the workflow and returns an event channel.
-func (w *Workflow) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
-	if state == nil {
-		state = store.New(nil)
-	}
-
+// State is mutated in place during streaming.
+// The state parameter must not be nil.
+func (w *Workflow[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	return w.root.RunStream(ctx, state, opts...)
 }

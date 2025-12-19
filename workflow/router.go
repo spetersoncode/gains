@@ -11,28 +11,35 @@ import (
 	"github.com/spetersoncode/gains/event"
 )
 
+// RouteResult can be stored in state to record which route was taken.
+// Store this via a setter if you need to access route information.
+type RouteResult struct {
+	RouteName      string // Name of the route that was taken
+	Classification string // For ClassifierRouter: the LLM classification
+}
+
 // Condition determines if a route should be taken.
-type Condition func(ctx context.Context, state *State) bool
+type Condition[S any] func(ctx context.Context, state *S) bool
 
 // Route represents a conditional path in a router.
-type Route struct {
+type Route[S any] struct {
 	Name      string
-	Condition Condition
-	Step      Step
+	Condition Condition[S]
+	Step      Step[S]
 }
 
 // Router selects and executes a step based on conditions.
-type Router struct {
+type Router[S any] struct {
 	name         string
-	routes       []Route
-	defaultRoute Step
+	routes       []Route[S]
+	defaultRoute Step[S]
 }
 
 // NewRouter creates a conditional router.
 // Routes are evaluated in order; first match wins.
 // Default route is used if no conditions match (can be nil).
-func NewRouter(name string, routes []Route, defaultRoute Step) *Router {
-	return &Router{
+func NewRouter[S any](name string, routes []Route[S], defaultRoute Step[S]) *Router[S] {
+	return &Router[S]{
 		name:         name,
 		routes:       routes,
 		defaultRoute: defaultRoute,
@@ -40,10 +47,10 @@ func NewRouter(name string, routes []Route, defaultRoute Step) *Router {
 }
 
 // Name returns the router name.
-func (r *Router) Name() string { return r.name }
+func (r *Router[S]) Name() string { return r.name }
 
 // Run evaluates conditions and executes the matching step.
-func (r *Router) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (r *Router[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -53,13 +60,11 @@ func (r *Router) Run(ctx context.Context, state *State, opts ...Option) (*StepRe
 	}
 
 	// Find matching route
-	var selectedStep Step
-	var selectedName string
+	var selectedStep Step[S]
 
 	for _, route := range r.routes {
 		if route.Condition(ctx, state) {
 			selectedStep = route.Step
-			selectedName = route.Name
 			break
 		}
 	}
@@ -67,20 +72,16 @@ func (r *Router) Run(ctx context.Context, state *State, opts ...Option) (*StepRe
 	if selectedStep == nil {
 		if r.defaultRoute != nil {
 			selectedStep = r.defaultRoute
-			selectedName = "default"
 		} else {
-			return nil, ErrNoRouteMatched
+			return ErrNoRouteMatched
 		}
 	}
-
-	// Store selected route in state
-	state.Set(r.name+"_route", selectedName)
 
 	return selectedStep.Run(ctx, state, opts...)
 }
 
 // RunStream evaluates conditions and streams the matching step's events.
-func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (r *Router[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -96,7 +97,7 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 		event.Emit(ch, Event{Type: event.StepStart, StepName: r.name})
 
 		// Find matching route
-		var selectedStep Step
+		var selectedStep Step[S]
 		var selectedName string
 
 		for _, route := range r.routes {
@@ -123,8 +124,6 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 			RouteName: selectedName,
 		})
 
-		state.Set(r.name+"_route", selectedName)
-
 		// Forward events from selected step
 		stepEvents := selectedStep.RunStream(ctx, state, opts...)
 		for ev := range stepEvents {
@@ -136,25 +135,25 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 }
 
 // ClassifierRouter uses an LLM to classify input and route accordingly.
-type ClassifierRouter struct {
+type ClassifierRouter[S any] struct {
 	name       string
 	chatClient chat.Client
-	prompt     PromptFunc
-	routes     map[string]Step
+	prompt     PromptFunc[S]
+	routes     map[string]Step[S]
 	chatOpts   []ai.Option
 }
 
 // NewClassifierRouter creates a router that uses LLM classification.
 // The LLM response should match one of the route keys (case-insensitive).
 // For more reliable classification, use ClassifierSchema().
-func NewClassifierRouter(
+func NewClassifierRouter[S any](
 	name string,
 	c chat.Client,
-	prompt PromptFunc,
-	routes map[string]Step,
+	prompt PromptFunc[S],
+	routes map[string]Step[S],
 	opts ...ai.Option,
-) *ClassifierRouter {
-	return &ClassifierRouter{
+) *ClassifierRouter[S] {
+	return &ClassifierRouter[S]{
 		name:       name,
 		chatClient: c,
 		prompt:     prompt,
@@ -166,7 +165,7 @@ func NewClassifierRouter(
 // ClassifierSchema returns a ai.Option that enforces structured output
 // for classification. Use with providers that support JSON schema (OpenAI, Anthropic).
 // Note: May not work with streaming on all providers.
-func ClassifierSchema(routes map[string]Step) ai.Option {
+func ClassifierSchema[S any](routes map[string]Step[S]) ai.Option {
 	routeKeys := make([]any, 0, len(routes))
 	for key := range routes {
 		routeKeys = append(routeKeys, key)
@@ -192,10 +191,10 @@ func ClassifierSchema(routes map[string]Step) ai.Option {
 }
 
 // Name returns the router name.
-func (c *ClassifierRouter) Name() string { return c.name }
+func (c *ClassifierRouter[S]) Name() string { return c.name }
 
 // Run classifies input and executes the matching route.
-func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (c *ClassifierRouter[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	if options.Timeout > 0 {
@@ -213,39 +212,34 @@ func (c *ClassifierRouter) Run(ctx context.Context, state *State, opts ...Option
 	msgs := c.prompt(state)
 	resp, err := c.chatClient.Chat(ctx, msgs, chatOpts...)
 	if err != nil {
-		return nil, &StepError{StepName: c.name, Err: err}
+		return &StepError{StepName: c.name, Err: err}
 	}
 
 	classification, err := extractClassification(resp.Content)
 	if err != nil {
-		return nil, &StepError{StepName: c.name, Err: err}
+		return &StepError{StepName: c.name, Err: err}
 	}
-	state.Set(c.name+"_classification", classification)
 
 	// Find matching route (case-insensitive)
-	var selectedStep Step
-	var matchedRoute string
+	var selectedStep Step[S]
 	for routeName, step := range c.routes {
 		if strings.EqualFold(routeName, classification) {
 			selectedStep = step
-			matchedRoute = routeName
 			break
 		}
 	}
 	if selectedStep == nil {
-		return nil, &StepError{
+		return &StepError{
 			StepName: c.name,
 			Err:      fmt.Errorf("unknown classification: %q", classification),
 		}
 	}
 
-	state.Set(c.name+"_route", matchedRoute)
-
 	return selectedStep.Run(ctx, state, opts...)
 }
 
 // RunStream classifies input with streaming and executes the matching route.
-func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (c *ClassifierRouter[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -293,10 +287,8 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 			}
 		}
 
-		state.Set(c.name+"_classification", classification)
-
 		// Find matching route (case-insensitive)
-		var selectedStep Step
+		var selectedStep Step[S]
 		var matchedRoute string
 		for routeName, step := range c.routes {
 			if strings.EqualFold(routeName, classification) {
@@ -319,8 +311,6 @@ func (c *ClassifierRouter) RunStream(ctx context.Context, state *State, opts ...
 			StepName:  c.name,
 			RouteName: matchedRoute,
 		})
-
-		state.Set(c.name+"_route", matchedRoute)
 
 		// Forward events from selected step
 		stepEvents := selectedStep.RunStream(ctx, state, opts...)
@@ -355,45 +345,4 @@ func extractClassification(content string) (string, error) {
 	// Strip trailing punctuation that models sometimes add
 	classification = strings.TrimRight(classification, ".,!?;:")
 	return classification, nil
-}
-
-// RouteKey returns a typed key for the selected route name.
-// The key name follows the pattern "{routerName}_route".
-func (r *Router) RouteKey() Key[string] {
-	return NewKey[string](r.name + "_route")
-}
-
-// RouteKey returns a typed key for the selected route name.
-// The key name follows the pattern "{routerName}_route".
-func (c *ClassifierRouter) RouteKey() Key[string] {
-	return NewKey[string](c.name + "_route")
-}
-
-// ClassificationKey returns a typed key for the raw classification result.
-// The key name follows the pattern "{routerName}_classification".
-func (c *ClassifierRouter) ClassificationKey() Key[string] {
-	return NewKey[string](c.name + "_classification")
-}
-
-// ConditionEquals returns a condition that matches when the key equals value.
-func ConditionEquals[T comparable](key Key[T], value T) Condition {
-	return func(ctx context.Context, state *State) bool {
-		v, ok := Get(state, key)
-		return ok && v == value
-	}
-}
-
-// ConditionSet returns a condition that matches when the key exists in state.
-func ConditionSet[T any](key Key[T]) Condition {
-	return func(ctx context.Context, state *State) bool {
-		return Has(state, key)
-	}
-}
-
-// ConditionMatches returns a condition using a predicate function on the key value.
-func ConditionMatches[T any](key Key[T], pred func(T) bool) Condition {
-	return func(ctx context.Context, state *State) bool {
-		v, ok := Get(state, key)
-		return ok && pred(v)
-	}
 }

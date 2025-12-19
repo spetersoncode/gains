@@ -13,6 +13,12 @@ import (
 	"github.com/spetersoncode/gains/workflow"
 )
 
+// RouterState is the state struct for the router workflow demo.
+type RouterState struct {
+	Input    string
+	Response string
+}
+
 func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│         Workflow Router Demo            │")
@@ -23,40 +29,46 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	fmt.Println("  - Other -> Default step")
 
 	// Define steps for each route (concise 1-2 sentence responses)
-	answerStep := workflow.NewPromptStep("answer", c,
-		func(s *workflow.State) []ai.Message {
+	answerStep := workflow.NewPromptStep[RouterState]("answer", c,
+		func(s *RouterState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Answer in 1-2 sentences: %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Answer in 1-2 sentences: %s", s.Input)},
 			}
 		},
-		"response",
+		func(s *RouterState, content string) {
+			s.Response = content
+		},
 	)
 
-	expandStep := workflow.NewPromptStep("expand", c,
-		func(s *workflow.State) []ai.Message {
+	expandStep := workflow.NewPromptStep[RouterState]("expand", c,
+		func(s *RouterState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Expand on this in 1-2 sentences: %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Expand on this in 1-2 sentences: %s", s.Input)},
 			}
 		},
-		"response",
+		func(s *RouterState, content string) {
+			s.Response = content
+		},
 	)
 
-	defaultStep := workflow.NewPromptStep("default", c,
-		func(s *workflow.State) []ai.Message {
+	defaultStep := workflow.NewPromptStep[RouterState]("default", c,
+		func(s *RouterState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Respond briefly (1-2 sentences): %s", s.GetString("input"))},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Respond briefly (1-2 sentences): %s", s.Input)},
 			}
 		},
-		"response",
+		func(s *RouterState, content string) {
+			s.Response = content
+		},
 	)
 
 	// Create router with conditions
 	router := workflow.NewRouter("input-router",
-		[]workflow.Route{
+		[]workflow.Route[RouterState]{
 			{
 				Name: "question",
-				Condition: func(ctx context.Context, s *workflow.State) bool {
-					input := s.GetString("input")
+				Condition: func(ctx context.Context, s *RouterState) bool {
+					input := s.Input
 					return strings.Contains(input, "?") || strings.HasPrefix(strings.ToLower(input), "what") ||
 						strings.HasPrefix(strings.ToLower(input), "how") || strings.HasPrefix(strings.ToLower(input), "why")
 				},
@@ -64,8 +76,8 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 			},
 			{
 				Name: "statement",
-				Condition: func(ctx context.Context, s *workflow.State) bool {
-					input := s.GetString("input")
+				Condition: func(ctx context.Context, s *RouterState) bool {
+					input := s.Input
 					return strings.HasSuffix(input, ".") && len(input) > 20
 				},
 				Step: expandStep,
@@ -84,7 +96,7 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 
 	for _, input := range testInputs {
 		fmt.Printf("\n--- Input: %q ---\n", input)
-		state := workflow.NewStateFrom(map[string]any{"input": input})
+		state := &RouterState{Input: input}
 
 		events := wf.RunStream(ctx, state, workflow.WithTimeout(1*time.Minute))
 

@@ -23,13 +23,13 @@ type AgentResult struct {
 }
 
 // AgentStep wraps the agent package for autonomous tool-calling within a workflow.
-// It runs an agent loop to completion and stores the final result in state.
-type AgentStep struct {
+// It runs an agent loop to completion and stores the final result in state via setter.
+type AgentStep[S any] struct {
 	name       string
 	chatClient chat.Client
 	registry   *tool.Registry
-	prompt     PromptFunc
-	outputKey  string
+	prompt     PromptFunc[S]
+	setter     func(*S, *AgentResult)
 	agentOpts  []agent.Option
 	chatOpts   []ai.Option
 }
@@ -41,7 +41,7 @@ type AgentStep struct {
 //   - chatClient: Client supporting ChatStream for the agent
 //   - registry: Tool registry with registered handlers
 //   - prompt: Function that builds initial messages from state
-//   - outputKey: State key for storing agent result (empty to skip storage)
+//   - setter: Function that stores the result in state (nil to skip storage)
 //   - agentOpts: Options passed to agent.Run/RunStream
 //   - chatOpts: Options passed to each chat call
 //
@@ -50,46 +50,45 @@ type AgentStep struct {
 //	registry := tool.NewRegistry()
 //	tool.RegisterFunc(registry, "search", "Search the web", searchHandler)
 //
-//	step := workflow.NewAgentStep(
+//	step := workflow.NewAgentStep[MyState](
 //	    "research",
 //	    client,
 //	    registry,
-//	    func(s *workflow.State) []ai.Message {
-//	        topic := s.GetString("topic")
+//	    func(s *MyState) []ai.Message {
 //	        return []ai.Message{{
 //	            Role: ai.RoleUser,
-//	            Content: fmt.Sprintf("Research %s and provide a summary", topic),
+//	            Content: fmt.Sprintf("Research %s and provide a summary", s.Topic),
 //	        }}
 //	    },
-//	    "research_result",
+//	    func(s *MyState, r *AgentResult) { s.ResearchResult = r },
 //	    []agent.Option{agent.WithMaxSteps(5)},
 //	    ai.WithModel(model.Claude35Sonnet),
 //	)
-func NewAgentStep(
+func NewAgentStep[S any](
 	name string,
 	chatClient chat.Client,
 	registry *tool.Registry,
-	prompt PromptFunc,
-	outputKey string,
+	prompt PromptFunc[S],
+	setter func(*S, *AgentResult),
 	agentOpts []agent.Option,
 	chatOpts ...ai.Option,
-) *AgentStep {
-	return &AgentStep{
+) *AgentStep[S] {
+	return &AgentStep[S]{
 		name:       name,
 		chatClient: chatClient,
 		registry:   registry,
 		prompt:     prompt,
-		outputKey:  outputKey,
+		setter:     setter,
 		agentOpts:  agentOpts,
 		chatOpts:   chatOpts,
 	}
 }
 
 // Name returns the step name.
-func (a *AgentStep) Name() string { return a.name }
+func (a *AgentStep[S]) Name() string { return a.name }
 
 // Run executes the agent to completion.
-func (a *AgentStep) Run(ctx context.Context, state *State, opts ...Option) (*StepResult, error) {
+func (a *AgentStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	// Apply workflow timeout if set
@@ -118,34 +117,25 @@ func (a *AgentStep) Run(ctx context.Context, state *State, opts ...Option) (*Ste
 	ag := agent.New(a.chatClient, a.registry)
 	result, err := ag.Run(ctx, msgs, agentOpts...)
 	if err != nil {
-		return nil, &StepError{StepName: a.name, Err: err}
+		return &StepError{StepName: a.name, Err: err}
 	}
 
-	// Store result in state
-	if a.outputKey != "" {
+	// Store result in state via setter
+	if a.setter != nil {
 		agentResult := &AgentResult{
 			Response:    result.Response,
 			Messages:    result.Messages(),
 			Steps:       result.Steps,
 			Termination: result.Termination,
 		}
-		state.Set(a.outputKey, agentResult)
+		a.setter(state, agentResult)
 	}
 
-	return &StepResult{
-		StepName: a.name,
-		Output:   result.Response.Content,
-		Response: result.Response,
-		Usage:    result.TotalUsage,
-		Metadata: map[string]any{
-			"steps":       result.Steps,
-			"termination": string(result.Termination),
-		},
-	}, nil
+	return nil
 }
 
 // RunStream executes the agent and emits mapped workflow events.
-func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option) <-chan Event {
+func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -329,15 +319,15 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 		}
 		messages = messageHistory
 
-		// Store result in state
-		if a.outputKey != "" && lastResponse != nil {
+		// Store result in state via setter
+		if a.setter != nil && lastResponse != nil {
 			agentResult := &AgentResult{
 				Response:    lastResponse,
 				Messages:    messages,
 				Steps:       steps,
 				Termination: termination,
 			}
-			state.Set(a.outputKey, agentResult)
+			a.setter(state, agentResult)
 		}
 
 		var output string
@@ -354,10 +344,4 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 	}()
 
 	return ch
-}
-
-// OutputKey returns a typed key for accessing the AgentResult in state.
-// The key name is the step's outputKey.
-func (a *AgentStep) OutputKey() Key[*AgentResult] {
-	return NewKey[*AgentResult](a.outputKey)
 }

@@ -1,9 +1,7 @@
 package workflow
 
 import (
-	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/event"
-	"github.com/spetersoncode/gains/model"
 )
 
 // Event is an alias to the unified event type.
@@ -15,24 +13,6 @@ import (
 //   - event.ParallelStart, event.ParallelEnd
 //   - event.RouteSelected, event.LoopIteration
 type Event = event.Event
-
-// StepResult contains the output of a step execution.
-type StepResult struct {
-	// StepName identifies which step produced this result.
-	StepName string
-
-	// Output is the primary output value (optional).
-	Output any
-
-	// Response contains the LLM response if the step used one.
-	Response *ai.Response
-
-	// Usage aggregates token usage if applicable.
-	Usage ai.Usage
-
-	// Metadata holds step-specific metadata.
-	Metadata map[string]any
-}
 
 // TerminationReason indicates why the workflow stopped.
 type TerminationReason string
@@ -52,28 +32,18 @@ const (
 )
 
 // Result represents the final outcome of workflow execution.
-type Result struct {
+// State contains all output from the workflow - access results via state fields.
+type Result[S any] struct {
 	// WorkflowName identifies the workflow.
 	WorkflowName string
 
 	// State contains the final state after execution.
-	State *State
-
-	// Output is the primary output from the workflow.
-	Output any
-
-	// Usage aggregates token usage across all steps.
-	Usage ai.Usage
+	// All step outputs are stored in state fields via setters.
+	State *S
 
 	// Termination indicates why execution stopped.
 	Termination TerminationReason
 
 	// Error contains any error that caused termination.
 	Error error
-}
-
-// TotalCost calculates the total cost in USD for this workflow result.
-// Uses the provided model's pricing to compute the cost.
-func (r *Result) TotalCost(m model.ChatModel) float64 {
-	return m.Cost(r.Usage)
 }
