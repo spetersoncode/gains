@@ -642,6 +642,35 @@ func TestMapper_MapEvent_State(t *testing.T) {
 	})
 }
 
+func TestMapper_MapEvent_MessagesSnapshot(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("MessagesSnapshot maps to MESSAGES_SNAPSHOT", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type: event.MessagesSnapshot,
+			Messages: []ai.Message{
+				{Role: ai.RoleUser, Content: "Hello"},
+				{Role: ai.RoleAssistant, Content: "Hi there!"},
+			},
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeMessagesSnapshot {
+			t.Errorf("expected MESSAGES_SNAPSHOT, got %s", result.Type())
+		}
+	})
+
+	t.Run("MessagesSnapshot helper returns correct type", func(t *testing.T) {
+		ev := m.MessagesSnapshot([]ai.Message{
+			{Role: ai.RoleUser, Content: "Test"},
+		})
+		if ev.Type() != events.EventTypeMessagesSnapshot {
+			t.Errorf("expected MESSAGES_SNAPSHOT, got %s", ev.Type())
+		}
+	})
+}
+
 func TestToGainsMessage(t *testing.T) {
 	t.Run("user message", func(t *testing.T) {
 		content := "Hello"

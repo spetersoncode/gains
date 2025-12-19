@@ -3,6 +3,7 @@ package agui
 import (
 	"github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/event"
 )
 
@@ -111,6 +112,11 @@ func (m *Mapper) StateSnapshot(state any) events.Event {
 // StateDelta returns a STATE_DELTA event with the given JSON Patch operations.
 func (m *Mapper) StateDelta(patches ...event.JSONPatch) events.Event {
 	return events.NewStateDeltaEvent(toAGUIPatches(patches))
+}
+
+// MessagesSnapshot returns a MESSAGES_SNAPSHOT event with the given messages.
+func (m *Mapper) MessagesSnapshot(messages []ai.Message) events.Event {
+	return events.NewMessagesSnapshotEvent(FromGainsMessages(messages))
 }
 
 // MapStream wraps a gains event channel and yields AG-UI events.
@@ -237,6 +243,8 @@ func (m *Mapper) MapEvent(e event.Event) events.Event {
 		return events.NewStateSnapshotEvent(e.State)
 	case event.StateDelta:
 		return events.NewStateDeltaEvent(toAGUIPatches(e.StatePatches))
+	case event.MessagesSnapshot:
+		return events.NewMessagesSnapshotEvent(FromGainsMessages(e.Messages))
 
 	default:
 		return nil

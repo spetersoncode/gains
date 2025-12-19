@@ -115,6 +115,9 @@ const (
 
 	// StateDelta fires to send incremental state changes using JSON Patch.
 	StateDelta Type = "state_delta"
+
+	// MessagesSnapshot fires to send the complete message history to the frontend.
+	MessagesSnapshot Type = "messages_snapshot"
 )
 
 // PatchOp represents a JSON Patch operation type (RFC 6902).
@@ -189,6 +192,9 @@ type Event struct {
 
 	// StatePatches contains JSON Patch operations for StateDelta events.
 	StatePatches []JSONPatch
+
+	// Messages contains the complete message history for MessagesSnapshot events.
+	Messages []ai.Message
 
 	// Timestamp is when the event occurred.
 	Timestamp time.Time
@@ -284,4 +290,20 @@ func EmitDelta(ch chan<- Event, patches ...JSONPatch) {
 //	event.EmitField(eventCh, "/progress", 75)
 func EmitField(ch chan<- Event, path string, value any) {
 	Emit(ch, NewStateDelta(Replace(path, value)))
+}
+
+// NewMessagesSnapshot creates a MessagesSnapshot event with the given messages.
+func NewMessagesSnapshot(messages []ai.Message) Event {
+	return Event{
+		Type:     MessagesSnapshot,
+		Messages: messages,
+	}
+}
+
+// EmitMessagesSnapshot is a convenience function that sends a MessagesSnapshot event.
+// Use this to sync the complete conversation history with the frontend:
+//
+//	event.EmitMessagesSnapshot(eventCh, conversation.Messages())
+func EmitMessagesSnapshot(ch chan<- Event, messages []ai.Message) {
+	Emit(ch, NewMessagesSnapshot(messages))
 }
