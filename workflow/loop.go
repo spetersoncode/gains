@@ -144,13 +144,19 @@ func (l *Loop[S]) Run(ctx context.Context, state *S, opts ...Option) error {
 		err := l.step.Run(stepCtx, state, opts...)
 		if err != nil {
 			if options.ErrorHandler != nil {
-				if handlerErr := options.ErrorHandler(ctx, l.step.Name(), err); handlerErr != nil {
+				handlerErr := options.ErrorHandler(ctx, l.step.Name(), err)
+				if handlerErr != nil {
+					// Handler wants to propagate (possibly transformed) error
 					return &StepError{StepName: l.name, Err: handlerErr}
 				}
+				// Handler suppressed the error (returned nil)
 				if options.ContinueOnError {
 					continue
 				}
+				// Error suppressed, stop successfully
+				return nil
 			}
+			// No handler - propagate original error
 			return &StepError{StepName: l.name, Err: err}
 		}
 
@@ -207,10 +213,21 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 
 			if stepError != nil {
 				if options.ErrorHandler != nil {
-					if handlerErr := options.ErrorHandler(ctx, l.step.Name(), stepError); handlerErr == nil && options.ContinueOnError {
+					handlerErr := options.ErrorHandler(ctx, l.step.Name(), stepError)
+					if handlerErr != nil {
+						// Handler wants to propagate - emit the handler's error
+						event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: handlerErr})
+						return
+					}
+					// Handler suppressed the error
+					if options.ContinueOnError {
 						continue
 					}
+					// Error suppressed, stop successfully
+					event.Emit(ch, Event{Type: event.RunEnd, StepName: l.name})
+					return
 				}
+				// No handler - error was already emitted by step, just stop
 				return
 			}
 

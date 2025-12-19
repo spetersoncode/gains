@@ -8,7 +8,14 @@ import (
 )
 
 // ErrorHandler is called when a step encounters an error.
-// Return nil to suppress the error, or return an error to propagate it.
+// The handler determines how to proceed:
+//   - Return nil: Error is suppressed (handled gracefully)
+//   - Return an error: The returned error is propagated (may be transformed)
+//
+// When used with ContinueOnError:
+//   - Handler returns nil + ContinueOnError=true: Continue to next step
+//   - Handler returns nil + ContinueOnError=false: Stop workflow successfully (no error)
+//   - Handler returns error: Stop workflow with that error (regardless of ContinueOnError)
 type ErrorHandler func(ctx context.Context, stepName string, err error) error
 
 // Options contains configuration for workflow execution.
@@ -22,10 +29,12 @@ type Options struct {
 	// MaxConcurrency limits parallel step execution (0 = unlimited).
 	MaxConcurrency int
 
-	// ErrorHandler is called on step errors.
+	// ErrorHandler is called on step errors. See ErrorHandler type for semantics.
 	ErrorHandler ErrorHandler
 
-	// ContinueOnError allows workflow to continue after step errors.
+	// ContinueOnError affects behavior when ErrorHandler returns nil (suppresses error).
+	// If true, workflow continues to next step. If false, workflow stops successfully.
+	// Has no effect when ErrorHandler returns an error (workflow always stops with error).
 	ContinueOnError bool
 
 	// ChatOptions are passed to LLM calls within steps.
