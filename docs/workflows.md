@@ -22,6 +22,9 @@ All workflow types implement the `Step` interface, enabling arbitrary nesting an
 - [Workflow Patterns](#workflow-patterns)
   - [Chain](#chain)
   - [Parallel](#parallel)
+    - [Accessing Branch State](#accessing-branch-state)
+    - [Merge Strategies](#merge-strategies)
+    - [TypedParallel](#typedparallel)
   - [Router](#router)
   - [ClassifierRouter](#classifierrouter)
   - [Loop](#loop)
@@ -36,6 +39,10 @@ All workflow types implement the `Step` interface, enabling arbitrary nesting an
 - [Options and Configuration](#options-and-configuration)
 - [Event Handling and Streaming](#event-handling-and-streaming)
 - [Error Handling](#error-handling)
+  - [Error Types](#error-types)
+  - [Continue on Error](#continue-on-error)
+  - [Parallel Error Visibility](#parallel-error-visibility)
+  - [Termination Reasons](#termination-reasons)
 
 ---
 
@@ -299,12 +306,16 @@ steps := []workflow.Step{
     ),
 }
 
-// With custom aggregator
+// With custom aggregator (receives results and errors)
 parallel := workflow.NewParallel("multi-perspective", steps,
-    func(state *workflow.State, results map[string]*workflow.StepResult) error {
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
         var combined strings.Builder
         for name, result := range results {
             combined.WriteString(fmt.Sprintf("## %s\n%s\n\n", name, result.Output))
+        }
+        // Handle any failed steps
+        for name, err := range errors {
+            combined.WriteString(fmt.Sprintf("## %s\n[Error: %v]\n\n", name, err))
         }
         state.Set("combined_analysis", combined.String())
         return nil
@@ -325,6 +336,93 @@ result, err := wf.Run(ctx, state, workflow.WithMaxConcurrency(2))
 - After completion:
   - If aggregator provided: aggregator merges results
   - If no aggregator: all branch states merged back to parent
+
+#### Accessing Branch State
+
+Use typed helpers to access values from branch states in aggregators:
+
+```go
+var KeyAnalysis = workflow.NewKey[*Analysis]("analysis")
+
+parallel := workflow.NewParallel("analyze", steps,
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
+        for name, result := range results {
+            // Type-safe access to branch state values
+            analysis := workflow.MustGetFromBranch(result, KeyAnalysis)
+            fmt.Printf("%s: score=%d\n", name, analysis.Score)
+        }
+        return nil
+    },
+)
+
+// Available helpers:
+workflow.GetBranchState(result)           // (*State, bool) - get full branch state
+workflow.GetFromBranch(result, key)       // (T, bool) - get typed value
+workflow.MustGetFromBranch(result, key)   // T - panics if missing
+```
+
+#### Merge Strategies
+
+For common patterns, use built-in merge strategies instead of custom aggregators:
+
+```go
+// Merge all keys from all branches (default behavior)
+parallel := workflow.NewParallel("steps", steps, workflow.MergeAll())
+
+// Merge only specific keys
+parallel := workflow.NewParallel("steps", steps, workflow.MergeKeys("output", "metadata"))
+
+// Type-safe single key merge
+parallel := workflow.NewParallel("steps", steps, workflow.MergeTypedKey(KeyResult))
+
+// Collect values into a slice (order non-deterministic)
+var KeyScore = workflow.NewKey[int]("score")
+var KeyScores = workflow.NewKey[[]int]("scores")
+parallel := workflow.NewParallel("steps", steps, workflow.CollectInto(KeyScore, KeyScores))
+
+// Collect values into a map keyed by step name
+var KeyScoreMap = workflow.NewKey[map[string]int]("score_map")
+parallel := workflow.NewParallel("steps", steps, workflow.CollectMap(KeyScore, KeyScoreMap))
+```
+
+#### TypedParallel
+
+For homogeneous branches that all produce the same type, use `TypedParallel`:
+
+```go
+var KeyChunkResult = workflow.NewKey[*ChunkAnalysis]("chunk_result")
+var KeyAllResults = workflow.NewKey[[]*ChunkAnalysis]("all_results")
+
+// Each branch writes to KeyChunkResult; results collected into KeyAllResults
+parallel := workflow.NewTypedParallel(
+    "analyze-chunks",
+    chunkSteps,
+    KeyChunkResult,  // Input: each branch writes here
+    KeyAllResults,   // Output: collected as slice
+)
+
+// After execution:
+results := workflow.MustGet(state, KeyAllResults)  // []*ChunkAnalysis
+```
+
+For custom aggregation of typed results:
+
+```go
+var KeyScore = workflow.NewKey[int]("score")
+var KeyTotal = workflow.NewKey[int]("total")
+
+parallel := workflow.NewTypedParallelWithAggregator(
+    "sum-scores",
+    scoreSteps,
+    KeyScore,
+    func(scores []int) int {
+        sum := 0
+        for _, s := range scores { sum += s }
+        return sum
+    },
+    KeyTotal,
+)
+```
 
 ### Router
 
@@ -687,7 +785,7 @@ researchParallel := workflow.NewParallel("research",
         workflow.NewPromptStep("source-b", client, promptB, "research_b"),
         workflow.NewPromptStep("source-c", client, promptC, "research_c"),
     },
-    func(state *workflow.State, results map[string]*workflow.StepResult) error {
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
         // Combine research
         return nil
     },
@@ -742,9 +840,9 @@ validator := workflow.NewParallel("validate",
         workflow.NewPromptStep("completeness", client, completenessPrompt, "completeness_result"),
         workflow.NewPromptStep("accuracy", client, accuracyPrompt, "accuracy_result"),
     },
-    func(state *workflow.State, results map[string]*workflow.StepResult) error {
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
         // Aggregate validation results
-        state.Set("validation_passed", allPassed(results))
+        state.Set("validation_passed", allPassed(results) && len(errors) == 0)
         return nil
     },
 )
@@ -827,7 +925,7 @@ researchSteps := []workflow.Step{
 }
 
 research := workflow.NewParallel("research", researchSteps,
-    func(state *workflow.State, results map[string]*workflow.StepResult) error {
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
         sources := make([]string, 0, len(results))
         for name, result := range results {
             sources = append(sources, fmt.Sprintf("[%s]: %v", name, result.Output))
@@ -892,7 +990,7 @@ result, err := wf.Run(ctx, state,
     // Overall workflow timeout
     workflow.WithTimeout(5*time.Minute),
 
-    // Per-step timeout (default: 30s)
+    // Per-step timeout (default: 2m)
     workflow.WithStepTimeout(1*time.Minute),
 
     // Limit parallel concurrency
@@ -1079,6 +1177,44 @@ result, err := chain.Run(ctx, state,
         return nil
     }),
 )
+```
+
+### Parallel Error Visibility
+
+When using `ContinueOnError` with Parallel workflows, failed steps are visible in multiple ways:
+
+**1. Aggregator receives errors map:**
+
+```go
+parallel := workflow.NewParallel("steps", steps,
+    func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
+        // results contains successful steps
+        // errors contains failed steps
+        for name, err := range errors {
+            log.Printf("Step %s failed: %v", name, err)
+        }
+        return nil
+    },
+)
+
+_, err := parallel.Run(ctx, state, workflow.WithContinueOnError(true))
+```
+
+**2. Streaming emits StepSkipped events:**
+
+```go
+events := parallel.RunStream(ctx, state, workflow.WithContinueOnError(true))
+
+for ev := range events {
+    switch ev.Type {
+    case event.StepSkipped:
+        // Step failed in ContinueOnError mode
+        fmt.Printf("Step %s skipped: %v\n", ev.StepName, ev.Error)
+        fmt.Printf("Reason: %s\n", ev.Message)  // "step failed, continuing"
+    case event.StepEnd:
+        fmt.Printf("Step %s completed\n", ev.StepName)
+    }
+}
 ```
 
 ### Termination Reasons
