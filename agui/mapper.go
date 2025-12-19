@@ -6,6 +6,18 @@ import (
 	"github.com/spetersoncode/gains/event"
 )
 
+// Custom event names for gains-specific workflow events.
+// These are emitted as AG-UI CUSTOM events with a name and value.
+const (
+	// CustomEventRouteSelected is emitted when a route is chosen in a Router step.
+	// Value contains: stepName (string), routeName (string)
+	CustomEventRouteSelected = "gains.route_selected"
+
+	// CustomEventLoopIteration is emitted at the start of each loop iteration.
+	// Value contains: stepName (string), iteration (int)
+	CustomEventLoopIteration = "gains.loop_iteration"
+)
+
 // Mapper converts gains events to AG-UI events.
 // With the unified event system, this is now a true 1:1 mapping -
 // each gains event maps to exactly one AG-UI event.
@@ -206,11 +218,19 @@ func (m *Mapper) MapEvent(e event.Event) events.Event {
 	case event.ParallelEnd:
 		return events.NewStepFinishedEvent(e.StepName)
 	case event.RouteSelected:
-		// No direct AG-UI equivalent, could use custom event
-		return nil
+		// Map to AG-UI custom event for route observability
+		return events.NewCustomEvent(CustomEventRouteSelected,
+			events.WithValue(map[string]any{
+				"stepName":  e.StepName,
+				"routeName": e.RouteName,
+			}))
 	case event.LoopIteration:
-		// No direct AG-UI equivalent, could use custom event
-		return nil
+		// Map to AG-UI custom event for loop observability
+		return events.NewCustomEvent(CustomEventLoopIteration,
+			events.WithValue(map[string]any{
+				"stepName":  e.StepName,
+				"iteration": e.Iteration,
+			}))
 
 	// State synchronization
 	case event.StateSnapshot:

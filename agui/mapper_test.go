@@ -439,6 +439,38 @@ func TestMapper_MapEvent_ToolCallLifecycle(t *testing.T) {
 	})
 }
 
+func TestMapper_MapEvent_CustomWorkflowEvents(t *testing.T) {
+	m := NewMapper("thread-1", "run-1")
+
+	t.Run("RouteSelected maps to CUSTOM event", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type:      event.RouteSelected,
+			StepName:  "router_step",
+			RouteName: "route_a",
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeCustom {
+			t.Errorf("expected CUSTOM, got %s", result.Type())
+		}
+	})
+
+	t.Run("LoopIteration maps to CUSTOM event", func(t *testing.T) {
+		result := m.MapEvent(event.Event{
+			Type:      event.LoopIteration,
+			StepName:  "loop_step",
+			Iteration: 3,
+		})
+		if result == nil {
+			t.Fatal("expected event, got nil")
+		}
+		if result.Type() != events.EventTypeCustom {
+			t.Errorf("expected CUSTOM, got %s", result.Type())
+		}
+	})
+}
+
 func TestMapper_MapEvent_ApprovalEventsReturnNil(t *testing.T) {
 	m := NewMapper("thread-1", "run-1")
 
@@ -472,11 +504,11 @@ func TestMapper_MapStream(t *testing.T) {
 
 		// Send mix of mappable and non-mappable events
 		input <- event.Event{Type: event.RunStart}
-		input <- event.Event{Type: event.ToolCallApproved} // maps to nil
+		input <- event.Event{Type: event.ToolCallApproved}  // maps to nil (gains-specific)
 		input <- event.Event{Type: event.MessageStart, MessageID: "msg-1"}
-		input <- event.Event{Type: event.ToolCallExecuting} // maps to nil
+		input <- event.Event{Type: event.ToolCallExecuting} // maps to nil (gains-specific)
 		input <- event.Event{Type: event.MessageDelta, MessageID: "msg-1", Delta: "Hello"}
-		input <- event.Event{Type: event.RouteSelected} // maps to nil
+		input <- event.Event{Type: event.RouteSelected}     // maps to CUSTOM event
 		input <- event.Event{Type: event.MessageEnd, MessageID: "msg-1"}
 		input <- event.Event{Type: event.RunEnd}
 		close(input)
@@ -492,6 +524,7 @@ func TestMapper_MapStream(t *testing.T) {
 			events.EventTypeRunStarted,
 			events.EventTypeTextMessageStart,
 			events.EventTypeTextMessageContent,
+			events.EventTypeCustom, // RouteSelected now maps to CUSTOM
 			events.EventTypeTextMessageEnd,
 			events.EventTypeRunFinished,
 		}
