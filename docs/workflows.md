@@ -607,22 +607,23 @@ loop := workflow.NewLoop("content-loop", reviewCycle,
 )
 ```
 
-**Loop helpers:**
+**Loop helpers** (using typed keys):
 
 ```go
+var (
+    KeyStatus   = workflow.NewKey[string]("status")
+    KeyContinue = workflow.NewKey[bool]("continue")
+    KeyResult   = workflow.NewKey[string]("result")
+)
+
 // Loop until key equals value
-loop := workflow.NewLoopUntil("loop", step, "status", "complete")
+loop := workflow.NewLoopUntil("loop", step, KeyStatus, "complete")
 
 // Loop while key equals value
-loop := workflow.NewLoopWhile("loop", step, "continue", true)
+loop := workflow.NewLoopWhile("loop", step, KeyContinue, true)
 
-// Loop until key is set
-loop := workflow.NewLoopUntilSet("loop", step, "result")
-
-// Type-safe versions
-loop := workflow.NewLoopUntilKey("loop", step, KeyStatus, "complete")
-loop := workflow.NewLoopWhileKey("loop", step, KeyContinue, true)
-loop := workflow.NewLoopUntilKeySet("loop", step, KeyResult)
+// Loop until key has truthy value
+loop := workflow.NewLoopUntilSet("loop", step, KeyResult)
 ```
 
 **Iteration tracking:**

@@ -8,18 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Define typed keys for tests
+var (
+	keyDone       = NewKey[bool]("done")
+	keyStatus     = NewKey[string]("status")
+	keyRetry      = NewKey[bool]("retry")
+	keyLoopResult = NewKey[string]("loop_result")
+	keyReady      = NewKey[bool]("ready")
+	keyCount      = NewKey[int]("count")
+	keyItems      = NewKey[[]string]("items")
+)
+
 func TestNewLoopUntil(t *testing.T) {
 	t.Run("exits when key equals value", func(t *testing.T) {
 		iterations := 0
 		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 3 {
-				state.Set("done", true)
+				Set(state, keyDone, true)
 			}
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, "done", true)
+		loop := NewLoopUntil("test-loop", step, keyDone, true)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -31,14 +42,14 @@ func TestNewLoopUntil(t *testing.T) {
 		iterations := 0
 		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
 			iterations++
-			state.Set("status", "pending")
+			Set(state, keyStatus, "pending")
 			if iterations >= 2 {
-				state.Set("status", "complete")
+				Set(state, keyStatus, "complete")
 			}
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, "status", "complete")
+		loop := NewLoopUntil("test-loop", step, keyStatus, "complete")
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -53,7 +64,7 @@ func TestNewLoopUntil(t *testing.T) {
 			return nil
 		})
 
-		loop := NewLoopUntil("test-loop", step, "done", true, WithMaxIterations(5))
+		loop := NewLoopUntil("test-loop", step, keyDone, true, WithMaxIterations(5))
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -68,13 +79,14 @@ func TestNewLoopWhile(t *testing.T) {
 		step := NewFuncStep("increment", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 3 {
-				state.Set("retry", false)
+				Set(state, keyRetry, false)
 			}
 			return nil
 		})
 
-		loop := NewLoopWhile("test-loop", step, "retry", true)
-		state := NewStateFrom(map[string]any{"retry": true})
+		loop := NewLoopWhile("test-loop", step, keyRetry, true)
+		state := NewState(nil)
+		Set(state, keyRetry, true)
 
 		_, err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
@@ -88,7 +100,9 @@ func TestNewLoopWhile(t *testing.T) {
 			return nil
 		})
 
-		loop := NewLoopWhile("test-loop", step, "nonexistent", "value")
+		// Use a key that's not set - loop should exit after first iteration
+		nonexistent := NewKey[string]("nonexistent")
+		loop := NewLoopWhile("test-loop", step, nonexistent, "value")
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -101,13 +115,14 @@ func TestNewLoopWhile(t *testing.T) {
 		step := NewFuncStep("change-status", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 2 {
-				state.Set("status", "done")
+				Set(state, keyStatus, "done")
 			}
 			return nil
 		})
 
-		loop := NewLoopWhile("test-loop", step, "status", "running")
-		state := NewStateFrom(map[string]any{"status": "running"})
+		loop := NewLoopWhile("test-loop", step, keyStatus, "running")
+		state := NewState(nil)
+		Set(state, keyStatus, "running")
 
 		_, err := loop.Run(context.Background(), state)
 		require.NoError(t, err)
@@ -121,12 +136,12 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-result", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 2 {
-				state.Set("result", "success")
+				Set(state, keyLoopResult, "success")
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "result")
+		loop := NewLoopUntilSet("test-loop", step, keyLoopResult)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -139,14 +154,14 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-result", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations < 3 {
-				state.Set("result", "")
+				Set(state, keyLoopResult, "")
 			} else {
-				state.Set("result", "done")
+				Set(state, keyLoopResult, "done")
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "result")
+		loop := NewLoopUntilSet("test-loop", step, keyLoopResult)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -159,12 +174,12 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-flag", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 2 {
-				state.Set("ready", true)
+				Set(state, keyReady, true)
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "ready")
+		loop := NewLoopUntilSet("test-loop", step, keyReady)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -176,11 +191,11 @@ func TestNewLoopUntilSet(t *testing.T) {
 		iterations := 0
 		step := NewFuncStep("set-flag", func(ctx context.Context, state *State) error {
 			iterations++
-			state.Set("ready", iterations >= 3)
+			Set(state, keyReady, iterations >= 3)
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "ready")
+		loop := NewLoopUntilSet("test-loop", step, keyReady)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -193,12 +208,12 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-count", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 2 {
-				state.Set("count", 42)
+				Set(state, keyCount, 42)
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "count")
+		loop := NewLoopUntilSet("test-loop", step, keyCount)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -211,14 +226,14 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-count", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations < 3 {
-				state.Set("count", 0)
+				Set(state, keyCount, 0)
 			} else {
-				state.Set("count", 1)
+				Set(state, keyCount, 1)
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "count")
+		loop := NewLoopUntilSet("test-loop", step, keyCount)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -231,12 +246,12 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-items", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations >= 2 {
-				state.Set("items", []string{"a", "b"})
+				Set(state, keyItems, []string{"a", "b"})
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "items")
+		loop := NewLoopUntilSet("test-loop", step, keyItems)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)
@@ -249,14 +264,14 @@ func TestNewLoopUntilSet(t *testing.T) {
 		step := NewFuncStep("set-items", func(ctx context.Context, state *State) error {
 			iterations++
 			if iterations < 3 {
-				state.Set("items", []string{})
+				Set(state, keyItems, []string{})
 			} else {
-				state.Set("items", []string{"done"})
+				Set(state, keyItems, []string{"done"})
 			}
 			return nil
 		})
 
-		loop := NewLoopUntilSet("test-loop", step, "items")
+		loop := NewLoopUntilSet("test-loop", step, keyItems)
 		state := NewState(nil)
 
 		_, err := loop.Run(context.Background(), state)

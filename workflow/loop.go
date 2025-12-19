@@ -52,31 +52,6 @@ func NewLoop(name string, step Step, condition LoopCondition, opts ...LoopOption
 	return l
 }
 
-// NewLoopUntil creates a loop that exits when state[key] equals the target value.
-// This is a convenience wrapper for common "exit when key equals X" patterns.
-func NewLoopUntil(name string, step Step, key string, value any, opts ...LoopOption) *Loop {
-	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
-		v, ok := state.Get(key)
-		return ok && v == value
-	}, opts...)
-}
-
-// NewLoopWhile creates a loop that continues while state[key] equals the target value.
-// The loop exits when the key no longer equals the value (or is unset).
-func NewLoopWhile(name string, step Step, key string, value any, opts ...LoopOption) *Loop {
-	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
-		v, ok := state.Get(key)
-		return !ok || v != value
-	}, opts...)
-}
-
-// NewLoopUntilSet creates a loop that exits when state[key] is "truthy".
-// A value is truthy if it exists and is non-nil, non-zero, non-empty.
-func NewLoopUntilSet(name string, step Step, key string, opts ...LoopOption) *Loop {
-	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
-		return isTruthy(state, key)
-	}, opts...)
-}
 
 // isTruthy checks if a state key has a "truthy" value.
 func isTruthy(state *State, key string) bool {
@@ -254,26 +229,25 @@ func (l *Loop) IterationKey() Key[int] {
 	return NewKey[int](l.name + "_iteration")
 }
 
-// NewLoopUntilKey creates a loop that exits when the typed key equals the target value.
-// This provides compile-time type safety compared to NewLoopUntil.
-func NewLoopUntilKey[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
+// NewLoopUntil creates a loop that exits when the typed key equals the target value.
+func NewLoopUntil[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
 	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
 		v, ok := Get(state, key)
 		return ok && v == value
 	}, opts...)
 }
 
-// NewLoopWhileKey creates a loop that continues while the typed key equals the target value.
+// NewLoopWhile creates a loop that continues while the typed key equals the target value.
 // The loop exits when the key no longer equals the value (or is unset).
-func NewLoopWhileKey[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
+func NewLoopWhile[T comparable](name string, step Step, key Key[T], value T, opts ...LoopOption) *Loop {
 	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
 		v, ok := Get(state, key)
 		return !ok || v != value
 	}, opts...)
 }
 
-// NewLoopUntilKeySet creates a loop that exits when the typed key has a truthy value.
-func NewLoopUntilKeySet[T any](name string, step Step, key Key[T], opts ...LoopOption) *Loop {
+// NewLoopUntilSet creates a loop that exits when the typed key has a truthy value.
+func NewLoopUntilSet[T any](name string, step Step, key Key[T], opts ...LoopOption) *Loop {
 	return NewLoop(name, step, func(ctx context.Context, state *State) bool {
 		return isTruthy(state, key.Name())
 	}, opts...)
