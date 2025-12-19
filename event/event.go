@@ -4,6 +4,7 @@
 package event
 
 import (
+	"context"
 	"time"
 
 	ai "github.com/spetersoncode/gains"
@@ -421,4 +422,26 @@ func EmitToolApprovalApproved(ch chan<- Event, toolCallID string) {
 // EmitToolApprovalRejected emits a tool approval rejected activity update.
 func EmitToolApprovalRejected(ch chan<- Event, toolCallID, reason string) {
 	Emit(ch, NewToolApprovalRejected(toolCallID, reason))
+}
+
+// Context-based event forwarding for nested runs
+
+// forwardChannelKey is the context key for event forwarding channels.
+type forwardChannelKey struct{}
+
+// ForwardChannel is the type of channel used for event forwarding.
+type ForwardChannel = chan<- Event
+
+// WithForwardChannel returns a new context with the given event channel for forwarding.
+// Tool handlers can use ForwardChannelFromContext to retrieve this channel and
+// forward sub-run events to the parent event stream.
+func WithForwardChannel(ctx context.Context, ch chan<- Event) context.Context {
+	return context.WithValue(ctx, forwardChannelKey{}, ch)
+}
+
+// ForwardChannelFromContext retrieves the event forwarding channel from the context.
+// Returns nil if no channel is set.
+func ForwardChannelFromContext(ctx context.Context) chan<- Event {
+	ch, _ := ctx.Value(forwardChannelKey{}).(chan<- Event)
+	return ch
 }

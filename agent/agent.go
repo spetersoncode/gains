@@ -444,6 +444,9 @@ func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Op
 		defer cancel()
 	}
 
+	// Add event forwarding channel to context for nested runs
+	execCtx = event.WithForwardChannel(execCtx, eventCh)
+
 	result, err := a.registry.Execute(execCtx, tc)
 	if err != nil {
 		// Tool not found or other registry error

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
 
@@ -19,11 +20,12 @@ type ToolArgs struct {
 type ToolOption func(*toolConfig)
 
 type toolConfig struct {
-	description  string
-	maxSteps     int
-	agentOptions []Option
-	schema       json.RawMessage
-	argsMapper   func(call ai.ToolCall) ([]ai.Message, error)
+	description    string
+	maxSteps       int
+	agentOptions   []Option
+	schema         json.RawMessage
+	argsMapper     func(call ai.ToolCall) ([]ai.Message, error)
+	forwardEvents  bool
 }
 
 // WithToolDescription sets a custom description for the agent tool.
@@ -60,6 +62,27 @@ func WithToolSchema(schema json.RawMessage) ToolOption {
 func WithToolArgsMapper(mapper func(call ai.ToolCall) ([]ai.Message, error)) ToolOption {
 	return func(c *toolConfig) {
 		c.argsMapper = mapper
+	}
+}
+
+// WithToolEventForwarding enables event forwarding from the sub-agent to the parent.
+// When enabled and a forwarding channel is available in the context, all sub-agent
+// events are forwarded to the parent event stream for observability.
+//
+// This allows the parent agent (or AG-UI frontend) to observe sub-agent progress:
+// - Streaming message deltas from the sub-agent
+// - Tool calls made by the sub-agent
+// - Step progress within the sub-agent
+//
+// Example:
+//
+//	mainRegistry.Add(agent.NewTool("research", researchAgent,
+//	    agent.WithToolEventForwarding(),
+//	    agent.WithToolDescription("Research a topic with observable progress"),
+//	))
+func WithToolEventForwarding() ToolOption {
+	return func(c *toolConfig) {
+		c.forwardEvents = true
 	}
 }
 
@@ -117,6 +140,15 @@ func NewTool(name string, a *Agent, opts ...ToolOption) tool.Registration {
 			return "", err
 		}
 
+		// Check for event forwarding channel in context
+		forwardCh := event.ForwardChannelFromContext(ctx)
+
+		// Use streaming mode if forwarding is enabled and channel is available
+		if cfg.forwardEvents && forwardCh != nil {
+			return runWithEventForwarding(ctx, a, messages, agentOpts, forwardCh)
+		}
+
+		// Standard blocking execution
 		result, err := a.Run(ctx, messages, agentOpts...)
 		if err != nil {
 			return "", fmt.Errorf("agent execution failed: %w", err)
@@ -181,6 +213,15 @@ func NewToolFunc[T any](name string, a *Agent, description string, toMessages fu
 		}
 
 		messages := toMessages(args)
+
+		// Check for event forwarding channel in context
+		forwardCh := event.ForwardChannelFromContext(ctx)
+
+		// Use streaming mode if forwarding is enabled and channel is available
+		if cfg.forwardEvents && forwardCh != nil {
+			return runWithEventForwarding(ctx, a, messages, agentOpts, forwardCh)
+		}
+
 		result, err := a.Run(ctx, messages, agentOpts...)
 		if err != nil {
 			return "", fmt.Errorf("agent execution failed: %w", err)
@@ -201,4 +242,47 @@ func NewToolFunc[T any](name string, a *Agent, description string, toMessages fu
 		},
 		Handler: handler,
 	}
+}
+
+// runWithEventForwarding runs an agent using RunStream and forwards all events
+// to the parent's event channel. Returns the final response content.
+func runWithEventForwarding(ctx context.Context, a *Agent, messages []ai.Message, opts []Option, forwardCh chan<- Event) (string, error) {
+	eventCh := a.RunStream(ctx, messages, opts...)
+
+	var lastResponse *ai.Response
+	var runError error
+
+	for ev := range eventCh {
+		// Forward the event to the parent channel
+		select {
+		case forwardCh <- ev:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+
+		// Track final response and errors
+		switch ev.Type {
+		case event.RunEnd:
+			if ev.Response != nil {
+				lastResponse = ev.Response
+			}
+		case event.RunError:
+			runError = ev.Error
+		case event.StepEnd:
+			// Track last response from steps as fallback
+			if ev.Response != nil {
+				lastResponse = ev.Response
+			}
+		}
+	}
+
+	if runError != nil {
+		return "", fmt.Errorf("agent execution failed: %w", runError)
+	}
+
+	if lastResponse == nil {
+		return "", fmt.Errorf("agent returned no response")
+	}
+
+	return lastResponse.Content, nil
 }
