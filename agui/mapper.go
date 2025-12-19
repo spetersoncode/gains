@@ -10,11 +10,16 @@ import (
 // With the unified event system, this is now a true 1:1 mapping -
 // each gains event maps to exactly one AG-UI event.
 //
+// The mapper tracks run depth to handle nested RunStart/RunEnd events
+// (e.g., from workflows containing agents or sub-agents). Only the outermost
+// run lifecycle events are mapped to AG-UI RUN_STARTED/RUN_FINISHED.
+//
 // Create a new Mapper for each run using NewMapper. The Mapper is not
 // safe for concurrent use - each goroutine should have its own Mapper.
 type Mapper struct {
 	threadID string
 	runID    string
+	runDepth int // Tracks nesting depth of runs
 }
 
 // NewMapper creates a new Mapper for a single run.
@@ -40,6 +45,12 @@ func (m *Mapper) ThreadID() string {
 // RunID returns the run ID for this mapper.
 func (m *Mapper) RunID() string {
 	return m.runID
+}
+
+// RunDepth returns the current nesting depth of runs.
+// Returns 0 when no runs are active, 1 during a top-level run, etc.
+func (m *Mapper) RunDepth() int {
+	return m.runDepth
 }
 
 // RunStarted returns a RUN_STARTED event.
@@ -90,14 +101,28 @@ func (m *Mapper) MapStream(input <-chan event.Event) <-chan events.Event {
 // MapEvent converts a unified gains event to an AG-UI event.
 // This is a true 1:1 mapping - each gains event maps to exactly one AG-UI event.
 // Returns nil for events that have no AG-UI equivalent.
+//
+// For nested runs (e.g., workflows containing agents), only the outermost
+// RunStart/RunEnd events are mapped to AG-UI lifecycle events.
 func (m *Mapper) MapEvent(e event.Event) events.Event {
 	switch e.Type {
-	// Run lifecycle
+	// Run lifecycle - track depth for nested runs
 	case event.RunStart:
-		return m.RunStarted()
+		m.runDepth++
+		if m.runDepth == 1 {
+			// Only emit for the outermost run
+			return m.RunStarted()
+		}
+		return nil
 	case event.RunEnd:
-		return m.RunFinished()
+		m.runDepth--
+		if m.runDepth == 0 {
+			// Only emit when returning to outermost level
+			return m.RunFinished()
+		}
+		return nil
 	case event.RunError:
+		// Errors always bubble up regardless of nesting depth
 		return m.RunError(e.Error)
 
 	// Step lifecycle

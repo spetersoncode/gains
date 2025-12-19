@@ -91,6 +91,116 @@ func TestMapper_MapEvent_RunLifecycle(t *testing.T) {
 	})
 }
 
+func TestMapper_NestedRuns(t *testing.T) {
+	t.Run("nested RunStart/RunEnd only emits outermost", func(t *testing.T) {
+		m := NewMapper("thread-1", "run-1")
+
+		// First run start - should emit
+		r1 := m.MapEvent(event.Event{Type: event.RunStart})
+		if r1 == nil {
+			t.Fatal("expected RUN_STARTED for first run")
+		}
+		if r1.Type() != events.EventTypeRunStarted {
+			t.Errorf("expected RUN_STARTED, got %s", r1.Type())
+		}
+		if m.RunDepth() != 1 {
+			t.Errorf("expected depth 1, got %d", m.RunDepth())
+		}
+
+		// Nested run start - should return nil
+		r2 := m.MapEvent(event.Event{Type: event.RunStart})
+		if r2 != nil {
+			t.Errorf("expected nil for nested run, got %s", r2.Type())
+		}
+		if m.RunDepth() != 2 {
+			t.Errorf("expected depth 2, got %d", m.RunDepth())
+		}
+
+		// Nested run end - should return nil
+		r3 := m.MapEvent(event.Event{Type: event.RunEnd})
+		if r3 != nil {
+			t.Errorf("expected nil for nested run end, got %s", r3.Type())
+		}
+		if m.RunDepth() != 1 {
+			t.Errorf("expected depth 1, got %d", m.RunDepth())
+		}
+
+		// First run end - should emit
+		r4 := m.MapEvent(event.Event{Type: event.RunEnd})
+		if r4 == nil {
+			t.Fatal("expected RUN_FINISHED for first run end")
+		}
+		if r4.Type() != events.EventTypeRunFinished {
+			t.Errorf("expected RUN_FINISHED, got %s", r4.Type())
+		}
+		if m.RunDepth() != 0 {
+			t.Errorf("expected depth 0, got %d", m.RunDepth())
+		}
+	})
+
+	t.Run("RunError emits regardless of depth", func(t *testing.T) {
+		m := NewMapper("thread-1", "run-1")
+
+		// Start outer run
+		m.MapEvent(event.Event{Type: event.RunStart})
+		// Start nested run
+		m.MapEvent(event.Event{Type: event.RunStart})
+		if m.RunDepth() != 2 {
+			t.Fatalf("expected depth 2, got %d", m.RunDepth())
+		}
+
+		// Error in nested run should still emit
+		r := m.MapEvent(event.Event{Type: event.RunError, Error: errors.New("nested error")})
+		if r == nil {
+			t.Fatal("expected RUN_ERROR event")
+		}
+		if r.Type() != events.EventTypeRunError {
+			t.Errorf("expected RUN_ERROR, got %s", r.Type())
+		}
+	})
+
+	t.Run("MapStream filters nested runs", func(t *testing.T) {
+		m := NewMapper("thread-1", "run-1")
+
+		input := make(chan event.Event, 20)
+
+		// Simulate: outer run -> nested run -> message -> end nested -> end outer
+		input <- event.Event{Type: event.RunStart}                              // outer: emits
+		input <- event.Event{Type: event.RunStart}                              // nested: filtered
+		input <- event.Event{Type: event.MessageStart, MessageID: "msg-1"}      // emits
+		input <- event.Event{Type: event.MessageDelta, MessageID: "msg-1", Delta: "Hi"} // emits
+		input <- event.Event{Type: event.MessageEnd, MessageID: "msg-1"}        // emits
+		input <- event.Event{Type: event.RunEnd}                                // nested: filtered
+		input <- event.Event{Type: event.RunEnd}                                // outer: emits
+		close(input)
+
+		output := m.MapStream(input)
+
+		var received []events.EventType
+		for ev := range output {
+			received = append(received, ev.Type())
+		}
+
+		expected := []events.EventType{
+			events.EventTypeRunStarted,
+			events.EventTypeTextMessageStart,
+			events.EventTypeTextMessageContent,
+			events.EventTypeTextMessageEnd,
+			events.EventTypeRunFinished,
+		}
+
+		if len(received) != len(expected) {
+			t.Fatalf("expected %d events, got %d: %v", len(expected), len(received), received)
+		}
+
+		for i, e := range expected {
+			if received[i] != e {
+				t.Errorf("event %d: expected %s, got %s", i, e, received[i])
+			}
+		}
+	})
+}
+
 func TestMapper_MapEvent_MessageLifecycle(t *testing.T) {
 	m := NewMapper("thread-1", "run-1")
 
