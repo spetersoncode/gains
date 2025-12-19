@@ -99,3 +99,52 @@ func MustDecodeState[T any](input *PreparedInput) T {
 	}
 	return result
 }
+
+// InitializeState creates a new state struct initialized from frontend state.
+// This is the recommended way to create workflow state from AG-UI input:
+//
+//	input, err := runAgentInput.Prepare()
+//	state, err := agui.InitializeState[MyState](input)
+//	result, err := workflow.Run(ctx, state, opts...)
+func InitializeState[T any](input *PreparedInput) (*T, error) {
+	state, err := DecodeState[T](input)
+	if err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+// MustInitializeState is like InitializeState but panics on error.
+func MustInitializeState[T any](input *PreparedInput) *T {
+	state, err := InitializeState[T](input)
+	if err != nil {
+		panic("agui: failed to initialize state: " + err.Error())
+	}
+	return state
+}
+
+// MergeState merges frontend state into an existing state struct.
+// Fields from the frontend state overwrite corresponding fields in state.
+// This is useful when you have a pre-populated state with defaults:
+//
+//	state := &MyState{DefaultField: "value"}
+//	agui.MergeState(state, input) // Overwrites with frontend values
+func MergeState[T any](state *T, input *PreparedInput) error {
+	if input.State == nil {
+		return nil
+	}
+
+	decoded, err := DecodeState[T](input)
+	if err != nil {
+		return err
+	}
+	*state = decoded
+	return nil
+}
+
+// MustMergeState is like MergeState but panics on error.
+func MustMergeState[T any](state *T, input *PreparedInput) {
+	if err := MergeState(state, input); err != nil {
+		panic("agui: failed to merge state: " + err.Error())
+	}
+}

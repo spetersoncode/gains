@@ -268,6 +268,159 @@ func TestPreparedInput_State(t *testing.T) {
 	})
 }
 
+func TestInitializeState(t *testing.T) {
+	type MyState struct {
+		Progress int      `json:"progress"`
+		Items    []string `json:"items"`
+	}
+
+	t.Run("creates state from frontend input", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: map[string]any{
+				"progress": float64(50),
+				"items":    []any{"a", "b"},
+			},
+		}
+
+		state, err := InitializeState[MyState](prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state == nil {
+			t.Fatal("expected non-nil state")
+		}
+		if state.Progress != 50 {
+			t.Errorf("Progress = %d, want 50", state.Progress)
+		}
+		if len(state.Items) != 2 {
+			t.Errorf("len(Items) = %d, want 2", len(state.Items))
+		}
+	})
+
+	t.Run("returns zero value pointer for nil state", func(t *testing.T) {
+		prepared := &PreparedInput{State: nil}
+
+		state, err := InitializeState[MyState](prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state == nil {
+			t.Fatal("expected non-nil state")
+		}
+		if state.Progress != 0 {
+			t.Errorf("Progress = %d, want 0", state.Progress)
+		}
+	})
+}
+
+func TestMustInitializeState(t *testing.T) {
+	type MyState struct {
+		Progress int `json:"progress"`
+	}
+
+	t.Run("returns initialized state", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: map[string]any{"progress": float64(100)},
+		}
+
+		state := MustInitializeState[MyState](prepared)
+		if state.Progress != 100 {
+			t.Errorf("Progress = %d, want 100", state.Progress)
+		}
+	})
+
+	t.Run("panics on invalid state", func(t *testing.T) {
+		prepared := &PreparedInput{
+			State: func() {}, // Functions can't be marshaled
+		}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+
+		MustInitializeState[MyState](prepared)
+	})
+}
+
+func TestMergeState(t *testing.T) {
+	type MyState struct {
+		Progress int    `json:"progress"`
+		Name     string `json:"name"`
+	}
+
+	t.Run("merges frontend state into existing state", func(t *testing.T) {
+		state := &MyState{Progress: 10, Name: "original"}
+		prepared := &PreparedInput{
+			State: map[string]any{
+				"progress": float64(50),
+				"name":     "updated",
+			},
+		}
+
+		err := MergeState(state, prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Progress != 50 {
+			t.Errorf("Progress = %d, want 50", state.Progress)
+		}
+		if state.Name != "updated" {
+			t.Errorf("Name = %q, want %q", state.Name, "updated")
+		}
+	})
+
+	t.Run("nil frontend state leaves state unchanged", func(t *testing.T) {
+		state := &MyState{Progress: 10, Name: "original"}
+		prepared := &PreparedInput{State: nil}
+
+		err := MergeState(state, prepared)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if state.Progress != 10 {
+			t.Errorf("Progress = %d, want 10", state.Progress)
+		}
+		if state.Name != "original" {
+			t.Errorf("Name = %q, want %q", state.Name, "original")
+		}
+	})
+}
+
+func TestMustMergeState(t *testing.T) {
+	type MyState struct {
+		Progress int `json:"progress"`
+	}
+
+	t.Run("merges state successfully", func(t *testing.T) {
+		state := &MyState{Progress: 10}
+		prepared := &PreparedInput{
+			State: map[string]any{"progress": float64(99)},
+		}
+
+		MustMergeState(state, prepared)
+		if state.Progress != 99 {
+			t.Errorf("Progress = %d, want 99", state.Progress)
+		}
+	})
+
+	t.Run("panics on invalid state", func(t *testing.T) {
+		state := &MyState{}
+		prepared := &PreparedInput{
+			State: func() {}, // Functions can't be marshaled
+		}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+
+		MustMergeState(state, prepared)
+	})
+}
+
 func TestRunAgentInput_JSON(t *testing.T) {
 	// Test that the struct marshals/unmarshals correctly
 	jsonData := `{
