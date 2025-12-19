@@ -5,6 +5,7 @@ import (
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/agent"
+	"github.com/spetersoncode/gains/chat"
 	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 )
@@ -25,7 +26,7 @@ type AgentResult struct {
 // It runs an agent loop to completion and stores the final result in state.
 type AgentStep struct {
 	name       string
-	chatClient ChatClient
+	chatClient chat.Client
 	registry   *tool.Registry
 	prompt     PromptFunc
 	outputKey  string
@@ -66,7 +67,7 @@ type AgentStep struct {
 //	)
 func NewAgentStep(
 	name string,
-	chatClient ChatClient,
+	chatClient chat.Client,
 	registry *tool.Registry,
 	prompt PromptFunc,
 	outputKey string,
@@ -358,7 +359,7 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 // NewAgentStepWithKey creates an AgentStep that stores output using a typed key.
 func NewAgentStepWithKey(
 	name string,
-	chatClient ChatClient,
+	chatClient chat.Client,
 	registry *tool.Registry,
 	prompt PromptFunc,
 	outputKey Key[*AgentResult],

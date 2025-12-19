@@ -6,15 +6,9 @@ import (
 	"fmt"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/chat"
 	"github.com/spetersoncode/gains/event"
 )
-
-// ChatClient is the interface for chat capabilities needed by workflow steps.
-// This is the canonical definition - client.Client implements this interface.
-type ChatClient interface {
-	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
-	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error)
-}
 
 // Step represents a single unit of work in a workflow.
 // Steps can be functions, LLM calls, or nested workflows.
@@ -84,7 +78,7 @@ type PromptFunc func(state *State) []ai.Message
 // PromptStep makes a single LLM call with a dynamic prompt.
 type PromptStep struct {
 	name       string
-	chatClient ChatClient
+	chatClient chat.Client
 	prompt     PromptFunc
 	outputKey  string
 	chatOpts   []ai.Option
@@ -93,7 +87,7 @@ type PromptStep struct {
 // NewPromptStep creates a step for a single LLM call.
 // The prompt function generates messages from current state.
 // If outputKey is non-empty, the response content is stored in state under that key.
-func NewPromptStep(name string, c ChatClient, prompt PromptFunc, outputKey string, opts ...ai.Option) *PromptStep {
+func NewPromptStep(name string, c chat.Client, prompt PromptFunc, outputKey string, opts ...ai.Option) *PromptStep {
 	return &PromptStep{
 		name:       name,
 		chatClient: c,
@@ -190,7 +184,7 @@ func (p *PromptStep) RunStream(ctx context.Context, state *State, opts ...Option
 // unmarshaled into type T and stored in state.
 type TypedPromptStep[T any] struct {
 	name       string
-	chatClient ChatClient
+	chatClient chat.Client
 	prompt     PromptFunc
 	outputKey  string
 	chatOpts   []ai.Option
@@ -230,7 +224,7 @@ type TypedPromptStep[T any] struct {
 //	// After execution, state.Get("analysis") returns *Analysis
 func NewTypedPromptStep[T any](
 	name string,
-	c ChatClient,
+	c chat.Client,
 	prompt PromptFunc,
 	schema ai.ResponseSchema,
 	outputKey string,
@@ -376,7 +370,7 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 //	)
 func NewTypedPromptStepWithKey[T any](
 	name string,
-	c ChatClient,
+	c chat.Client,
 	prompt PromptFunc,
 	schema ai.ResponseSchema,
 	outputKey Key[*T],

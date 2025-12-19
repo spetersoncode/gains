@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/chat"
 	"github.com/spetersoncode/gains/event"
 )
 
@@ -137,7 +138,7 @@ func (r *Router) RunStream(ctx context.Context, state *State, opts ...Option) <-
 // ClassifierRouter uses an LLM to classify input and route accordingly.
 type ClassifierRouter struct {
 	name       string
-	chatClient ChatClient
+	chatClient chat.Client
 	prompt     PromptFunc
 	routes     map[string]Step
 	chatOpts   []ai.Option
@@ -148,7 +149,7 @@ type ClassifierRouter struct {
 // For more reliable classification, use ClassifierSchema().
 func NewClassifierRouter(
 	name string,
-	c ChatClient,
+	c chat.Client,
 	prompt PromptFunc,
 	routes map[string]Step,
 	opts ...ai.Option,

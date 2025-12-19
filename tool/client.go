@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/chat"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -18,12 +19,6 @@ type ImageClient interface {
 // EmbeddingClient is the interface for embedding capabilities.
 type EmbeddingClient interface {
 	Embed(ctx context.Context, texts []string, opts ...ai.EmbeddingOption) (*ai.EmbeddingResponse, error)
-}
-
-// Chatter is the interface for non-streaming chat capabilities.
-// Use workflow.ChatClient for the full interface with streaming support.
-type Chatter interface {
-	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
 }
 
 // imageArgs defines the arguments for the image generation tool.
@@ -262,7 +257,7 @@ func WithChatDefaults(opts ...ai.Option) ChatToolOption {
 
 // NewChatTool creates a tool that makes LLM calls (sub-agent pattern).
 // This allows an agent to delegate tasks to another LLM call.
-func NewChatTool(c Chatter, opts ...ChatToolOption) (ai.Tool, Handler) {
+func NewChatTool(c chat.Client, opts ...ChatToolOption) (ai.Tool, Handler) {
 	cfg := &chatToolConfig{
 		name: "ask_assistant",
 	}
