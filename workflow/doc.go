@@ -36,13 +36,28 @@
 // Execute multiple steps concurrently:
 //
 //	parallel := workflow.NewParallel("research", steps,
-//		func(state *workflow.State, results map[string]*workflow.StepResult) error {
-//			// Aggregate results
+//		func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
+//			// Aggregate results (errors contains any failed steps when ContinueOnError=true)
 //			var combined string
 //			for name, result := range results {
 //				combined += fmt.Sprintf("%s: %v\n", name, result.Output)
 //			}
 //			state.Set("combined", combined)
+//			return nil
+//		},
+//	)
+//
+// Access branch state values with typed helpers:
+//
+//	var KeyAnalysis = workflow.NewKey[*AnalysisResult]("analysis")
+//
+//	parallel := workflow.NewParallel("analyze", steps,
+//		func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
+//			for name, result := range results {
+//				// Type-safe access to branch state
+//				analysis := workflow.MustGetFromBranch(result, KeyAnalysis)
+//				fmt.Printf("%s score: %d\n", name, analysis.Score)
+//			}
 //			return nil
 //		},
 //	)

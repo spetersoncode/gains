@@ -51,7 +51,7 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	}
 
 	// Aggregator combines all perspectives
-	aggregator := func(state *workflow.State, results map[string]*workflow.StepResult) error {
+	aggregator := func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
 		var combined strings.Builder
 		combined.WriteString("## Multi-Perspective Analysis\n\n")
 		for _, p := range perspectives {
@@ -59,6 +59,9 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 				combined.WriteString(fmt.Sprintf("### %s\n%s\n\n",
 					strings.Title(p.name),
 					result.Output))
+			} else if err, ok := errors[p.name]; ok {
+				combined.WriteString(fmt.Sprintf("### %s\n[Error: %v]\n\n",
+					strings.Title(p.name), err))
 			}
 		}
 		state.Set("combined_analysis", combined.String())

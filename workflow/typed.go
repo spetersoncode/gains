@@ -141,3 +141,66 @@ func BoolKey(name string) Key[bool] { return NewKey[bool](name) }
 
 // FloatKey creates a Key[float64] with the given name.
 func FloatKey(name string) Key[float64] { return NewKey[float64](name) }
+
+// GetBranchState extracts the branch state from a StepResult.
+// In parallel workflows, each branch runs with a cloned state stored in metadata.
+// Returns the branch state and true if found, or nil and false otherwise.
+//
+// Example:
+//
+//	aggregator := func(state *State, results map[string]*StepResult, errors map[string]error) error {
+//	    for name, result := range results {
+//	        if branchState, ok := workflow.GetBranchState(result); ok {
+//	            // Access branch-specific state
+//	        }
+//	    }
+//	}
+func GetBranchState(result *StepResult) (*State, bool) {
+	if result == nil || result.Metadata == nil {
+		return nil, false
+	}
+	branchState, ok := result.Metadata["branch_state"].(*State)
+	return branchState, ok
+}
+
+// GetFromBranch extracts a typed value from a branch's state within StepResult.
+// This is a convenience helper for parallel workflow aggregators.
+// Returns the typed value and true if the key exists, or zero value and false otherwise.
+//
+// Example:
+//
+//	aggregator := func(state *State, results map[string]*StepResult, errors map[string]error) error {
+//	    for name, result := range results {
+//	        if riff, ok := workflow.GetFromBranch(result, KeyRiff); ok {
+//	            fmt.Println("Branch", name, "produced:", riff)
+//	        }
+//	    }
+//	}
+func GetFromBranch[T any](result *StepResult, key Key[T]) (T, bool) {
+	var zero T
+	branchState, ok := GetBranchState(result)
+	if !ok {
+		return zero, false
+	}
+	return Get(branchState, key)
+}
+
+// MustGetFromBranch extracts a typed value from a branch's state within StepResult.
+// Panics if the branch state is missing, the key doesn't exist, or the type mismatches.
+// Use when you are certain the branch produced the expected key.
+//
+// Example:
+//
+//	aggregator := func(state *State, results map[string]*StepResult, errors map[string]error) error {
+//	    for name, result := range results {
+//	        riff := workflow.MustGetFromBranch(result, KeyRiff)
+//	        fmt.Println("Branch", name, "produced:", riff)
+//	    }
+//	}
+func MustGetFromBranch[T any](result *StepResult, key Key[T]) T {
+	branchState, ok := GetBranchState(result)
+	if !ok {
+		panic("workflow: StepResult has no branch_state metadata")
+	}
+	return MustGet(branchState, key)
+}

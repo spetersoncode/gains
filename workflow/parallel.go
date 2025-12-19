@@ -9,7 +9,9 @@ import (
 )
 
 // Aggregator combines results from parallel steps into the shared state.
-type Aggregator func(state *State, results map[string]*StepResult) error
+// The errors map contains any step failures when ContinueOnError is true,
+// giving full visibility into which steps succeeded and which failed.
+type Aggregator func(state *State, results map[string]*StepResult, errors map[string]error) error
 
 // Parallel executes steps concurrently and aggregates results.
 type Parallel struct {
@@ -99,7 +101,7 @@ func (p *Parallel) Run(ctx context.Context, state *State, opts ...Option) (*Step
 
 	// Aggregate results
 	if p.aggregator != nil {
-		if err := p.aggregator(state, results); err != nil {
+		if err := p.aggregator(state, results, errors); err != nil {
 			return nil, err
 		}
 	} else {
@@ -170,8 +172,6 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 				stepEvents := s.RunStream(ctx, branchState, opts...)
 
 				for ev := range stepEvents {
-					eventCh <- ev
-
 					mu.Lock()
 					if ev.Type == event.StepEnd && ev.Response != nil {
 						results[s.Name()] = &StepResult{
@@ -183,8 +183,20 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 					}
 					if ev.Type == event.RunError {
 						errors[s.Name()] = ev.Error
+						// In ContinueOnError mode, emit StepSkipped instead of RunError
+						if options.ContinueOnError {
+							eventCh <- Event{
+								Type:     event.StepSkipped,
+								StepName: s.Name(),
+								Error:    ev.Error,
+								Message:  "step failed, continuing",
+							}
+							mu.Unlock()
+							continue
+						}
 					}
 					mu.Unlock()
+					eventCh <- ev
 				}
 			}(step)
 		}
@@ -208,7 +220,7 @@ func (p *Parallel) RunStream(ctx context.Context, state *State, opts ...Option) 
 
 		// Aggregate
 		if p.aggregator != nil {
-			if err := p.aggregator(state, results); err != nil {
+			if err := p.aggregator(state, results, errors); err != nil {
 				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 				return
 			}

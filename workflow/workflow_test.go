@@ -362,7 +362,7 @@ func TestParallel_RunWithAggregator(t *testing.T) {
 		}),
 	}
 
-	aggregator := func(state *State, results map[string]*StepResult) error {
+	aggregator := func(state *State, results map[string]*StepResult, errors map[string]error) error {
 		state.Set("aggregated", len(results))
 		return nil
 	}
@@ -393,6 +393,53 @@ func TestParallel_RunWithError(t *testing.T) {
 	var parallelErr *ParallelError
 	require.ErrorAs(t, err, &parallelErr)
 	assert.Contains(t, parallelErr.Errors, "step2")
+}
+
+func TestParallel_ContinueOnError(t *testing.T) {
+	steps := []Step{
+		NewFuncStep("step1", func(ctx context.Context, state *State) error {
+			state.Set("step1", "done")
+			return nil
+		}),
+		NewFuncStep("step2", func(ctx context.Context, state *State) error {
+			return errors.New("step2 error")
+		}),
+	}
+
+	t.Run("aggregator receives errors map", func(t *testing.T) {
+		var receivedErrors map[string]error
+		aggregator := func(state *State, results map[string]*StepResult, errs map[string]error) error {
+			receivedErrors = errs
+			return nil
+		}
+
+		parallel := NewParallel("test-parallel", steps, aggregator)
+		state := NewState(nil)
+
+		_, err := parallel.Run(context.Background(), state, WithContinueOnError(true))
+
+		require.NoError(t, err)
+		assert.Len(t, receivedErrors, 1)
+		assert.Contains(t, receivedErrors, "step2")
+	})
+
+	t.Run("streaming emits StepSkipped for failures", func(t *testing.T) {
+		parallel := NewParallel("test-parallel", steps, nil)
+		state := NewState(nil)
+
+		events := parallel.RunStream(context.Background(), state, WithContinueOnError(true))
+
+		var skippedSteps []string
+		for ev := range events {
+			if ev.Type == event.StepSkipped {
+				skippedSteps = append(skippedSteps, ev.StepName)
+				assert.NotNil(t, ev.Error)
+				assert.Equal(t, "step failed, continuing", ev.Message)
+			}
+		}
+
+		assert.Contains(t, skippedSteps, "step2")
+	})
 }
 
 func TestParallel_MaxConcurrency(t *testing.T) {

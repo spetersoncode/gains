@@ -269,3 +269,147 @@ func TestConvenienceConstructors(t *testing.T) {
 		assert.Equal(t, 3.14, v)
 	})
 }
+
+func TestGetBranchState(t *testing.T) {
+	t.Run("returns state when present in metadata", func(t *testing.T) {
+		branchState := NewStateFrom(map[string]any{"key": "value"})
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		state, ok := GetBranchState(result)
+		require.True(t, ok)
+		assert.Same(t, branchState, state)
+	})
+
+	t.Run("returns false when nil result", func(t *testing.T) {
+		state, ok := GetBranchState(nil)
+		assert.False(t, ok)
+		assert.Nil(t, state)
+	})
+
+	t.Run("returns false when nil metadata", func(t *testing.T) {
+		result := &StepResult{Metadata: nil}
+
+		state, ok := GetBranchState(result)
+		assert.False(t, ok)
+		assert.Nil(t, state)
+	})
+
+	t.Run("returns false when branch_state missing", func(t *testing.T) {
+		result := &StepResult{
+			Metadata: map[string]any{"other": "data"},
+		}
+
+		state, ok := GetBranchState(result)
+		assert.False(t, ok)
+		assert.Nil(t, state)
+	})
+
+	t.Run("returns false when branch_state wrong type", func(t *testing.T) {
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": "not a state"},
+		}
+
+		state, ok := GetBranchState(result)
+		assert.False(t, ok)
+		assert.Nil(t, state)
+	})
+}
+
+func TestGetFromBranch(t *testing.T) {
+	t.Run("returns typed value from branch state", func(t *testing.T) {
+		branchState := NewStateFrom(nil)
+		Set(branchState, keyString, "hello from branch")
+		Set(branchState, keyInt, 42)
+
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		s, ok := GetFromBranch(result, keyString)
+		require.True(t, ok)
+		assert.Equal(t, "hello from branch", s)
+
+		i, ok := GetFromBranch(result, keyInt)
+		require.True(t, ok)
+		assert.Equal(t, 42, i)
+	})
+
+	t.Run("returns false when key missing in branch state", func(t *testing.T) {
+		branchState := NewStateFrom(nil)
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		_, ok := GetFromBranch(result, keyMissing)
+		assert.False(t, ok)
+	})
+
+	t.Run("returns false when no branch state", func(t *testing.T) {
+		result := &StepResult{Metadata: nil}
+
+		_, ok := GetFromBranch(result, keyString)
+		assert.False(t, ok)
+	})
+
+	t.Run("returns false when type mismatches", func(t *testing.T) {
+		branchState := NewStateFrom(map[string]any{"string": "hello"})
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		wrongTypeKey := NewKey[int]("string")
+		_, ok := GetFromBranch(result, wrongTypeKey)
+		assert.False(t, ok)
+	})
+}
+
+func TestMustGetFromBranch(t *testing.T) {
+	t.Run("returns typed value from branch state", func(t *testing.T) {
+		branchState := NewStateFrom(nil)
+		Set(branchState, keyString, "hello from branch")
+
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		s := MustGetFromBranch(result, keyString)
+		assert.Equal(t, "hello from branch", s)
+	})
+
+	t.Run("panics when no branch state", func(t *testing.T) {
+		result := &StepResult{Metadata: nil}
+
+		assert.PanicsWithValue(t,
+			"workflow: StepResult has no branch_state metadata",
+			func() {
+				MustGetFromBranch(result, keyString)
+			})
+	})
+
+	t.Run("panics when key missing", func(t *testing.T) {
+		branchState := NewStateFrom(nil)
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		assert.PanicsWithValue(t,
+			`workflow: state key "nonexistent" not found`,
+			func() {
+				MustGetFromBranch(result, keyMissing)
+			})
+	})
+
+	t.Run("panics when type mismatches", func(t *testing.T) {
+		branchState := NewStateFrom(map[string]any{"string": "hello"})
+		result := &StepResult{
+			Metadata: map[string]any{"branch_state": branchState},
+		}
+
+		wrongTypeKey := NewKey[int]("string")
+		assert.Panics(t, func() {
+			MustGetFromBranch(result, wrongTypeKey)
+		})
+	})
+}
