@@ -41,7 +41,7 @@ gains/
 
 - **client**: Entry point for most users. Unified access to all provider capabilities with automatic retry and event emission.
 - **agent**: Tool-calling loops with max steps, timeouts, approval workflows, and parallel tool execution. Uses `tool.Registry` for tool management.
-- **workflow**: Step interface with Chain (sequential), Parallel (concurrent), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), and TypedPromptStep (auto-unmarshaling structured output). Uses `Key[T]` for type-safe state access: `Get`, `Set`, `MustGet`, `GetOr`.
+- **workflow**: Generic Step[S] interface where S is a user-defined state struct. Composable patterns: Chain (sequential), Parallel (concurrent with branch isolation), Router (conditional), ClassifierRouter (LLM-based routing), Loop (iterative), Merge (conditional fan-in). PromptStep[S, T] supports both plain text and structured JSON output with automatic unmarshaling via field getters.
 - **tool**: Tool infrastructure including Registry, Handler types, function binding with auto schema generation from struct tags, and built-in tools (file, HTTP, search, client tools).
 - **event**: Unified event types for streaming. Defines `Event` struct with types for run lifecycle (`RunStart`, `RunEnd`), message streaming (`MessageStart`, `MessageDelta`, `MessageEnd`), tool calls (`ToolCallStart`, `ToolCallEnd`, `ToolCallResult`), and workflow events (`StepStart`, `StepEnd`, `RouteSelected`, `LoopIteration`).
 - **agui**: AG-UI protocol support. Provides `Mapper` for converting gains events to AG-UI events (handles Start-Content-End pattern), and message conversion utilities (`ToGainsMessages`, `FromGainsMessages`). Transport-agnostic - users implement their own HTTP/SSE server.

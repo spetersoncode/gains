@@ -1,139 +1,191 @@
 // Package workflow provides composable patterns for orchestrating AI-powered pipelines.
 //
-// The package implements four core workflow patterns:
-//   - Chain: Sequential execution where output flows to the next step
-//   - Parallel: Concurrent execution with result aggregation
+// The package implements five core workflow patterns:
+//   - Chain: Sequential execution where steps share mutable state
+//   - Parallel: Concurrent execution with branch state isolation and aggregation
 //   - Router: Conditional branching based on predicates or LLM classification
 //   - Loop: Iterative execution until a condition is met
+//   - Merge: Conditional joining of multiple steps with fan-in aggregation
 //
-// All workflow types implement the Step interface, enabling arbitrary nesting
-// and composition of patterns.
+// All workflow types implement the Step[S] interface, enabling arbitrary nesting
+// and composition. The generic type parameter S is your user-defined state struct.
+//
+// # State Model
+//
+// Define your own state struct to hold workflow data:
+//
+//	type MyState struct {
+//	    Input    string
+//	    Analysis SentimentResult
+//	    Summary  string
+//	}
+//
+// State is passed by pointer and mutated in place. After workflow completion,
+// access results directly from your state fields.
 //
 // # Basic Usage
 //
 // Create a simple chain workflow:
 //
+//	type PipelineState struct {
+//	    Topic   string
+//	    Content string
+//	}
+//
 //	chain := workflow.NewChain("my-chain",
-//		workflow.NewFuncStep("setup", func(ctx context.Context, state *workflow.State) error {
-//			state.Set("input", "Hello, World!")
-//			return nil
-//		}),
-//		workflow.NewPromptStep("process", provider,
-//			func(s *workflow.State) []gains.Message {
-//				return []gains.Message{
-//					{Role: gains.RoleUser, Content: s.GetString("input")},
-//				}
-//			},
-//			"output",
-//		),
+//	    workflow.NewFuncStep[PipelineState]("setup", func(ctx context.Context, s *PipelineState) error {
+//	        s.Topic = "Go generics"
+//	        return nil
+//	    }),
+//	    workflow.NewPromptStep("generate", client,
+//	        func(s *PipelineState) []gains.Message {
+//	            return []gains.Message{
+//	                {Role: gains.RoleUser, Content: "Write about: " + s.Topic},
+//	            }
+//	        },
+//	        nil, // no schema = plain text
+//	        func(s *PipelineState) *string { return &s.Content },
+//	    ),
 //	)
 //
 //	wf := workflow.New("my-workflow", chain)
-//	result, err := wf.Run(context.Background(), workflow.NewState())
+//	state := &PipelineState{}
+//	result, err := wf.Run(ctx, state)
+//	fmt.Println(state.Content) // Access result from state
+//
+// # Structured Output
+//
+// Use PromptStep with a schema for automatic JSON unmarshaling:
+//
+//	type AnalysisState struct {
+//	    Input    string
+//	    Analysis SentimentResult
+//	}
+//
+//	type SentimentResult struct {
+//	    Sentiment string  `json:"sentiment"`
+//	    Score     float64 `json:"score"`
+//	}
+//
+//	schema := gains.MustSchemaFor[SentimentResult]()
+//
+//	step := workflow.NewPromptStep("analyze", client,
+//	    func(s *AnalysisState) []gains.Message {
+//	        return []gains.Message{{Role: gains.RoleUser, Content: s.Input}}
+//	    },
+//	    schema, // schema provided = JSON unmarshal
+//	    func(s *AnalysisState) *SentimentResult { return &s.Analysis },
+//	)
 //
 // # Parallel Execution
 //
-// Execute multiple steps concurrently:
+// Execute multiple steps concurrently with isolated branch state:
 //
-//	parallel := workflow.NewParallel("research", steps,
-//		func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
-//			// Aggregate results (errors contains any failed steps when ContinueOnError=true)
-//			var combined string
-//			for name, result := range results {
-//				combined += fmt.Sprintf("%s: %v\n", name, result.Output)
-//			}
-//			state.Set("combined", combined)
-//			return nil
-//		},
-//	)
+//	type ResearchState struct {
+//	    Topic       string
+//	    Technical   string
+//	    Business    string
+//	    Combined    string
+//	}
 //
-// Access branch state values with typed helpers:
-//
-//	var KeyAnalysis = workflow.NewKey[*AnalysisResult]("analysis")
-//
-//	parallel := workflow.NewParallel("analyze", steps,
-//		func(state *workflow.State, results map[string]*workflow.StepResult, errors map[string]error) error {
-//			for name, result := range results {
-//				// Type-safe access to branch state
-//				analysis := workflow.MustGetFromBranch(result, KeyAnalysis)
-//				fmt.Printf("%s score: %d\n", name, analysis.Score)
-//			}
-//			return nil
-//		},
+//	parallel := workflow.NewParallel("research",
+//	    []workflow.Step[ResearchState]{technicalStep, businessStep},
+//	    func(state *ResearchState, branches map[string]*ResearchState, errors map[string]error) error {
+//	        // Each branch ran with a deep copy; merge results back
+//	        for name, branch := range branches {
+//	            if name == "technical" {
+//	                state.Technical = branch.Technical
+//	            } else if name == "business" {
+//	                state.Business = branch.Business
+//	            }
+//	        }
+//	        state.Combined = state.Technical + "\n\n" + state.Business
+//	        return nil
+//	    },
 //	)
 //
 // # Conditional Routing
 //
 // Route based on state conditions:
 //
+//	type TicketState struct {
+//	    Priority string
+//	    Response string
+//	}
+//
 //	router := workflow.NewRouter("route",
-//		[]workflow.Route{
-//			{
-//				Name: "high-priority",
-//				Condition: func(ctx context.Context, s *workflow.State) bool {
-//					return s.GetString("priority") == "high"
-//				},
-//				Step: highPriorityStep,
-//			},
-//		},
-//		defaultStep,
+//	    []workflow.Route[TicketState]{
+//	        {
+//	            Name: "urgent",
+//	            Condition: func(ctx context.Context, s *TicketState) bool {
+//	                return s.Priority == "high"
+//	            },
+//	            Step: urgentHandler,
+//	        },
+//	    },
+//	    normalHandler, // default
 //	)
 //
 // Or use LLM-based classification:
 //
-//	classifier := workflow.NewClassifierRouter("classify", provider,
-//		func(s *workflow.State) []gains.Message {
-//			return []gains.Message{
-//				{Role: gains.RoleSystem, Content: "Classify as: billing, technical, general"},
-//				{Role: gains.RoleUser, Content: s.GetString("ticket")},
-//			}
-//		},
-//		map[string]workflow.Step{
-//			"billing":   billingStep,
-//			"technical": technicalStep,
-//			"general":   generalStep,
-//		},
+//	classifier := workflow.NewClassifierRouter("classify", client,
+//	    func(s *TicketState) []gains.Message {
+//	        return []gains.Message{
+//	            {Role: gains.RoleSystem, Content: "Classify as: billing, technical, general"},
+//	            {Role: gains.RoleUser, Content: s.Ticket},
+//	        }
+//	    },
+//	    map[string]workflow.Step[TicketState]{
+//	        "billing":   billingStep,
+//	        "technical": technicalStep,
+//	        "general":   generalStep,
+//	    },
 //	)
 //
 // # Iterative Loops
 //
 // Repeat steps until a condition is met:
 //
-//	// Create a content creator that reads feedback on subsequent iterations
-//	creator := workflow.NewPromptStep("creator", provider,
-//		func(s *workflow.State) []gains.Message {
-//			feedback := s.GetString("feedback")
-//			if feedback == "" {
-//				return []gains.Message{{Role: gains.RoleUser, Content: "Write a blog post about Go"}}
-//			}
-//			return []gains.Message{
-//				{Role: gains.RoleUser, Content: "Write a blog post about Go"},
-//				{Role: gains.RoleAssistant, Content: s.GetString("draft")},
-//				{Role: gains.RoleUser, Content: "Revise based on: " + feedback},
-//			}
-//		},
-//		workflow.WithOutputKey("draft"),
+//	type EditState struct {
+//	    Draft    string
+//	    Feedback string
+//	}
+//
+//	// Create a writer that revises based on feedback
+//	writer := workflow.NewPromptStep("writer", client,
+//	    func(s *EditState) []gains.Message {
+//	        if s.Feedback == "" {
+//	            return []gains.Message{{Role: gains.RoleUser, Content: "Write a poem"}}
+//	        }
+//	        return []gains.Message{
+//	            {Role: gains.RoleUser, Content: fmt.Sprintf(
+//	                "Revise this:\n%s\n\nFeedback: %s", s.Draft, s.Feedback,
+//	            )},
+//	        }
+//	    },
+//	    nil,
+//	    func(s *EditState) *string { return &s.Draft },
 //	)
 //
 //	// Create an editor that approves or provides feedback
-//	editor := workflow.NewPromptStep("editor", provider,
-//		func(s *workflow.State) []gains.Message {
-//			return []gains.Message{{
-//				Role: gains.RoleUser,
-//				Content: "Review this draft. Reply APPROVED or provide feedback:\n\n" +
-//					s.GetString("draft"),
-//			}}
-//		},
-//		workflow.WithOutputKey("feedback"),
+//	editor := workflow.NewPromptStep("editor", client,
+//	    func(s *EditState) []gains.Message {
+//	        return []gains.Message{{
+//	            Role:    gains.RoleUser,
+//	            Content: "Review this. Reply APPROVED or provide feedback:\n\n" + s.Draft,
+//	        }}
+//	    },
+//	    nil,
+//	    func(s *EditState) *string { return &s.Feedback },
 //	)
 //
-//	// Combine into a chain and loop until approved
-//	reviewCycle := workflow.NewChain("review-cycle", creator, editor)
-//	loop := workflow.NewLoop("content-loop", reviewCycle,
-//		func(ctx context.Context, s *workflow.State) bool {
-//			return strings.Contains(s.GetString("feedback"), "APPROVED")
-//		},
-//		workflow.WithMaxIterations(5),
+//	// Loop until approved
+//	loop := workflow.NewLoopUntil("refine",
+//	    workflow.NewChain("cycle", writer, editor),
+//	    func(s *EditState) bool {
+//	        return strings.Contains(strings.ToUpper(s.Feedback), "APPROVED")
+//	    },
+//	    workflow.WithMaxIterations(5),
 //	)
 //
 // # Streaming Events
@@ -142,29 +194,32 @@
 //
 //	import "github.com/spetersoncode/gains/event"
 //
+//	state := &MyState{}
 //	events := wf.RunStream(ctx, state)
 //	for e := range events {
-//		switch e.Type {
-//		case event.StepStart:
-//			fmt.Printf("Starting: %s\n", e.StepName)
-//		case event.MessageDelta:
-//			fmt.Print(e.Delta)
-//		case event.StepEnd:
-//			fmt.Printf("Completed: %s\n", e.StepName)
-//		case event.RunError:
-//			fmt.Printf("Error: %v\n", e.Error)
-//		}
+//	    switch e.Type {
+//	    case event.StepStart:
+//	        fmt.Printf("Starting: %s\n", e.StepName)
+//	    case event.MessageDelta:
+//	        fmt.Print(e.Delta)
+//	    case event.StepEnd:
+//	        fmt.Printf("Completed: %s\n", e.StepName)
+//	    case event.RunError:
+//	        fmt.Printf("Error: %v\n", e.Error)
+//	    }
 //	}
+//	// Access final results from state
+//	fmt.Println(state.Summary)
 //
 // # Composability
 //
-// Workflows can be nested since all patterns implement Step:
+// Workflows can be nested since all patterns implement Step[S]:
 //
 //	outer := workflow.NewChain("outer",
-//		setupStep,
-//		workflow.NewParallel("inner-parallel", parallelSteps, nil),
-//		workflow.NewRouter("inner-router", routes, nil),
-//		workflow.NewLoop("inner-loop", refinementStep, condition),
-//		finalStep,
+//	    setupStep,
+//	    workflow.NewParallel("inner-parallel", parallelSteps, aggregator),
+//	    workflow.NewRouter("inner-router", routes, defaultStep),
+//	    workflow.NewLoopUntil("inner-loop", refinementStep, condition),
+//	    finalStep,
 //	)
 package workflow
