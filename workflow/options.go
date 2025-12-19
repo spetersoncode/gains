@@ -115,7 +115,7 @@ func WithTemperature(t float64) Option {
 // ApplyOptions applies functional options with defaults.
 func ApplyOptions(opts ...Option) *Options {
 	o := &Options{
-		StepTimeout:     30 * time.Second,
+		StepTimeout:     2 * time.Minute,
 		ContinueOnError: false,
 	}
 	for _, opt := range opts {

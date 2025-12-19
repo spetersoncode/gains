@@ -810,7 +810,7 @@ func TestNestedWorkflows(t *testing.T) {
 func TestApplyOptions_Defaults(t *testing.T) {
 	opts := ApplyOptions()
 
-	assert.Equal(t, 30*time.Second, opts.StepTimeout)
+	assert.Equal(t, 2*time.Minute, opts.StepTimeout)
 	assert.False(t, opts.ContinueOnError)
 	assert.Zero(t, opts.Timeout)
 	assert.Zero(t, opts.MaxConcurrency)
