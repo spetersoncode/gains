@@ -18,7 +18,6 @@ type LoopState struct {
 	Iteration int
 	Draft     string
 	Feedback  string
-	Approved  bool
 }
 
 func demoWorkflowLoop(ctx context.Context, c *client.Client) {
@@ -31,7 +30,7 @@ func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 	fmt.Println("  3. Loop continues until approved (max 3 iterations)")
 
 	// Step 1: Writer creates/revises content based on feedback
-	writer := workflow.NewPromptStep[LoopState]("writer", c,
+	writer := workflow.NewPromptStep("writer", c,
 		func(s *LoopState) []ai.Message {
 			if s.Iteration <= 1 || s.Feedback == "" {
 				// First iteration - create initial content
@@ -47,13 +46,12 @@ func demoWorkflowLoop(ctx context.Context, c *client.Client) {
 					s.Draft, s.Feedback)},
 			}
 		},
-		func(s *LoopState, content string) {
-			s.Draft = content
-		},
+		nil,
+		func(s *LoopState) *string { return &s.Draft },
 	)
 
 	// Step 2: Editor reviews and either approves or provides feedback
-	editor := workflow.NewPromptStep[LoopState]("editor", c,
+	editor := workflow.NewPromptStep("editor", c,
 		func(s *LoopState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
@@ -66,10 +64,8 @@ If it needs improvement, provide specific constructive feedback (1-2 sentences) 
 Be a tough but fair editor - only approve truly good work.`, s.Draft)},
 			}
 		},
-		func(s *LoopState, content string) {
-			s.Feedback = content
-			s.Approved = strings.Contains(strings.ToUpper(content), "APPROVED")
-		},
+		nil,
+		func(s *LoopState) *string { return &s.Feedback },
 	)
 
 	// Create the review cycle chain
@@ -78,7 +74,7 @@ Be a tough but fair editor - only approve truly good work.`, s.Draft)},
 	// Create the loop that exits when approved
 	loop := workflow.NewLoopUntil("content-loop", reviewCycle,
 		func(s *LoopState) bool {
-			return s.Approved
+			return strings.Contains(strings.ToUpper(s.Feedback), "APPROVED")
 		},
 		workflow.WithMaxIterations(3),
 	)

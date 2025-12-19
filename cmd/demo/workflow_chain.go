@@ -30,39 +30,36 @@ func demoWorkflowChain(ctx context.Context, c *client.Client) {
 	fmt.Println("  3. Translate the haiku to another style")
 
 	// Step 1: Generate a random topic
-	step1 := workflow.NewPromptStep[ChainState]("generate-topic", c,
+	step1 := workflow.NewPromptStep("generate-topic", c,
 		func(s *ChainState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: "Give me one random nature topic in 1-2 words only. Just the topic, nothing else."},
 			}
 		},
-		func(s *ChainState, content string) {
-			s.Topic = strings.TrimSpace(content)
-		},
+		nil,
+		func(s *ChainState) *string { return &s.Topic },
 	)
 
 	// Step 2: Write a haiku about the topic
-	step2 := workflow.NewPromptStep[ChainState]("write-haiku", c,
+	step2 := workflow.NewPromptStep("write-haiku", c,
 		func(s *ChainState) []ai.Message {
 			return []ai.Message{
-				{Role: ai.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", s.Topic)},
+				{Role: ai.RoleUser, Content: fmt.Sprintf("Write a haiku about: %s\n\nJust the haiku, no explanation.", strings.TrimSpace(s.Topic))},
 			}
 		},
-		func(s *ChainState, content string) {
-			s.Haiku = content
-		},
+		nil,
+		func(s *ChainState) *string { return &s.Haiku },
 	)
 
 	// Step 3: Transform the haiku
-	step3 := workflow.NewPromptStep[ChainState]("transform", c,
+	step3 := workflow.NewPromptStep("transform", c,
 		func(s *ChainState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("Take this haiku and rewrite it in a modern, humorous style while keeping the same theme:\n\n%s\n\nJust the new version, no explanation.", s.Haiku)},
 			}
 		},
-		func(s *ChainState, content string) {
-			s.Transformed = content
-		},
+		nil,
+		func(s *ChainState) *string { return &s.Transformed },
 	)
 
 	// Create the chain

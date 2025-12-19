@@ -28,40 +28,37 @@ func demoWorkflowClassifier(ctx context.Context, c *client.Client) {
 	fmt.Println("  - general -> General handler")
 
 	// Define handlers for each category (concise responses)
-	billingHandler := workflow.NewPromptStep[ClassifierState]("billing-handler", c,
+	billingHandler := workflow.NewPromptStep("billing-handler", c,
 		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a billing support specialist. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		func(s *ClassifierState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *ClassifierState) *string { return &s.Response },
 	)
 
-	technicalHandler := workflow.NewPromptStep[ClassifierState]("technical-handler", c,
+	technicalHandler := workflow.NewPromptStep("technical-handler", c,
 		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a technical support specialist. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		func(s *ClassifierState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *ClassifierState) *string { return &s.Response },
 	)
 
-	generalHandler := workflow.NewPromptStep[ClassifierState]("general-handler", c,
+	generalHandler := workflow.NewPromptStep("general-handler", c,
 		func(s *ClassifierState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleSystem, Content: "You are a general support agent. Respond in 2-3 sentences max."},
 				{Role: ai.RoleUser, Content: s.Ticket},
 			}
 		},
-		func(s *ClassifierState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *ClassifierState) *string { return &s.Response },
 	)
 
 	// Create classifier router

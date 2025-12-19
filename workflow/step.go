@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/chat"
@@ -69,61 +71,70 @@ func (f *FuncStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <
 // PromptFunc generates messages from state for an LLM call.
 type PromptFunc[S any] func(state *S) []ai.Message
 
-// PromptStep makes a single LLM call with a dynamic prompt.
-// The setter receives the raw response content as a string.
-// For structured output, add WithResponseSchema to opts and unmarshal in setter.
-type PromptStep[S any] struct {
+// PromptStep makes a single LLM call and stores the result in a state field.
+// Generic over state type S and field type T.
+//
+// When schema is non-nil, the response is unmarshaled as JSON into the field.
+// When schema is nil, T must be string and the response is assigned directly.
+// Run() returns error only - results are stored in state via the field getter.
+type PromptStep[S, T any] struct {
 	name       string
 	chatClient chat.Client
 	prompt     PromptFunc[S]
-	setter     func(*S, string)
+	schema     *ai.ResponseSchema
+	field      func(*S) *T
 	chatOpts   []ai.Option
 }
 
 // NewPromptStep creates a step for a single LLM call.
-// The setter receives the response content as a string.
+// The field getter returns a pointer to where the result should be stored.
+// Type parameters are inferred from the function arguments.
 //
-// For plain text output:
+// For plain text (schema = nil):
 //
-//	step := NewPromptStep[MyState]("summarize", client, promptFn,
-//	    func(s *MyState, content string) { s.Summary = content },
+//	step := NewPromptStep("summarize", client, promptFn, nil,
+//	    func(s *MyState) *string { return &s.Summary },
 //	)
 //
-// For structured output, add WithResponseSchema and unmarshal in setter:
+// For structured JSON (schema required):
 //
-//	step := NewPromptStep[MyState]("analyze", client, promptFn,
-//	    func(s *MyState, content string) {
-//	        json.Unmarshal([]byte(content), &s.Analysis)
-//	    },
-//	    ai.WithResponseSchema(analysisSchema),
+//	step := NewPromptStep("analyze", client, promptFn, schema,
+//	    func(s *MyState) *Analysis { return &s.Analysis },
 //	)
-func NewPromptStep[S any](
+func NewPromptStep[S, T any](
 	name string,
 	c chat.Client,
 	prompt PromptFunc[S],
-	setter func(*S, string),
+	schema *ai.ResponseSchema,
+	field func(*S) *T,
 	opts ...ai.Option,
-) *PromptStep[S] {
-	return &PromptStep[S]{
+) *PromptStep[S, T] {
+	return &PromptStep[S, T]{
 		name:       name,
 		chatClient: c,
 		prompt:     prompt,
-		setter:     setter,
+		schema:     schema,
+		field:      field,
 		chatOpts:   opts,
 	}
 }
 
 // Name returns the step name.
-func (p *PromptStep[S]) Name() string { return p.name }
+func (p *PromptStep[S, T]) Name() string { return p.name }
 
 // Run executes the LLM call.
-func (p *PromptStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
+func (p *PromptStep[S, T]) Run(ctx context.Context, state *S, opts ...Option) error {
 	options := ApplyOptions(opts...)
 
 	// Merge chat options: constructor opts first, then runtime opts
-	chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
+	chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions)+1)
 	chatOpts = append(chatOpts, p.chatOpts...)
 	chatOpts = append(chatOpts, options.ChatOptions...)
+
+	// Add schema if provided
+	if p.schema != nil {
+		chatOpts = append(chatOpts, ai.WithResponseSchema(*p.schema))
+	}
 
 	msgs := p.prompt(state)
 	resp, err := p.chatClient.Chat(ctx, msgs, chatOpts...)
@@ -131,15 +142,41 @@ func (p *PromptStep[S]) Run(ctx context.Context, state *S, opts ...Option) error
 		return err
 	}
 
-	if p.setter != nil {
-		p.setter(state, resp.Content)
+	if p.field != nil {
+		if err := p.storeResult(state, resp.Content); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
+// storeResult stores the response content into the field.
+func (p *PromptStep[S, T]) storeResult(state *S, content string) error {
+	fieldPtr := p.field(state)
+	if p.schema != nil {
+		// Structured output: unmarshal JSON
+		if err := json.Unmarshal([]byte(content), fieldPtr); err != nil {
+			return &ai.UnmarshalError{
+				Context:    fmt.Sprintf("workflow step %q", p.name),
+				Content:    content,
+				TargetType: fmt.Sprintf("%T", *fieldPtr),
+				Err:        err,
+			}
+		}
+	} else {
+		// Plain text: T must be string
+		if strPtr, ok := any(fieldPtr).(*string); ok {
+			*strPtr = content
+		} else {
+			return fmt.Errorf("workflow step %q: nil schema requires string field, got %T", p.name, fieldPtr)
+		}
+	}
+	return nil
+}
+
 // RunStream executes the LLM call with streaming.
-func (p *PromptStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
+func (p *PromptStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
 	ch := make(chan Event, 100)
 
 	go func() {
@@ -149,9 +186,14 @@ func (p *PromptStep[S]) RunStream(ctx context.Context, state *S, opts ...Option)
 		options := ApplyOptions(opts...)
 
 		// Merge chat options: constructor opts first, then runtime opts
-		chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions))
+		chatOpts := make([]ai.Option, 0, len(p.chatOpts)+len(options.ChatOptions)+1)
 		chatOpts = append(chatOpts, p.chatOpts...)
 		chatOpts = append(chatOpts, options.ChatOptions...)
+
+		// Add schema if provided
+		if p.schema != nil {
+			chatOpts = append(chatOpts, ai.WithResponseSchema(*p.schema))
+		}
 
 		msgs := p.prompt(state)
 		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
@@ -177,8 +219,11 @@ func (p *PromptStep[S]) RunStream(ctx context.Context, state *S, opts ...Option)
 		}
 
 		if response != nil {
-			if p.setter != nil {
-				p.setter(state, response.Content)
+			if p.field != nil {
+				if err := p.storeResult(state, response.Content); err != nil {
+					event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
+					return
+				}
 			}
 
 			event.Emit(ch, Event{

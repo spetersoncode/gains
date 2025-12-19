@@ -86,7 +86,7 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 	)
 
 	// Step 3: Use the result
-	step3 := workflow.NewPromptStep[ToolStepState]("explain", c,
+	step3 := workflow.NewPromptStep("explain", c,
 		func(s *ToolStepState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
@@ -95,9 +95,8 @@ func demoWorkflowToolStep(ctx context.Context, c *client.Client) {
 				)},
 			}
 		},
-		func(s *ToolStepState, content string) {
-			s.Explanation = content
-		},
+		nil,
+		func(s *ToolStepState) *string { return &s.Explanation },
 	)
 
 	// Create the chain
@@ -203,7 +202,7 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 	)
 
 	// Step 3: Summarize
-	step3 := workflow.NewPromptStep[AgentStepState]("summarize", c,
+	step3 := workflow.NewPromptStep("summarize", c,
 		func(s *AgentStepState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
@@ -212,9 +211,8 @@ func demoWorkflowAgentStep(ctx context.Context, c *client.Client) {
 				)},
 			}
 		},
-		func(s *AgentStepState, content string) {
-			s.Summary = content
-		},
+		nil,
+		func(s *AgentStepState) *string { return &s.Summary },
 	)
 
 	// Create the chain

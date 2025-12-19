@@ -29,37 +29,34 @@ func demoWorkflowRouter(ctx context.Context, c *client.Client) {
 	fmt.Println("  - Other -> Default step")
 
 	// Define steps for each route (concise 1-2 sentence responses)
-	answerStep := workflow.NewPromptStep[RouterState]("answer", c,
+	answerStep := workflow.NewPromptStep("answer", c,
 		func(s *RouterState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("Answer in 1-2 sentences: %s", s.Input)},
 			}
 		},
-		func(s *RouterState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *RouterState) *string { return &s.Response },
 	)
 
-	expandStep := workflow.NewPromptStep[RouterState]("expand", c,
+	expandStep := workflow.NewPromptStep("expand", c,
 		func(s *RouterState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("Expand on this in 1-2 sentences: %s", s.Input)},
 			}
 		},
-		func(s *RouterState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *RouterState) *string { return &s.Response },
 	)
 
-	defaultStep := workflow.NewPromptStep[RouterState]("default", c,
+	defaultStep := workflow.NewPromptStep("default", c,
 		func(s *RouterState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("Respond briefly (1-2 sentences): %s", s.Input)},
 			}
 		},
-		func(s *RouterState, content string) {
-			s.Response = content
-		},
+		nil,
+		func(s *RouterState) *string { return &s.Response },
 	)
 
 	// Create router with conditions

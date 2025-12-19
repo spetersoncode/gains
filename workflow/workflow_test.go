@@ -182,13 +182,14 @@ func TestPromptStep_Run(t *testing.T) {
 		responses: []mockResponse{{content: "Hello, World!"}},
 	}
 
-	step := NewPromptStep[testState]("prompt", provider,
+	step := NewPromptStep("prompt", provider,
 		func(s *testState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: s.Input},
 			}
 		},
-		func(s *testState, content string) { s.Output = content },
+		nil,
+		func(s *testState) *string { return &s.Output },
 	)
 
 	state := &testState{Input: "Hi"}
@@ -203,11 +204,12 @@ func TestPromptStep_RunStream(t *testing.T) {
 		responses: []mockResponse{{content: "Hello"}},
 	}
 
-	step := NewPromptStep[testState]("prompt", provider,
+	step := NewPromptStep("prompt", provider,
 		func(s *testState) []ai.Message {
 			return []ai.Message{{Role: ai.RoleUser, Content: "Hi"}}
 		},
-		func(s *testState, content string) { s.Output = content },
+		nil,
+		func(s *testState) *string { return &s.Output },
 	)
 
 	state := &testState{}

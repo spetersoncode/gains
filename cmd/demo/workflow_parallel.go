@@ -35,37 +35,34 @@ func demoWorkflowParallel(ctx context.Context, c *client.Client) {
 	fmt.Printf("\nTopic: %s\n", topic)
 
 	// Create parallel analysis steps
-	scientificStep := workflow.NewPromptStep[ParallelState]("scientific", c,
+	scientificStep := workflow.NewPromptStep("scientific", c,
 		func(s *ParallelState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("From a scientific perspective, give 2 interesting facts about %s. Be concise (2-3 sentences).", s.Topic)},
 			}
 		},
-		func(s *ParallelState, content string) {
-			s.Scientific = content
-		},
+		nil,
+		func(s *ParallelState) *string { return &s.Scientific },
 	)
 
-	historicalStep := workflow.NewPromptStep[ParallelState]("historical", c,
+	historicalStep := workflow.NewPromptStep("historical", c,
 		func(s *ParallelState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("From a historical perspective, share 2 interesting facts about %s. Be concise (2-3 sentences).", s.Topic)},
 			}
 		},
-		func(s *ParallelState, content string) {
-			s.Historical = content
-		},
+		nil,
+		func(s *ParallelState) *string { return &s.Historical },
 	)
 
-	culturalStep := workflow.NewPromptStep[ParallelState]("cultural", c,
+	culturalStep := workflow.NewPromptStep("cultural", c,
 		func(s *ParallelState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf("From a cultural perspective, share 2 interesting facts about %s across different societies. Be concise (2-3 sentences).", s.Topic)},
 			}
 		},
-		func(s *ParallelState, content string) {
-			s.Cultural = content
-		},
+		nil,
+		func(s *ParallelState) *string { return &s.Cultural },
 	)
 
 	steps := []workflow.Step[ParallelState]{scientificStep, historicalStep, culturalStep}

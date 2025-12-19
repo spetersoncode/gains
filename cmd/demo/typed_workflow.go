@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -34,8 +33,8 @@ type ContentSuggestions struct {
 // With struct-based state, all keys and their types are defined here.
 type TypedWorkflowState struct {
 	InputText   string
-	Analysis    *SentimentAnalysis
-	Suggestions *ContentSuggestions
+	Analysis    SentimentAnalysis
+	Suggestions ContentSuggestions
 }
 
 func demoTypedWorkflow(ctx context.Context, c *client.Client) {
@@ -61,36 +60,21 @@ func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 		Schema:      ai.MustSchemaFor[ContentSuggestions](),
 	}
 
-	// Step 1: Typed sentiment analysis - result stored via setter function
-	analyzeStep := workflow.NewPromptStep[TypedWorkflowState](
-		"analyze",
-		c,
+	// Step 1: Typed sentiment analysis - schema + field getter handles unmarshaling
+	analyzeStep := workflow.NewPromptStep("analyze", c,
 		func(s *TypedWorkflowState) []ai.Message {
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					"Analyze the sentiment of this text:\n\n%s", s.InputText)},
 			}
 		},
-		func(s *TypedWorkflowState, content string) {
-			var analysis SentimentAnalysis
-			if err := json.Unmarshal([]byte(content), &analysis); err == nil {
-				s.Analysis = &analysis
-			}
-		},
-		ai.WithResponseSchema(*sentimentSchema),
+		sentimentSchema,
+		func(s *TypedWorkflowState) *SentimentAnalysis { return &s.Analysis },
 	)
 
 	// Step 2: Generate suggestions based on analysis
-	suggestStep := workflow.NewPromptStep[TypedWorkflowState](
-		"suggest",
-		c,
+	suggestStep := workflow.NewPromptStep("suggest", c,
 		func(s *TypedWorkflowState) []ai.Message {
-			analysis := s.Analysis
-			if analysis == nil {
-				return []ai.Message{
-					{Role: ai.RoleUser, Content: "No analysis available"},
-				}
-			}
 			return []ai.Message{
 				{Role: ai.RoleUser, Content: fmt.Sprintf(
 					`Given this text:
@@ -103,17 +87,12 @@ And this sentiment analysis:
 - Summary: %s
 
 Suggest improvements to make this text more engaging and positive.`,
-					s.InputText, analysis.Sentiment, analysis.Confidence*100,
-					analysis.Keywords, analysis.Summary)},
+					s.InputText, s.Analysis.Sentiment, s.Analysis.Confidence*100,
+					s.Analysis.Keywords, s.Analysis.Summary)},
 			}
 		},
-		func(s *TypedWorkflowState, content string) {
-			var suggestions ContentSuggestions
-			if err := json.Unmarshal([]byte(content), &suggestions); err == nil {
-				s.Suggestions = &suggestions
-			}
-		},
-		ai.WithResponseSchema(*suggestionsSchema),
+		suggestionsSchema,
+		func(s *TypedWorkflowState) *ContentSuggestions { return &s.Suggestions },
 	)
 
 	// Create chain workflow
@@ -152,21 +131,17 @@ Suggest improvements to make this text more engaging and positive.`,
 	// Access results directly via typed struct fields
 	fmt.Println("\n--- Results (Direct Struct Field Access) ---")
 
-	if state.Analysis != nil {
-		fmt.Println("\nSentiment Analysis:")
-		fmt.Printf("  Sentiment:  %s\n", state.Analysis.Sentiment)
-		fmt.Printf("  Confidence: %.0f%%\n", state.Analysis.Confidence*100)
-		fmt.Printf("  Keywords:   %v\n", state.Analysis.Keywords)
-		fmt.Printf("  Summary:    %s\n", state.Analysis.Summary)
-	}
+	fmt.Println("\nSentiment Analysis:")
+	fmt.Printf("  Sentiment:  %s\n", state.Analysis.Sentiment)
+	fmt.Printf("  Confidence: %.0f%%\n", state.Analysis.Confidence*100)
+	fmt.Printf("  Keywords:   %v\n", state.Analysis.Keywords)
+	fmt.Printf("  Summary:    %s\n", state.Analysis.Summary)
 
-	if state.Suggestions != nil {
-		fmt.Println("\nContent Suggestions:")
-		fmt.Printf("  Recommended Tone: %s\n", state.Suggestions.Tone)
-		fmt.Println("  Suggestions:")
-		for i, s := range state.Suggestions.Suggestions {
-			fmt.Printf("    %d. %s\n", i+1, s)
-		}
-		fmt.Printf("\n  Rewritten:\n  %s\n", state.Suggestions.Rewrite)
+	fmt.Println("\nContent Suggestions:")
+	fmt.Printf("  Recommended Tone: %s\n", state.Suggestions.Tone)
+	fmt.Println("  Suggestions:")
+	for i, s := range state.Suggestions.Suggestions {
+		fmt.Printf("    %d. %s\n", i+1, s)
 	}
+	fmt.Printf("\n  Rewritten:\n  %s\n", state.Suggestions.Rewrite)
 }
