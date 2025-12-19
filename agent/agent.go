@@ -12,19 +12,20 @@ import (
 	"github.com/spetersoncode/gains/tool"
 )
 
-// ChatClient is the interface for chat capabilities needed by the agent.
-type ChatClient interface {
+// Streamer is the interface for streaming chat capabilities.
+// Use workflow.ChatClient for the full interface with non-streaming support.
+type Streamer interface {
 	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error)
 }
 
 // Agent orchestrates autonomous tool-calling conversations.
 type Agent struct {
-	chatClient ChatClient
+	chatClient Streamer
 	registry   *tool.Registry
 }
 
 // New creates a new Agent with the given chat client and tool registry.
-func New(c ChatClient, registry *tool.Registry) *Agent {
+func New(c Streamer, registry *tool.Registry) *Agent {
 	return &Agent{
 		chatClient: c,
 		registry:   registry,

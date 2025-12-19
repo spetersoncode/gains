@@ -10,6 +10,7 @@ import (
 )
 
 // ChatClient is the interface for chat capabilities needed by workflow steps.
+// This is the canonical definition - client.Client implements this interface.
 type ChatClient interface {
 	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
 	ChatStream(ctx context.Context, messages []ai.Message, opts ...ai.Option) (<-chan event.Event, error)

@@ -20,8 +20,9 @@ type EmbeddingClient interface {
 	Embed(ctx context.Context, texts []string, opts ...ai.EmbeddingOption) (*ai.EmbeddingResponse, error)
 }
 
-// ChatClient is the interface for chat capabilities.
-type ChatClient interface {
+// Chatter is the interface for non-streaming chat capabilities.
+// Use workflow.ChatClient for the full interface with streaming support.
+type Chatter interface {
 	Chat(ctx context.Context, messages []ai.Message, opts ...ai.Option) (*ai.Response, error)
 }
 
@@ -261,7 +262,7 @@ func WithChatDefaults(opts ...ai.Option) ChatToolOption {
 
 // NewChatTool creates a tool that makes LLM calls (sub-agent pattern).
 // This allows an agent to delegate tasks to another LLM call.
-func NewChatTool(c ChatClient, opts ...ChatToolOption) (ai.Tool, Handler) {
+func NewChatTool(c Chatter, opts ...ChatToolOption) (ai.Tool, Handler) {
 	cfg := &chatToolConfig{
 		name: "ask_assistant",
 	}
