@@ -90,6 +90,24 @@ const (
 	LoopIteration Type = "loop_iteration"
 )
 
+// Retry events
+const (
+	// RetryAttempt fires when a retry attempt starts.
+	RetryAttempt Type = "retry_attempt"
+
+	// RetryFailed fires when an attempt fails (may or may not retry).
+	RetryFailed Type = "retry_failed"
+
+	// RetryScheduled fires when a retry is scheduled after a failure.
+	RetryScheduled Type = "retry_scheduled"
+
+	// RetrySuccess fires when an attempt succeeds.
+	RetrySuccess Type = "retry_success"
+
+	// RetryExhausted fires when all retry attempts are exhausted.
+	RetryExhausted Type = "retry_exhausted"
+)
+
 // State synchronization events (AG-UI shared state)
 const (
 	// StateSnapshot fires to send the complete state to the frontend.
@@ -152,6 +170,9 @@ type Event struct {
 
 	// Iteration is the loop iteration (1-indexed) for LoopIteration events.
 	Iteration int
+
+	// Attempt is the retry attempt number (1-indexed) for retry events.
+	Attempt int
 
 	// Error contains the error for RunError events.
 	Error error
