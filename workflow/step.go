@@ -68,6 +68,65 @@ func (f *FuncStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <
 	return ch
 }
 
+// StatefulStepFunc is a function signature for steps that can emit state changes.
+// The StateEmitter allows sending state snapshots or deltas for AG-UI synchronization.
+type StatefulStepFunc[S any] func(ctx context.Context, state *S, emit StateEmitter) error
+
+// StatefulFuncStep wraps a function that can emit state changes.
+// Use this step type when you need to synchronize state with the frontend
+// during step execution (e.g., progress updates, intermediate results).
+type StatefulFuncStep[S any] struct {
+	name string
+	fn   StatefulStepFunc[S]
+}
+
+// NewStatefulFuncStep creates a step from a function that can emit state changes.
+//
+// Example:
+//
+//	step := workflow.NewStatefulFuncStep("process", func(ctx context.Context, state *MyState, emit workflow.StateEmitter) error {
+//	    for i := 0; i < 10; i++ {
+//	        state.Progress = (i + 1) * 10
+//	        emit.EmitDelta(event.Replace("/progress", state.Progress))
+//	    }
+//	    return nil
+//	})
+func NewStatefulFuncStep[S any](name string, fn StatefulStepFunc[S]) *StatefulFuncStep[S] {
+	return &StatefulFuncStep[S]{name: name, fn: fn}
+}
+
+// Name returns the step name.
+func (f *StatefulFuncStep[S]) Name() string { return f.name }
+
+// Run executes the function with a no-op emitter (state events are discarded).
+func (f *StatefulFuncStep[S]) Run(ctx context.Context, state *S, opts ...Option) error {
+	return f.fn(ctx, state, NewNoOpEmitter())
+}
+
+// RunStream executes the function and emits events including state changes.
+func (f *StatefulFuncStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-chan Event {
+	ch := make(chan Event, 100) // Larger buffer for state events
+	go func() {
+		defer close(ch)
+		event.Emit(ch, Event{Type: event.StepStart, StepName: f.name})
+
+		// Create emitter that sends to our channel
+		emitter := NewChannelEmitter(ch, f.name)
+
+		err := f.fn(ctx, state, emitter)
+		if err != nil {
+			event.Emit(ch, Event{Type: event.RunError, StepName: f.name, Error: err})
+			return
+		}
+
+		event.Emit(ch, Event{
+			Type:     event.StepEnd,
+			StepName: f.name,
+		})
+	}()
+	return ch
+}
+
 // PromptFunc generates messages from state for an LLM call.
 type PromptFunc[S any] func(state *S) []ai.Message
 
