@@ -66,23 +66,6 @@ func NewToolStep[T any](
 	}
 }
 
-// NewToolStepWithKey creates a ToolStep that stores output using a typed key.
-func NewToolStepWithKey[T any](
-	name string,
-	registry *tool.Registry,
-	toolName string,
-	argsFunc func(state *State) (T, error),
-	outputKey Key[string],
-) *ToolStep[T] {
-	return &ToolStep[T]{
-		name:      name,
-		registry:  registry,
-		toolName:  toolName,
-		argsFunc:  argsFunc,
-		outputKey: outputKey.Name(),
-	}
-}
-
 // Name returns the step name.
 func (t *ToolStep[T]) Name() string { return t.name }
 

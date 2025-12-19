@@ -186,7 +186,7 @@ schema := ai.ResponseSchema{
     Schema:      ai.MustSchemaFor[SentimentAnalysis](),
 }
 
-step := workflow.NewTypedPromptStepWithKey(
+step := workflow.NewTypedPromptStep[SentimentAnalysis](
     "analyze",
     client,
     func(s *workflow.State) []ai.Message {
@@ -196,7 +196,7 @@ step := workflow.NewTypedPromptStepWithKey(
         }
     },
     schema,
-    KeyAnalysis,  // Type-safe output key
+    KeyAnalysis.Name(),  // Use key.Name() for the output key
 )
 
 // Later: type-safe access
@@ -918,7 +918,7 @@ research := workflow.NewParallel("research", researchSteps,
 // Synthesis phase - iterative refinement
 synthesisLoop := workflow.NewLoop("synthesis",
     workflow.NewChain("synthesis-cycle",
-        workflow.NewTypedPromptStepWithKey(
+        workflow.NewTypedPromptStep[SynthesisResult](
             "synthesize",
             client,
             func(s *workflow.State) []ai.Message {
@@ -931,7 +931,7 @@ synthesisLoop := workflow.NewLoop("synthesis",
                 }
             },
             synthesisSchema,
-            KeySynthesis,
+            KeySynthesis.Name(),
         ),
         workflow.NewPromptStep("critique",
             func(s *workflow.State) []ai.Message {

@@ -239,8 +239,8 @@ type Analysis struct {
 var KeyAnalysis = workflow.NewKey[*Analysis]("analysis")
 
 // Create typed step - result auto-unmarshaled
-step := workflow.NewTypedPromptStepWithKey(
-    "analyze", c, promptFn, responseSchema, KeyAnalysis,
+step := workflow.NewTypedPromptStep[Analysis](
+    "analyze", c, promptFn, responseSchema, KeyAnalysis.Name(),
 )
 
 // Type-safe state access

@@ -356,27 +356,6 @@ func (a *AgentStep) RunStream(ctx context.Context, state *State, opts ...Option)
 	return ch
 }
 
-// NewAgentStepWithKey creates an AgentStep that stores output using a typed key.
-func NewAgentStepWithKey(
-	name string,
-	chatClient chat.Client,
-	registry *tool.Registry,
-	prompt PromptFunc,
-	outputKey Key[*AgentResult],
-	agentOpts []agent.Option,
-	chatOpts ...ai.Option,
-) *AgentStep {
-	return &AgentStep{
-		name:       name,
-		chatClient: chatClient,
-		registry:   registry,
-		prompt:     prompt,
-		outputKey:  outputKey.Name(),
-		agentOpts:  agentOpts,
-		chatOpts:   chatOpts,
-	}
-}
-
 // OutputKey returns a typed key for accessing the AgentResult in state.
 // The key name is the step's outputKey.
 func (a *AgentStep) OutputKey() Key[*AgentResult] {

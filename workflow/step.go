@@ -352,36 +352,3 @@ func (p *TypedPromptStep[T]) RunStream(ctx context.Context, state *State, opts .
 
 	return ch
 }
-
-// NewTypedPromptStepWithKey creates a step that stores output using a typed key.
-// This provides stronger type guarantees than the string-based version.
-// The key type must be a pointer (*T) since TypedPromptStep stores pointers.
-//
-// Example:
-//
-//	var KeyAnalysis = workflow.NewKey[*SentimentAnalysis]("analysis")
-//
-//	step := workflow.NewTypedPromptStepWithKey(
-//	    "analyze",
-//	    client,
-//	    promptFunc,
-//	    sentimentSchema,
-//	    KeyAnalysis,
-//	)
-func NewTypedPromptStepWithKey[T any](
-	name string,
-	c chat.Client,
-	prompt PromptFunc,
-	schema ai.ResponseSchema,
-	outputKey Key[*T],
-	opts ...ai.Option,
-) *TypedPromptStep[T] {
-	return &TypedPromptStep[T]{
-		name:       name,
-		chatClient: c,
-		prompt:     prompt,
-		outputKey:  outputKey.Name(),
-		chatOpts:   opts,
-		schema:     schema,
-	}
-}

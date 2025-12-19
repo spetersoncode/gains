@@ -61,7 +61,7 @@ func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 	}
 
 	// Step 1: Typed sentiment analysis using typed key
-	analyzeStep := workflow.NewTypedPromptStepWithKey(
+	analyzeStep := workflow.NewTypedPromptStep[SentimentAnalysis](
 		"analyze",
 		c,
 		func(s *workflow.State) []ai.Message {
@@ -72,11 +72,11 @@ func demoTypedWorkflow(ctx context.Context, c *client.Client) {
 			}
 		},
 		sentimentSchema,
-		KeyAnalysis,
+		KeyAnalysis.Name(),
 	)
 
 	// Step 2: Generate suggestions based on analysis
-	suggestStep := workflow.NewTypedPromptStepWithKey(
+	suggestStep := workflow.NewTypedPromptStep[ContentSuggestions](
 		"suggest",
 		c,
 		func(s *workflow.State) []ai.Message {
@@ -105,7 +105,7 @@ Suggest improvements to make this text more engaging and positive.`,
 			}
 		},
 		suggestionsSchema,
-		KeySuggestions,
+		KeySuggestions.Name(),
 	)
 
 	// Create chain workflow
