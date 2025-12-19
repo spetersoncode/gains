@@ -18,6 +18,13 @@ func (m ChatModel) Provider() ai.Provider { return m.provider }
 // Pricing returns the pricing for this model.
 func (m ChatModel) Pricing() ChatPricing { return m.pricing }
 
+// Cost calculates the cost in USD for the given token usage.
+// Uses standard per-million token rates; does not account for cached
+// input tokens or long context tiers which require extended usage tracking.
+func (m ChatModel) Cost(usage ai.Usage) float64 {
+	return CalculateCost(usage, m.pricing)
+}
+
 // Anthropic Claude Models
 // Model pricing last verified: December 14, 2025
 var (

@@ -3,6 +3,7 @@ package workflow
 import (
 	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/event"
+	"github.com/spetersoncode/gains/model"
 )
 
 // Event is an alias to the unified event type.
@@ -69,4 +70,10 @@ type Result struct {
 
 	// Error contains any error that caused termination.
 	Error error
+}
+
+// TotalCost calculates the total cost in USD for this workflow result.
+// Uses the provided model's pricing to compute the cost.
+func (r *Result) TotalCost(m model.ChatModel) float64 {
+	return m.Cost(r.Usage)
 }

@@ -1,5 +1,7 @@
 package model
 
+import ai "github.com/spetersoncode/gains"
+
 // ChatPricing contains pricing per million tokens (USD) for chat models.
 // Fields are zero if not applicable to a specific provider's model.
 type ChatPricing struct {
@@ -55,4 +57,13 @@ func (p ImagePricing) HasFlatPricing() bool {
 type EmbeddingPricing struct {
 	// PerMillion is the price per million tokens.
 	PerMillion float64
+}
+
+// CalculateCost computes the cost in USD for the given token usage and pricing.
+// Uses standard per-million token rates; does not account for cached
+// input tokens or long context tiers.
+func CalculateCost(usage ai.Usage, pricing ChatPricing) float64 {
+	inputCost := float64(usage.InputTokens) * pricing.InputPerMillion / 1_000_000
+	outputCost := float64(usage.OutputTokens) * pricing.OutputPerMillion / 1_000_000
+	return inputCost + outputCost
 }
