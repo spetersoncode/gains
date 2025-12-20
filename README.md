@@ -400,7 +400,7 @@ See the [`cmd/demo`](cmd/demo) directory for complete examples including:
 
 ### AG-UI Server (Experimental)
 
-The [`cmd/aguiserver`](cmd/aguiserver) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE.
+The [`cmd/serve`](cmd/serve) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE.
 
 **Progress:**
 - ✅ Chat streaming
@@ -411,7 +411,7 @@ The [`cmd/aguiserver`](cmd/aguiserver) directory contains a reference HTTP serve
 - ⏳ Human in the loop (pending)
 
 ```bash
-GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
+GAINS_PROVIDER=anthropic go run ./cmd/serve
 # POST http://localhost:8000/api/agent
 ```
 

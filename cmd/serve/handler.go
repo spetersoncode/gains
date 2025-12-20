@@ -9,6 +9,7 @@ import (
 
 	aguievents "github.com/ag-ui-protocol/ag-ui/sdks/community/go/pkg/core/events"
 
+	"github.com/spetersoncode/gains/a2a"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/agui"
 	"github.com/spetersoncode/gains/tool"
@@ -281,4 +282,201 @@ func (h *WorkflowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"events_sent", eventCount,
 		)
 	}
+}
+
+// A2AHandler handles A2A protocol requests over SSE.
+// Supports the tasks/send and tasks/sendSubscribe methods.
+type A2AHandler struct {
+	executor a2a.Executor
+	config   *Config
+}
+
+// NewA2AHandler creates a new handler for A2A requests.
+func NewA2AHandler(executor a2a.Executor, cfg *Config) *A2AHandler {
+	return &A2AHandler{executor: executor, config: cfg}
+}
+
+// jsonRPCRequest represents a JSON-RPC 2.0 request.
+type jsonRPCRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      any             `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params"`
+}
+
+// jsonRPCResponse represents a JSON-RPC 2.0 response.
+type jsonRPCResponse struct {
+	JSONRPC string        `json:"jsonrpc"`
+	ID      any           `json:"id,omitempty"`
+	Result  any           `json:"result,omitempty"`
+	Error   *jsonRPCError `json:"error,omitempty"`
+}
+
+// jsonRPCError represents a JSON-RPC 2.0 error.
+type jsonRPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+// JSON-RPC error codes
+const (
+	jsonRPCParseError     = -32700
+	jsonRPCInvalidRequest = -32600
+	jsonRPCMethodNotFound = -32601
+	jsonRPCInvalidParams  = -32602
+	jsonRPCInternalError  = -32603
+)
+
+// ServeHTTP handles A2A protocol requests.
+func (h *A2AHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	// Only accept POST
+	if r.Method != http.MethodPost {
+		slog.Warn("method not allowed", "method", r.Method, "path", r.URL.Path)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse JSON-RPC request
+	var req jsonRPCRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Warn("invalid JSON-RPC request", "error", err)
+		h.writeError(w, nil, jsonRPCParseError, "Parse error: "+err.Error())
+		return
+	}
+
+	// Validate JSON-RPC version
+	if req.JSONRPC != "2.0" {
+		h.writeError(w, req.ID, jsonRPCInvalidRequest, "Invalid JSON-RPC version")
+		return
+	}
+
+	log := slog.With("method", req.Method, "id", req.ID)
+	log.Info("A2A request received")
+
+	// Dispatch based on method
+	switch req.Method {
+	case "tasks/send":
+		h.handleSend(w, r, req, log)
+	case "tasks/sendSubscribe":
+		h.handleSendSubscribe(w, r, req, log, start)
+	default:
+		log.Warn("unknown method")
+		h.writeError(w, req.ID, jsonRPCMethodNotFound, "Method not found: "+req.Method)
+	}
+}
+
+// handleSend handles synchronous task execution.
+func (h *A2AHandler) handleSend(w http.ResponseWriter, r *http.Request, req jsonRPCRequest, log *slog.Logger) {
+	// Parse params
+	var params a2a.SendMessageRequest
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		log.Warn("invalid params", "error", err)
+		h.writeError(w, req.ID, jsonRPCInvalidParams, "Invalid params: "+err.Error())
+		return
+	}
+
+	// Execute task
+	task, err := h.executor.Execute(r.Context(), params)
+	if err != nil {
+		log.Error("execution error", "error", err)
+		h.writeError(w, req.ID, jsonRPCInternalError, "Execution error: "+err.Error())
+		return
+	}
+
+	// Return result
+	h.writeResult(w, req.ID, task)
+	log.Info("A2A request completed", "task_id", task.ID, "status", task.Status.State)
+}
+
+// handleSendSubscribe handles streaming task execution via SSE.
+func (h *A2AHandler) handleSendSubscribe(w http.ResponseWriter, r *http.Request, req jsonRPCRequest, log *slog.Logger, start time.Time) {
+	// Parse params
+	var params a2a.SendMessageRequest
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		log.Warn("invalid params", "error", err)
+		h.writeError(w, req.ID, jsonRPCInvalidParams, "Invalid params: "+err.Error())
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// Get flusher for streaming
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		log.Error("streaming not supported")
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Execute with streaming
+	events := h.executor.ExecuteStream(r.Context(), params)
+
+	// Stream events as SSE
+	var eventCount int
+	for evt := range events {
+		eventCount++
+
+		data, err := json.Marshal(evt)
+		if err != nil {
+			log.Error("failed to marshal event", "error", err)
+			continue
+		}
+
+		// Determine event type
+		var eventType string
+		switch evt.(type) {
+		case a2a.TaskStatusUpdateEvent:
+			eventType = "status-update"
+		case a2a.TaskArtifactUpdateEvent:
+			eventType = "artifact-update"
+		default:
+			eventType = "message"
+		}
+
+		// Write SSE format
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(data)); err != nil {
+			log.Error("failed to write SSE event", "error", err)
+			return
+		}
+
+		flusher.Flush()
+		log.Debug("sent A2A event", "event_type", eventType, "event_num", eventCount)
+	}
+
+	duration := time.Since(start)
+	log.Info("A2A streaming request completed",
+		"duration_ms", duration.Milliseconds(),
+		"events_sent", eventCount,
+	)
+}
+
+// writeResult writes a successful JSON-RPC response.
+func (h *A2AHandler) writeResult(w http.ResponseWriter, id any, result any) {
+	resp := jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result:  result,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// writeError writes a JSON-RPC error response.
+func (h *A2AHandler) writeError(w http.ResponseWriter, id any, code int, message string) {
+	resp := jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &jsonRPCError{
+			Code:    code,
+			Message: message,
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

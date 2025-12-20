@@ -19,11 +19,11 @@
 //
 // Usage:
 //
-//	GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
+//	GAINS_PROVIDER=anthropic go run ./cmd/serve
 //
 // Debug logging (shows all events):
 //
-//	AGUI_LOG_LEVEL=debug GAINS_PROVIDER=anthropic go run ./cmd/aguiserver
+//	AGUI_LOG_LEVEL=debug GAINS_PROVIDER=anthropic go run ./cmd/serve
 package main
 
 import (
@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/a2a"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/client"
 	"github.com/spetersoncode/gains/model"
@@ -81,10 +82,18 @@ func main() {
 	handler := NewAgentHandler(a, registry, cfg)
 	workflowHandler := NewWorkflowHandler(workflowRegistry, cfg)
 
+	// Create A2A executor and handler
+	a2aExecutor := a2a.NewAgentExecutor(a,
+		agent.WithMaxSteps(cfg.MaxSteps),
+		agent.WithTimeout(cfg.Timeout),
+	)
+	a2aHandler := NewA2AHandler(a2aExecutor, cfg)
+
 	// Setup routes
 	mux := http.NewServeMux()
 	mux.Handle("/api/agent", corsMiddleware(handler))
 	mux.Handle("/api/workflow", corsMiddleware(workflowHandler))
+	mux.Handle("/api/a2a", corsMiddleware(a2aHandler))
 	mux.HandleFunc("/health", healthHandler)
 
 	// Create server
@@ -118,6 +127,7 @@ func main() {
 		"log_level", cfg.LogLevel,
 		"agent_endpoint", fmt.Sprintf("POST http://localhost:%s/api/agent", cfg.Port),
 		"workflow_endpoint", fmt.Sprintf("POST http://localhost:%s/api/workflow", cfg.Port),
+		"a2a_endpoint", fmt.Sprintf("POST http://localhost:%s/api/a2a", cfg.Port),
 		"health", fmt.Sprintf("GET http://localhost:%s/health", cfg.Port),
 	)
 
