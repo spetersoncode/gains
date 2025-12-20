@@ -51,6 +51,7 @@ func getModelsForProvider(provider string) []modelOption {
 			{model.Gemini25Flash, "Gemini 2.5 Flash (recommended)"},
 			{model.Gemini25Pro, "Gemini 2.5 Pro (most capable)"},
 			{model.Gemini25FlashLite, "Gemini 2.5 Flash Lite (fastest)"},
+			{model.Gemini3FlashPreview, "Gemini 3 Flash Preview"},
 			{model.Gemini3Pro, "Gemini 3.0 Pro"},
 			{model.Gemini3DeepThink, "Gemini 3.0 Deep Think (reasoning)"},
 		}
@@ -59,6 +60,7 @@ func getModelsForProvider(provider string) []modelOption {
 			{model.VertexGemini25Flash, "Gemini 2.5 Flash (recommended)"},
 			{model.VertexGemini25Pro, "Gemini 2.5 Pro (most capable)"},
 			{model.VertexGemini25FlashLite, "Gemini 2.5 Flash Lite (fastest)"},
+			{model.VertexGemini3FlashPreview, "Gemini 3 Flash Preview"},
 			{model.VertexGemini3Pro, "Gemini 3.0 Pro"},
 			{model.VertexGemini3DeepThink, "Gemini 3.0 Deep Think (reasoning)"},
 		}
@@ -95,12 +97,14 @@ func getImageModels() []modelOption {
 
 	if availableCreds.OpenAI != "" {
 		models = append(models,
-			modelOption{model.GPTImage1, "OpenAI GPT Image 1 (recommended)"},
+			modelOption{model.GPTImage15, "OpenAI GPT Image 1.5 (recommended)"},
+			modelOption{model.GPTImage1, "OpenAI GPT Image 1"},
 			modelOption{model.GPTImage1Mini, "OpenAI GPT Image 1 Mini"},
 		)
 	}
 	if availableCreds.Google != "" {
 		models = append(models,
+			modelOption{model.Gemini3ProImagePreview, "Google Gemini 3 Pro Image Preview"},
 			modelOption{model.Imagen4, "Google Imagen 4"},
 			modelOption{model.Imagen4Fast, "Google Imagen 4 Fast"},
 			modelOption{model.Imagen4Ultra, "Google Imagen 4 Ultra"},
@@ -108,6 +112,7 @@ func getImageModels() []modelOption {
 	}
 	if availableCreds.Vertex.Project != "" && availableCreds.Vertex.Location != "" {
 		models = append(models,
+			modelOption{model.VertexGemini3ProImagePreview, "Vertex AI Gemini 3 Pro Image Preview"},
 			modelOption{model.VertexImagen4, "Vertex AI Imagen 4"},
 			modelOption{model.VertexImagen4Fast, "Vertex AI Imagen 4 Fast"},
 			modelOption{model.VertexImagen4Ultra, "Vertex AI Imagen 4 Ultra"},

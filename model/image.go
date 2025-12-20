@@ -19,19 +19,25 @@ func (m ImageModel) Provider() ai.Provider { return m.provider }
 func (m ImageModel) Pricing() ImagePricing { return m.pricing }
 
 // OpenAI Image Models
-// Model pricing last verified: December 14, 2025
+// Model pricing last verified: December 19, 2025
 var (
+	// GPT Image 1.5 Series
+	GPTImage15 = ImageModel{id: "gpt-image-1.5", provider: ai.ProviderOpenAI, pricing: ImagePricing{LowQuality: 0.02, MediumQuality: 0.07, HighQuality: 0.19}}
+
 	// GPT Image 1 Series
 	GPTImage1     = ImageModel{id: "gpt-image-1", provider: ai.ProviderOpenAI, pricing: ImagePricing{LowQuality: 0.011, MediumQuality: 0.042, HighQuality: 0.167}}
 	GPTImage1Mini = ImageModel{id: "gpt-image-1-mini", provider: ai.ProviderOpenAI, pricing: ImagePricing{LowQuality: 0.005, MediumQuality: 0.013, HighQuality: 0.052}}
 
 	// DefaultGPTImageModel is the recommended default OpenAI image model.
-	DefaultGPTImageModel = GPTImage1
+	DefaultGPTImageModel = GPTImage15
 )
 
 // Google Imagen Models
-// Model pricing last verified: December 14, 2025
+// Model pricing last verified: December 19, 2025
 var (
+	// Gemini 3 Image Preview
+	Gemini3ProImagePreview = ImageModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
+
 	// Imagen 4 Series
 	Imagen4      = ImageModel{id: "imagen-4.0-generate-001", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
 	Imagen4Fast  = ImageModel{id: "imagen-4.0-fast-generate-001", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
@@ -43,8 +49,11 @@ var (
 
 // Google Vertex AI Imagen Models (via Vertex AI backend)
 // Vertex AI uses Application Default Credentials instead of API keys.
-// Model pricing last verified: December 14, 2025
+// Model pricing last verified: December 19, 2025
 var (
+	// Vertex Gemini 3 Image Preview
+	VertexGemini3ProImagePreview = ImageModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
+
 	// Vertex Imagen 4 Series
 	VertexImagen4      = ImageModel{id: "imagen-4.0-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
 	VertexImagen4Fast  = ImageModel{id: "imagen-4.0-fast-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}

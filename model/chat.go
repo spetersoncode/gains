@@ -70,11 +70,12 @@ var (
 )
 
 // Google Gemini Models
-// Model pricing last verified: December 14, 2025
+// Model pricing last verified: December 19, 2025
 var (
 	// Gemini 3.0 (Latest - November 2025)
-	Gemini3Pro       = ChatModel{id: "gemini-3.0-pro", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00, InputPerMillionLong: 4.00, OutputPerMillionLong: 18.00}}
-	Gemini3DeepThink = ChatModel{id: "gemini-3.0-deep-think", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 4.00, OutputPerMillion: 24.00, InputPerMillionLong: 8.00, OutputPerMillionLong: 36.00}}
+	Gemini3Pro          = ChatModel{id: "gemini-3.0-pro", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00, InputPerMillionLong: 4.00, OutputPerMillionLong: 18.00}}
+	Gemini3FlashPreview = ChatModel{id: "gemini-3-flash-preview", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 0.15, OutputPerMillion: 0.60}}
+	Gemini3DeepThink    = ChatModel{id: "gemini-3.0-deep-think", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 4.00, OutputPerMillion: 24.00, InputPerMillionLong: 8.00, OutputPerMillionLong: 36.00}}
 
 	// Gemini 2.5 Series
 	Gemini25Pro       = ChatModel{id: "gemini-2.5-pro", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 1.25, OutputPerMillion: 10.00, InputPerMillionLong: 2.50, OutputPerMillionLong: 15.00}}
@@ -87,11 +88,12 @@ var (
 
 // Google Vertex AI Models (same models as Gemini, but via Vertex AI backend)
 // Vertex AI uses Application Default Credentials instead of API keys.
-// Model pricing last verified: December 14, 2025
+// Model pricing last verified: December 19, 2025
 var (
 	// Vertex Gemini 3.0 (Latest - November 2025)
-	VertexGemini3Pro       = ChatModel{id: "gemini-3.0-pro", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00, InputPerMillionLong: 4.00, OutputPerMillionLong: 18.00}}
-	VertexGemini3DeepThink = ChatModel{id: "gemini-3.0-deep-think", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 4.00, OutputPerMillion: 24.00, InputPerMillionLong: 8.00, OutputPerMillionLong: 36.00}}
+	VertexGemini3Pro          = ChatModel{id: "gemini-3.0-pro", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00, InputPerMillionLong: 4.00, OutputPerMillionLong: 18.00}}
+	VertexGemini3FlashPreview = ChatModel{id: "gemini-3-flash-preview", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 0.15, OutputPerMillion: 0.60}}
+	VertexGemini3DeepThink    = ChatModel{id: "gemini-3.0-deep-think", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 4.00, OutputPerMillion: 24.00, InputPerMillionLong: 8.00, OutputPerMillionLong: 36.00}}
 
 	// Vertex Gemini 2.5 Series
 	VertexGemini25Pro       = ChatModel{id: "gemini-2.5-pro", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 1.25, OutputPerMillion: 10.00, InputPerMillionLong: 2.50, OutputPerMillionLong: 15.00}}
