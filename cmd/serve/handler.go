@@ -12,6 +12,7 @@ import (
 	"github.com/spetersoncode/gains/a2a"
 	"github.com/spetersoncode/gains/agent"
 	"github.com/spetersoncode/gains/agui"
+	"github.com/spetersoncode/gains/event"
 	"github.com/spetersoncode/gains/tool"
 	"github.com/spetersoncode/gains/workflow"
 )
@@ -96,11 +97,16 @@ func (h *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create mapper for this run
-	mapper := agui.NewMapper(prepared.ThreadID, prepared.RunID)
+	// Create mapper for this run (with initial state for STATE_SNAPSHOT emission)
+	mapper := agui.NewMapper(prepared.ThreadID, prepared.RunID,
+		agui.WithInitialState(prepared.State),
+	)
+
+	// Set up shared state in context for state tools
+	sharedState := event.NewSharedState(prepared.State)
+	ctx := event.WithSharedState(r.Context(), sharedState)
 
 	// Run agent with streaming
-	ctx := r.Context()
 	gainsEvents := h.agent.RunStream(ctx, prepared.Messages,
 		agent.WithMaxSteps(h.config.MaxSteps),
 		agent.WithTimeout(h.config.Timeout),

@@ -398,17 +398,17 @@ See the [`cmd/demo`](cmd/demo) directory for complete examples including:
 - Structured output
 - Vision and embeddings
 
-### AG-UI Server (Experimental)
+### AG-UI Server
 
 The [`cmd/serve`](cmd/serve) directory contains a reference HTTP server that exposes a gains agent via the AG-UI protocol over SSE.
 
-**Progress:**
+**Features:**
 - ✅ Chat streaming
 - ✅ Client-side tools
 - ✅ Server-side tools
 - ✅ Generative UI elements
-- 🚧 Shared state (in progress)
-- ⏳ Human in the loop (pending)
+- ✅ Shared state
+- ✅ Human in the loop
 
 ```bash
 GAINS_PROVIDER=anthropic go run ./cmd/serve

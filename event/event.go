@@ -313,33 +313,20 @@ func Test(path string, value any) JSONPatch {
 	return JSONPatch{Op: PatchTest, Path: path, Value: value}
 }
 
-// EmitSnapshot is a convenience function that sends a StateSnapshot event.
-// Use this in tool handlers to sync state with the frontend:
-//
-//	func handleTool(ctx context.Context, args Args) (string, error) {
-//	    state.Progress = 50
-//	    event.EmitSnapshot(eventCh, state)
-//	    return "done", nil
-//	}
+// EmitSnapshot sends a StateSnapshot event to the channel.
+// Used internally by SharedState.Set().
 func EmitSnapshot(ch chan<- Event, state any) {
 	Emit(ch, NewStateSnapshot(state))
 }
 
-// EmitDelta is a convenience function that sends a StateDelta event.
-// Use this in tool handlers for efficient incremental state updates:
-//
-//	event.EmitDelta(eventCh,
-//	    event.Replace("/progress", 50),
-//	    event.Add("/items/-", "new item"),
-//	)
+// EmitDelta sends a StateDelta event to the channel.
+// Used internally by SharedState.Update().
 func EmitDelta(ch chan<- Event, patches ...JSONPatch) {
 	Emit(ch, NewStateDelta(patches...))
 }
 
-// EmitField is a convenience function that sends a StateDelta event
-// for a single field update. Use this for simple field changes:
-//
-//	event.EmitField(eventCh, "/progress", 75)
+// EmitField sends a StateDelta event for a single field update.
+// Used internally by SharedState.UpdateField().
 func EmitField(ch chan<- Event, path string, value any) {
 	Emit(ch, NewStateDelta(Replace(path, value)))
 }

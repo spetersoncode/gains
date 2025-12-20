@@ -66,9 +66,14 @@ func main() {
 
 	// Create tool registry
 	registry := tool.NewRegistry()
+
+	// Register shared state tools (always enabled for AG-UI support)
+	registry.Add(tool.SharedStateTools()...)
+	slog.Info("registered state tools", "count", 3)
+
 	if cfg.EnableDemoTools {
 		SetupDemoTools(registry)
-		slog.Info("registered demo tools", "count", registry.Len())
+		slog.Info("registered demo tools", "count", registry.Len()-3)
 	}
 
 	// Create agent
