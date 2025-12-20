@@ -47,7 +47,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 	// Make API call
 	resp, err := c.client.Models.EmbedContent(ctx, model.String(), contents, config)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, WrapError(err)
 	}
 
 	// Convert response

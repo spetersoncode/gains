@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**gains** - Go AI Native Scaffold. A production-ready, Go-idiomatic generative AI library providing unified interfaces for Anthropic, OpenAI, and Google.
+**gains** - Go AI Native Scaffold. A production-ready, Go-idiomatic generative AI library providing unified interfaces for Anthropic, OpenAI, Google, and Vertex AI.
 
 ## Commands
 
@@ -23,7 +23,7 @@ gains/
 ├── agui/             # AG-UI protocol support: event mapping, message conversion
 ├── model/            # Model constants with pricing information
 ├── internal/
-│   ├── provider/     # Provider implementations (anthropic, openai, google)
+│   ├── provider/     # Provider implementations (anthropic, openai, google, vertex)
 │   ├── retry/        # Exponential backoff with jitter
 │   └── store/        # State management (Store, TypedStore, MessageStore)
 └── cmd/demo/         # Example implementations
@@ -34,8 +34,8 @@ gains/
 ### Core Interfaces
 
 - `ChatProvider` - Chat/ChatStream for all providers
-- `EmbeddingProvider` - Text embeddings (OpenAI, Google)
-- `ImageProvider` - Image generation (OpenAI, Google)
+- `EmbeddingProvider` - Text embeddings (OpenAI, Google, Vertex)
+- `ImageProvider` - Image generation (OpenAI, Google, Vertex)
 
 ### Key Packages
 
@@ -85,9 +85,30 @@ Supported tags: `json`, `desc`, `required`, `enum`, `min`, `max`, `minLength`, `
 | Anthropic | ✓    | -      | -          |
 | OpenAI    | ✓    | ✓      | ✓          |
 | Google    | ✓    | ✓      | ✓          |
+| Vertex AI | ✓    | ✓      | ✓          |
 
 ## Environment Variables
 
 - `ANTHROPIC_API_KEY` - Anthropic Claude API
 - `OPENAI_API_KEY` - OpenAI API
 - `GOOGLE_API_KEY` - Google Gemini API
+
+## Vertex AI Configuration
+
+Vertex AI uses Application Default Credentials (ADC) instead of API keys. Configure with project ID and location:
+
+```go
+client := client.New(client.Config{
+    APIKeys: client.APIKeys{
+        Vertex: client.VertexConfig{
+            Project:  "my-gcp-project",
+            Location: "us-central1",
+        },
+    },
+})
+```
+
+ADC discovers credentials automatically:
+1. `GOOGLE_APPLICATION_CREDENTIALS` environment variable (service account key path)
+2. `gcloud auth application-default login` (local development)
+3. Attached service account (GKE, Compute Engine, Cloud Run)

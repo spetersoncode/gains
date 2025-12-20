@@ -6,7 +6,8 @@ import (
 	"google.golang.org/genai"
 )
 
-func convertJSONSchemaToGenaiSchema(schemaJSON json.RawMessage) *genai.Schema {
+// ConvertJSONSchemaToGenaiSchema converts JSON Schema to Google genai Schema.
+func ConvertJSONSchemaToGenaiSchema(schemaJSON json.RawMessage) *genai.Schema {
 	if len(schemaJSON) == 0 {
 		return nil
 	}

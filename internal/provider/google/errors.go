@@ -7,10 +7,10 @@ import (
 	"google.golang.org/genai"
 )
 
-// wrapError wraps a Google GenAI error with gains error categorization.
+// WrapError wraps a Google GenAI error with gains error categorization.
 // It extracts status codes for proper retry handling.
 // Note: Google's genai.APIError doesn't expose headers, so Retry-After is not available.
-func wrapError(err error) error {
+func WrapError(err error) error {
 	if err == nil {
 		return nil
 	}

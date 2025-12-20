@@ -11,4 +11,5 @@ const (
 	ProviderAnthropic Provider = "anthropic"
 	ProviderOpenAI    Provider = "openai"
 	ProviderGoogle    Provider = "google"
+	ProviderVertex    Provider = "vertex"
 )

@@ -51,7 +51,7 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		model = ChatModel(options.Model.String())
 	}
 
-	contents, err := convertMessages(messages)
+	contents, err := ConvertMessages(messages)
 	if err != nil {
 		return nil, err
 	}
@@ -65,23 +65,23 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		config.Temperature = &temp
 	}
 	if len(options.Tools) > 0 {
-		config.Tools = convertTools(options.Tools)
+		config.Tools = ConvertTools(options.Tools)
 		if options.ToolChoice != "" {
-			config.ToolConfig = convertToolChoice(options.ToolChoice)
+			config.ToolConfig = ConvertToolChoice(options.ToolChoice)
 		}
 	}
 
 	// Handle JSON mode / response schema
 	if options.ResponseSchema != nil {
 		config.ResponseMIMEType = "application/json"
-		config.ResponseSchema = convertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
+		config.ResponseSchema = ConvertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
 	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		config.ResponseMIMEType = "application/json"
 	}
 
 	resp, err := c.client.Models.GenerateContent(ctx, model.String(), contents, config)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, WrapError(err)
 	}
 
 	content := ""
@@ -92,7 +92,7 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 				content += part.Text
 			}
 		}
-		toolCalls = extractToolCalls(resp.Candidates[0].Content.Parts)
+		toolCalls = ExtractToolCalls(resp.Candidates[0].Content.Parts)
 	}
 
 	finishReason := ""
@@ -122,7 +122,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		model = ChatModel(options.Model.String())
 	}
 
-	contents, err := convertMessages(messages)
+	contents, err := ConvertMessages(messages)
 	if err != nil {
 		return nil, err
 	}
@@ -136,16 +136,16 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		config.Temperature = &temp
 	}
 	if len(options.Tools) > 0 {
-		config.Tools = convertTools(options.Tools)
+		config.Tools = ConvertTools(options.Tools)
 		if options.ToolChoice != "" {
-			config.ToolConfig = convertToolChoice(options.ToolChoice)
+			config.ToolConfig = ConvertToolChoice(options.ToolChoice)
 		}
 	}
 
 	// Handle JSON mode / response schema
 	if options.ResponseSchema != nil {
 		config.ResponseMIMEType = "application/json"
-		config.ResponseSchema = convertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
+		config.ResponseSchema = ConvertJSONSchemaToGenaiSchema(options.ResponseSchema.Schema)
 	} else if options.ResponseFormat == ai.ResponseFormatJSON {
 		config.ResponseMIMEType = "application/json"
 	}
@@ -164,7 +164,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		for resp, err := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
 			iterCount++
 			if err != nil {
-				ch <- ai.StreamEvent{Err: wrapError(fmt.Errorf("stream error at iteration %d: %w", iterCount, err))}
+				ch <- ai.StreamEvent{Err: WrapError(fmt.Errorf("stream error at iteration %d: %w", iterCount, err))}
 				return
 			}
 
@@ -205,7 +205,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 				Content:      fullContent,
 				FinishReason: finishReason,
 				Usage:        usage,
-				ToolCalls:    extractToolCalls(allParts),
+				ToolCalls:    ExtractToolCalls(allParts),
 			},
 		}
 	}()

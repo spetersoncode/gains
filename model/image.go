@@ -40,3 +40,16 @@ var (
 	// DefaultImagenModel is the recommended default Google image model.
 	DefaultImagenModel = Imagen4
 )
+
+// Google Vertex AI Imagen Models (via Vertex AI backend)
+// Vertex AI uses Application Default Credentials instead of API keys.
+// Model pricing last verified: December 14, 2025
+var (
+	// Vertex Imagen 4 Series
+	VertexImagen4      = ImageModel{id: "imagen-4.0-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
+	VertexImagen4Fast  = ImageModel{id: "imagen-4.0-fast-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
+	VertexImagen4Ultra = ImageModel{id: "imagen-4.0-ultra-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.06}}
+
+	// DefaultVertexImageModel is the recommended default Vertex AI image model.
+	DefaultVertexImageModel = VertexImagen4
+)

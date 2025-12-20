@@ -42,3 +42,14 @@ var (
 	// DefaultGoogleEmbeddingModel is the recommended default Google embedding model.
 	DefaultGoogleEmbeddingModel = GeminiEmbedding001
 )
+
+// Google Vertex AI Embedding Models (via Vertex AI backend)
+// Vertex AI uses Application Default Credentials instead of API keys.
+// Model pricing last verified: December 14, 2025
+var (
+	// Vertex Gemini Embedding
+	VertexGeminiEmbedding001 = EmbeddingModel{id: "gemini-embedding-001", provider: ai.ProviderVertex, dimensions: 3072, pricing: EmbeddingPricing{PerMillion: 0.15}}
+
+	// DefaultVertexEmbeddingModel is the recommended default Vertex AI embedding model.
+	DefaultVertexEmbeddingModel = VertexGeminiEmbedding001
+)

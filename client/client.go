@@ -11,6 +11,7 @@ import (
 	"github.com/spetersoncode/gains/internal/provider/anthropic"
 	"github.com/spetersoncode/gains/internal/provider/google"
 	"github.com/spetersoncode/gains/internal/provider/openai"
+	"github.com/spetersoncode/gains/internal/provider/vertex"
 	"github.com/spetersoncode/gains/internal/retry"
 )
 
@@ -41,6 +42,11 @@ var providerCapabilities = map[ai.Provider]map[Feature]bool{
 		FeatureImage:     true,
 		FeatureEmbedding: true,
 	},
+	ai.ProviderVertex: {
+		FeatureChat:      true,
+		FeatureImage:     true,
+		FeatureEmbedding: true,
+	},
 }
 
 // APIKeys holds API keys for different providers.
@@ -49,6 +55,14 @@ type APIKeys struct {
 	Anthropic string
 	OpenAI    string
 	Google    string
+	Vertex    VertexConfig
+}
+
+// VertexConfig holds configuration for Vertex AI.
+// Uses Application Default Credentials (ADC) for authentication.
+type VertexConfig struct {
+	Project  string // GCP project ID
+	Location string // e.g., "us-central1"
 }
 
 // Defaults holds default models for each capability.
@@ -168,6 +182,8 @@ type Client struct {
 	openaiClient    *openai.Client
 	googleClient    *google.Client
 	googleInitErr   error
+	vertexClient    *vertex.Client
+	vertexInitErr   error
 }
 
 // New creates a unified client with the given configuration.
@@ -279,6 +295,44 @@ func (c *Client) getGoogleClient(ctx context.Context) (*google.Client, error) {
 	return c.googleClient, nil
 }
 
+// getVertexClient returns the Vertex AI client, initializing it if needed.
+func (c *Client) getVertexClient(ctx context.Context) (*vertex.Client, error) {
+	c.mu.RLock()
+	if c.vertexClient != nil {
+		defer c.mu.RUnlock()
+		return c.vertexClient, nil
+	}
+	if c.vertexInitErr != nil {
+		defer c.mu.RUnlock()
+		return nil, c.vertexInitErr
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if c.vertexClient != nil {
+		return c.vertexClient, nil
+	}
+	if c.vertexInitErr != nil {
+		return nil, c.vertexInitErr
+	}
+
+	if c.apiKeys.Vertex.Project == "" || c.apiKeys.Vertex.Location == "" {
+		return nil, &ErrMissingAPIKey{Provider: "vertex (requires Project and Location)"}
+	}
+
+	client, err := vertex.New(ctx, c.apiKeys.Vertex.Project, c.apiKeys.Vertex.Location)
+	if err != nil {
+		c.vertexInitErr = fmt.Errorf("failed to initialize Vertex AI client: %w", err)
+		return nil, c.vertexInitErr
+	}
+
+	c.vertexClient = client
+	return c.vertexClient, nil
+}
+
 // resolveProvider determines which provider to use for a given model.
 func (c *Client) resolveProvider(model ai.Model) ai.Provider {
 	return model.Provider()
@@ -303,6 +357,12 @@ func (c *Client) getChatProvider(ctx context.Context, model ai.Model) (ai.ChatPr
 		return client, provider, nil
 	case ai.ProviderGoogle:
 		client, err := c.getGoogleClient(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		return client, provider, nil
+	case ai.ProviderVertex:
+		client, err := c.getVertexClient(ctx)
 		if err != nil {
 			return nil, "", err
 		}
@@ -585,6 +645,12 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.Im
 			return nil, err
 		}
 		imageProvider = client
+	case ai.ProviderVertex:
+		client, err := c.getVertexClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		imageProvider = client
 	default:
 		return nil, &ErrFeatureNotSupported{Provider: provider.String(), Feature: "image"}
 	}
@@ -680,6 +746,12 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 			return nil, err
 		}
 		embedProvider = client
+	case ai.ProviderVertex:
+		client, err := c.getVertexClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		embedProvider = client
 	default:
 		return nil, &ErrFeatureNotSupported{Provider: provider.String(), Feature: "embedding"}
 	}
@@ -739,13 +811,14 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 
 // SupportsFeature returns true if the given feature is supported by any configured provider.
 func (c *Client) SupportsFeature(f Feature) bool {
+	hasVertex := c.apiKeys.Vertex.Project != "" && c.apiKeys.Vertex.Location != ""
 	switch f {
 	case FeatureChat:
-		return c.apiKeys.Anthropic != "" || c.apiKeys.OpenAI != "" || c.apiKeys.Google != ""
+		return c.apiKeys.Anthropic != "" || c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
 	case FeatureImage:
-		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != ""
+		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
 	case FeatureEmbedding:
-		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != ""
+		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
 	default:
 		return false
 	}

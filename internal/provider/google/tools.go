@@ -8,7 +8,8 @@ import (
 	"google.golang.org/genai"
 )
 
-func convertTools(tools []ai.Tool) []*genai.Tool {
+// ConvertTools converts gains Tools to Google genai Tools.
+func ConvertTools(tools []ai.Tool) []*genai.Tool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -18,14 +19,15 @@ func convertTools(tools []ai.Tool) []*genai.Tool {
 		funcs[i] = &genai.FunctionDeclaration{
 			Name:        t.Name,
 			Description: t.Description,
-			Parameters:  convertJSONSchemaToGenaiSchema(t.Parameters),
+			Parameters:  ConvertJSONSchemaToGenaiSchema(t.Parameters),
 		}
 	}
 
 	return []*genai.Tool{{FunctionDeclarations: funcs}}
 }
 
-func convertToolChoice(choice ai.ToolChoice) *genai.ToolConfig {
+// ConvertToolChoice converts gains ToolChoice to Google genai ToolConfig.
+func ConvertToolChoice(choice ai.ToolChoice) *genai.ToolConfig {
 	switch choice {
 	case ai.ToolChoiceNone:
 		return &genai.ToolConfig{
@@ -48,7 +50,8 @@ func convertToolChoice(choice ai.ToolChoice) *genai.ToolConfig {
 	}
 }
 
-func extractToolCalls(parts []*genai.Part) []ai.ToolCall {
+// ExtractToolCalls extracts tool calls from Google genai Parts.
+func ExtractToolCalls(parts []*genai.Part) []ai.ToolCall {
 	var calls []ai.ToolCall
 	for i, part := range parts {
 		if part.FunctionCall != nil {

@@ -12,7 +12,8 @@ import (
 	"google.golang.org/genai"
 )
 
-func convertMessages(messages []ai.Message) ([]*genai.Content, error) {
+// ConvertMessages converts gains Messages to Google genai Contents.
+func ConvertMessages(messages []ai.Message) ([]*genai.Content, error) {
 	var contents []*genai.Content
 
 	for _, msg := range messages {

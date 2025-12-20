@@ -36,7 +36,7 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...ai.Im
 	// Make API call
 	resp, err := c.client.Models.GenerateImages(ctx, model.String(), prompt, config)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, WrapError(err)
 	}
 
 	// Convert response
