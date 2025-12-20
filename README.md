@@ -25,7 +25,9 @@ Most AI agent frameworks either don't support Go or treat it as an afterthought.
 - **Agent Orchestration** - Autonomous tool-calling loops with approval workflows
 - **Composable Workflows** - Chain, Parallel, Router, and Loop patterns for complex pipelines
 - **Built-in Tools** - File, HTTP, search, and client tools ready to use
-- **AG-UI Protocol** - Frontend integration via event mapping
+- **AG-UI Protocol** - Frontend integration via event mapping and shared state
+- **A2A Protocol** - Agent-to-agent communication (testing)
+- **MCP Protocol** - Model Context Protocol for tool interoperability (testing)
 - **Streaming First** - Channel-based streaming throughout the entire API
 - **Automatic Retry** - Exponential backoff with jitter for transient errors
 
