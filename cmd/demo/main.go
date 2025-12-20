@@ -31,6 +31,8 @@ func main() {
 			Location: os.Getenv("VERTEX_LOCATION"),
 		},
 	}
+	// Store for model filtering in demos
+	availableCreds = creds
 
 	// Check what's available
 	var available []struct {

@@ -7,10 +7,15 @@ import (
 	"strings"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/client"
 	"github.com/spetersoncode/gains/model"
 )
 
 var reader = bufio.NewReader(os.Stdin)
+
+// availableCreds stores credentials for model filtering.
+// Set by main() after loading environment.
+var availableCreds client.Credentials
 
 func askYesNo(question string) bool {
 	fmt.Printf("%s [y/N]: ", question)
@@ -60,4 +65,80 @@ func getModelsForProvider(provider string) []modelOption {
 	default:
 		return nil
 	}
+}
+
+func getEmbeddingModels() []modelOption {
+	var models []modelOption
+
+	if availableCreds.OpenAI != "" {
+		models = append(models,
+			modelOption{model.TextEmbedding3Small, "OpenAI text-embedding-3-small (recommended)"},
+			modelOption{model.TextEmbedding3Large, "OpenAI text-embedding-3-large"},
+		)
+	}
+	if availableCreds.Google != "" {
+		models = append(models,
+			modelOption{model.GeminiEmbedding001, "Google gemini-embedding-001"},
+		)
+	}
+	if availableCreds.Vertex.Project != "" && availableCreds.Vertex.Location != "" {
+		models = append(models,
+			modelOption{model.VertexGeminiEmbedding001, "Vertex AI gemini-embedding-001"},
+		)
+	}
+
+	return models
+}
+
+func getImageModels() []modelOption {
+	var models []modelOption
+
+	if availableCreds.OpenAI != "" {
+		models = append(models,
+			modelOption{model.GPTImage1, "OpenAI GPT Image 1 (recommended)"},
+			modelOption{model.GPTImage1Mini, "OpenAI GPT Image 1 Mini"},
+		)
+	}
+	if availableCreds.Google != "" {
+		models = append(models,
+			modelOption{model.Imagen4, "Google Imagen 4"},
+			modelOption{model.Imagen4Fast, "Google Imagen 4 Fast"},
+			modelOption{model.Imagen4Ultra, "Google Imagen 4 Ultra"},
+		)
+	}
+	if availableCreds.Vertex.Project != "" && availableCreds.Vertex.Location != "" {
+		models = append(models,
+			modelOption{model.VertexImagen4, "Vertex AI Imagen 4"},
+			modelOption{model.VertexImagen4Fast, "Vertex AI Imagen 4 Fast"},
+			modelOption{model.VertexImagen4Ultra, "Vertex AI Imagen 4 Ultra"},
+		)
+	}
+
+	return models
+}
+
+func selectModel(models []modelOption, prompt string) ai.Model {
+	if len(models) == 0 {
+		return nil
+	}
+	if len(models) == 1 {
+		fmt.Printf("Using: %s\n", models[0].label)
+		return models[0].model
+	}
+
+	fmt.Println(prompt)
+	for i, m := range models {
+		fmt.Printf("  [%d] %s\n", i+1, m.label)
+	}
+	fmt.Printf("Select [1-%d]: ", len(models))
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(answer)
+	var idx int
+	fmt.Sscanf(answer, "%d", &idx)
+	idx--
+	if idx < 0 || idx >= len(models) {
+		idx = 0
+	}
+	fmt.Printf("Using: %s\n\n", models[idx].label)
+	return models[idx].model
 }

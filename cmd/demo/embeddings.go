@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 
+	ai "github.com/spetersoncode/gains"
 	"github.com/spetersoncode/gains/client"
 )
 
@@ -13,6 +14,9 @@ func demoEmbeddings(ctx context.Context, c *client.Client) {
 	fmt.Println("\n┌─────────────────────────────────────────┐")
 	fmt.Println("│            Embeddings Demo              │")
 	fmt.Println("└─────────────────────────────────────────┘")
+
+	// Select embedding model
+	selectedModel := selectModel(getEmbeddingModels(), "Select embedding model:")
 
 	texts := []string{
 		"The quick brown fox jumps over the lazy dog.",
@@ -26,7 +30,7 @@ func demoEmbeddings(ctx context.Context, c *client.Client) {
 	}
 	fmt.Println()
 
-	resp, err := c.Embed(ctx, texts)
+	resp, err := c.Embed(ctx, texts, ai.WithEmbeddingModel(selectedModel))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return
