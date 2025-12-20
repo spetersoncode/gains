@@ -93,17 +93,31 @@ func main() {
 	}
 	fmt.Println()
 
-	// Determine default chat model based on selection
+	// Get available models for the selected provider
+	providerName := available[selected].name
+	models := getModelsForProvider(providerName)
+
+	// Let user select model
 	var defaultChatModel ai.Model
-	switch available[selected].name {
-	case "anthropic":
-		defaultChatModel = model.ClaudeSonnet45
-	case "openai":
-		defaultChatModel = model.GPT52
-	case "google":
-		defaultChatModel = model.Gemini25Flash
-	case "vertex":
-		defaultChatModel = model.VertexGemini25Flash
+	if len(models) == 1 {
+		defaultChatModel = models[0].model
+		fmt.Printf("Using model: %s\n", models[0].label)
+	} else {
+		fmt.Println("Available models:")
+		for i, m := range models {
+			fmt.Printf("  [%d] %s\n", i+1, m.label)
+		}
+		fmt.Printf("Select model [1-%d]: ", len(models))
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(answer)
+		var modelIdx int
+		fmt.Sscanf(answer, "%d", &modelIdx)
+		modelIdx-- // Convert to 0-indexed
+		if modelIdx < 0 || modelIdx >= len(models) {
+			modelIdx = 0
+		}
+		defaultChatModel = models[modelIdx].model
+		fmt.Printf("Using model: %s\n", models[modelIdx].label)
 	}
 
 	// Create unified client with all available credentials
