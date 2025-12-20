@@ -4,3 +4,6 @@ nul
 /demo
 /demo.exe
 /serve.exe
+
+# bv (beads viewer) local config and caches
+.bv/
