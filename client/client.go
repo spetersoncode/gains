@@ -49,13 +49,13 @@ var providerCapabilities = map[ai.Provider]map[Feature]bool{
 	},
 }
 
-// APIKeys holds API keys for different providers.
-// Only configure keys for providers you intend to use.
-type APIKeys struct {
-	Anthropic string
-	OpenAI    string
-	Google    string
-	Vertex    VertexConfig
+// Credentials holds authentication credentials for different providers.
+// Only configure credentials for providers you intend to use.
+type Credentials struct {
+	Anthropic string       // API key
+	OpenAI    string       // API key
+	Google    string       // API key
+	Vertex    VertexConfig // Project + Location (uses ADC)
 }
 
 // VertexConfig holds configuration for Vertex AI.
@@ -75,9 +75,9 @@ type Defaults struct {
 
 // Config holds configuration for creating a unified client.
 type Config struct {
-	// APIKeys contains authentication keys for each provider.
-	// Only configure keys for providers you intend to use.
-	APIKeys APIKeys
+	// Credentials contains authentication for each provider.
+	// Only configure credentials for providers you intend to use.
+	Credentials Credentials
 
 	// Defaults contains default models for each capability.
 	// The model's provider determines which backend is used.
@@ -170,7 +170,7 @@ func WithDefaultChatOptions(opts ...ai.Option) ClientOption {
 // Client is a unified interface to all AI provider capabilities.
 // Provider clients are lazily initialized when first needed.
 type Client struct {
-	apiKeys         APIKeys
+	creds           Credentials
 	defaults        Defaults
 	retryConfig     retry.Config
 	events          chan<- Event
@@ -196,7 +196,7 @@ func New(cfg Config, opts ...ClientOption) *Client {
 	}
 
 	c := &Client{
-		apiKeys:     cfg.APIKeys,
+		creds:       cfg.Credentials,
 		defaults:    cfg.Defaults,
 		retryConfig: retryConfig,
 		events:      cfg.Events,
@@ -224,11 +224,11 @@ func (c *Client) getAnthropicClient() (*anthropic.Client, error) {
 		return c.anthropicClient, nil
 	}
 
-	if c.apiKeys.Anthropic == "" {
+	if c.creds.Anthropic == "" {
 		return nil, &ErrMissingAPIKey{Provider: "anthropic"}
 	}
 
-	c.anthropicClient = anthropic.New(c.apiKeys.Anthropic)
+	c.anthropicClient = anthropic.New(c.creds.Anthropic)
 	return c.anthropicClient, nil
 }
 
@@ -249,11 +249,11 @@ func (c *Client) getOpenAIClient() (*openai.Client, error) {
 		return c.openaiClient, nil
 	}
 
-	if c.apiKeys.OpenAI == "" {
+	if c.creds.OpenAI == "" {
 		return nil, &ErrMissingAPIKey{Provider: "openai"}
 	}
 
-	c.openaiClient = openai.New(c.apiKeys.OpenAI)
+	c.openaiClient = openai.New(c.creds.OpenAI)
 	return c.openaiClient, nil
 }
 
@@ -281,11 +281,11 @@ func (c *Client) getGoogleClient(ctx context.Context) (*google.Client, error) {
 		return nil, c.googleInitErr
 	}
 
-	if c.apiKeys.Google == "" {
+	if c.creds.Google == "" {
 		return nil, &ErrMissingAPIKey{Provider: "google"}
 	}
 
-	client, err := google.New(ctx, c.apiKeys.Google)
+	client, err := google.New(ctx, c.creds.Google)
 	if err != nil {
 		c.googleInitErr = fmt.Errorf("failed to initialize Google client: %w", err)
 		return nil, c.googleInitErr
@@ -319,11 +319,11 @@ func (c *Client) getVertexClient(ctx context.Context) (*vertex.Client, error) {
 		return nil, c.vertexInitErr
 	}
 
-	if c.apiKeys.Vertex.Project == "" || c.apiKeys.Vertex.Location == "" {
+	if c.creds.Vertex.Project == "" || c.creds.Vertex.Location == "" {
 		return nil, &ErrMissingAPIKey{Provider: "vertex (requires Project and Location)"}
 	}
 
-	client, err := vertex.New(ctx, c.apiKeys.Vertex.Project, c.apiKeys.Vertex.Location)
+	client, err := vertex.New(ctx, c.creds.Vertex.Project, c.creds.Vertex.Location)
 	if err != nil {
 		c.vertexInitErr = fmt.Errorf("failed to initialize Vertex AI client: %w", err)
 		return nil, c.vertexInitErr
@@ -811,14 +811,14 @@ func (c *Client) Embed(ctx context.Context, texts []string, opts ...ai.Embedding
 
 // SupportsFeature returns true if the given feature is supported by any configured provider.
 func (c *Client) SupportsFeature(f Feature) bool {
-	hasVertex := c.apiKeys.Vertex.Project != "" && c.apiKeys.Vertex.Location != ""
+	hasVertex := c.creds.Vertex.Project != "" && c.creds.Vertex.Location != ""
 	switch f {
 	case FeatureChat:
-		return c.apiKeys.Anthropic != "" || c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
+		return c.creds.Anthropic != "" || c.creds.OpenAI != "" || c.creds.Google != "" || hasVertex
 	case FeatureImage:
-		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
+		return c.creds.OpenAI != "" || c.creds.Google != "" || hasVertex
 	case FeatureEmbedding:
-		return c.apiKeys.OpenAI != "" || c.apiKeys.Google != "" || hasVertex
+		return c.creds.OpenAI != "" || c.creds.Google != "" || hasVertex
 	default:
 		return false
 	}

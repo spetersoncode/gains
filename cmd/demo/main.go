@@ -21,11 +21,15 @@ func main() {
 	fmt.Println("╚════════════════════════════════════════╝")
 	fmt.Println()
 
-	// Collect available API keys
-	apiKeys := client.APIKeys{
+	// Collect available credentials
+	creds := client.Credentials{
 		Anthropic: os.Getenv("ANTHROPIC_API_KEY"),
 		OpenAI:    os.Getenv("OPENAI_API_KEY"),
 		Google:    os.Getenv("GOOGLE_API_KEY"),
+		Vertex: client.VertexConfig{
+			Project:  os.Getenv("VERTEX_PROJECT"),
+			Location: os.Getenv("VERTEX_LOCATION"),
+		},
 	}
 
 	// Check what's available
@@ -35,30 +39,38 @@ func main() {
 	}
 
 	fmt.Println("Available providers:")
-	if apiKeys.Anthropic != "" {
+	if creds.Anthropic != "" {
 		fmt.Printf("  [%d] Anthropic (Claude)\n", len(available)+1)
 		available = append(available, struct {
 			name  string
 			label string
 		}{"anthropic", "Anthropic (Claude)"})
 	}
-	if apiKeys.OpenAI != "" {
+	if creds.OpenAI != "" {
 		fmt.Printf("  [%d] OpenAI (GPT)\n", len(available)+1)
 		available = append(available, struct {
 			name  string
 			label string
 		}{"openai", "OpenAI (GPT)"})
 	}
-	if apiKeys.Google != "" {
+	if creds.Google != "" {
 		fmt.Printf("  [%d] Google (Gemini)\n", len(available)+1)
 		available = append(available, struct {
 			name  string
 			label string
 		}{"google", "Google (Gemini)"})
 	}
+	if creds.Vertex.Project != "" && creds.Vertex.Location != "" {
+		fmt.Printf("  [%d] Vertex AI (Gemini)\n", len(available)+1)
+		available = append(available, struct {
+			name  string
+			label string
+		}{"vertex", "Vertex AI (Gemini)"})
+	}
 
 	if len(available) == 0 {
-		fmt.Println("  No API keys found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.")
+		fmt.Println("  No credentials found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY,")
+		fmt.Println("  or VERTEX_PROJECT + VERTEX_LOCATION.")
 		return
 	}
 	fmt.Println()
@@ -90,11 +102,13 @@ func main() {
 		defaultChatModel = model.GPT52
 	case "google":
 		defaultChatModel = model.Gemini25Flash
+	case "vertex":
+		defaultChatModel = model.VertexGemini25Flash
 	}
 
-	// Create unified client with all available API keys
+	// Create unified client with all available credentials
 	c := client.New(client.Config{
-		APIKeys: apiKeys,
+		Credentials: creds,
 		Defaults: client.Defaults{
 			Chat:      defaultChatModel,
 			Embedding: model.TextEmbedding3Small,

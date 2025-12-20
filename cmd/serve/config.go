@@ -24,6 +24,10 @@ type Config struct {
 	OpenAIKey    string
 	GoogleKey    string
 
+	// Vertex AI (uses ADC for auth)
+	VertexProject  string
+	VertexLocation string
+
 	// Agent config
 	MaxSteps        int
 	Timeout         time.Duration
@@ -43,6 +47,8 @@ func LoadConfig() (*Config, error) {
 		AnthropicKey:    os.Getenv("ANTHROPIC_API_KEY"),
 		OpenAIKey:       os.Getenv("OPENAI_API_KEY"),
 		GoogleKey:       os.Getenv("GOOGLE_API_KEY"),
+		VertexProject:   os.Getenv("VERTEX_PROJECT"),
+		VertexLocation:  os.Getenv("VERTEX_LOCATION"),
 		MaxSteps:        getEnvIntOrDefault("GAINS_MAX_STEPS", 10),
 		Timeout:         getEnvDurationOrDefault("GAINS_TIMEOUT", 2*time.Minute),
 		EnableDemoTools: getEnvBoolOrDefault("GAINS_DEMO_TOOLS", true),
@@ -58,7 +64,7 @@ func LoadConfig() (*Config, error) {
 // Validate checks that required configuration is present.
 func (c *Config) Validate() error {
 	if c.Provider == "" {
-		return fmt.Errorf("GAINS_PROVIDER is required (anthropic, openai, or google)")
+		return fmt.Errorf("GAINS_PROVIDER is required (anthropic, openai, google, or vertex)")
 	}
 
 	switch c.Provider {
@@ -74,8 +80,12 @@ func (c *Config) Validate() error {
 		if c.GoogleKey == "" {
 			return fmt.Errorf("GOOGLE_API_KEY is required for google provider")
 		}
+	case "vertex":
+		if c.VertexProject == "" || c.VertexLocation == "" {
+			return fmt.Errorf("VERTEX_PROJECT and VERTEX_LOCATION are required for vertex provider")
+		}
 	default:
-		return fmt.Errorf("unknown provider: %s (must be anthropic, openai, or google)", c.Provider)
+		return fmt.Errorf("unknown provider: %s (must be anthropic, openai, google, or vertex)", c.Provider)
 	}
 
 	return nil

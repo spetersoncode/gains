@@ -98,8 +98,8 @@ Supported tags: `json`, `desc`, `required`, `enum`, `min`, `max`, `minLength`, `
 Vertex AI uses Application Default Credentials (ADC) instead of API keys. Configure with project ID and location:
 
 ```go
-client := client.New(client.Config{
-    APIKeys: client.APIKeys{
+c := client.New(client.Config{
+    Credentials: client.Credentials{
         Vertex: client.VertexConfig{
             Project:  "my-gcp-project",
             Location: "us-central1",

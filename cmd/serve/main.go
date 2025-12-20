@@ -8,7 +8,7 @@
 //
 //	AGUI_PORT         - Server port (default: 8000)
 //	AGUI_LOG_LEVEL    - Log level: debug, info, warn, error (default: info)
-//	GAINS_PROVIDER    - Provider: anthropic, openai, or google (required)
+//	GAINS_PROVIDER    - Provider: anthropic, openai, google, or vertex (required)
 //	GAINS_MODEL       - Model override (optional, uses provider default)
 //	GAINS_MAX_STEPS   - Max agent iterations (default: 10)
 //	GAINS_TIMEOUT     - Agent timeout (default: 2m)
@@ -16,10 +16,13 @@
 //	ANTHROPIC_API_KEY - Anthropic API key
 //	OPENAI_API_KEY    - OpenAI API key
 //	GOOGLE_API_KEY    - Google API key
+//	VERTEX_PROJECT    - Vertex AI project ID
+//	VERTEX_LOCATION   - Vertex AI location (e.g., us-central1)
 //
 // Usage:
 //
 //	GAINS_PROVIDER=anthropic go run ./cmd/serve
+//	GAINS_PROVIDER=vertex VERTEX_PROJECT=my-project VERTEX_LOCATION=us-central1 go run ./cmd/serve
 //
 // Debug logging (shows all events):
 //
@@ -154,6 +157,8 @@ func createClient(cfg *Config) (*client.Client, error) {
 		defaultChat = model.GPT52
 	case "google":
 		defaultChat = model.Gemini25Flash
+	case "vertex":
+		defaultChat = model.VertexGemini25Flash
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
 	}
@@ -164,10 +169,14 @@ func createClient(cfg *Config) (*client.Client, error) {
 	_ = cfg.Model // Acknowledge but don't use
 
 	return client.New(client.Config{
-		APIKeys: client.APIKeys{
+		Credentials: client.Credentials{
 			Anthropic: cfg.AnthropicKey,
 			OpenAI:    cfg.OpenAIKey,
 			Google:    cfg.GoogleKey,
+			Vertex: client.VertexConfig{
+				Project:  cfg.VertexProject,
+				Location: cfg.VertexLocation,
+			},
 		},
 		Defaults: client.Defaults{
 			Chat: defaultChat,
