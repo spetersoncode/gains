@@ -104,18 +104,35 @@ func getImageModels() []modelOption {
 	}
 	if availableCreds.Google != "" {
 		models = append(models,
-			modelOption{model.Gemini3ProImagePreview, "Google Gemini 3 Pro Image Preview"},
-			modelOption{model.Imagen4, "Google Imagen 4"},
+			modelOption{model.Imagen4, "Google Imagen 4 (recommended)"},
 			modelOption{model.Imagen4Fast, "Google Imagen 4 Fast"},
 			modelOption{model.Imagen4Ultra, "Google Imagen 4 Ultra"},
 		)
 	}
 	if availableCreds.Vertex.Project != "" && availableCreds.Vertex.Location != "" {
 		models = append(models,
-			modelOption{model.VertexGemini3ProImagePreview, "Vertex AI Gemini 3 Pro Image Preview"},
-			modelOption{model.VertexImagen4, "Vertex AI Imagen 4"},
+			modelOption{model.VertexImagen4, "Vertex AI Imagen 4 (recommended)"},
 			modelOption{model.VertexImagen4Fast, "Vertex AI Imagen 4 Fast"},
 			modelOption{model.VertexImagen4Ultra, "Vertex AI Imagen 4 Ultra"},
+		)
+	}
+
+	return models
+}
+
+func getChatImageModels() []modelOption {
+	var models []modelOption
+
+	if availableCreds.Google != "" {
+		models = append(models,
+			modelOption{model.Gemini3ProImagePreview, "Gemini 3 Pro Image Preview (recommended)"},
+			modelOption{model.Gemini25FlashImage, "Gemini 2.5 Flash Image"},
+		)
+	}
+	if availableCreds.Vertex.Project != "" && availableCreds.Vertex.Location != "" {
+		models = append(models,
+			modelOption{model.VertexGemini3ProImagePreview, "Vertex Gemini 3 Pro Image Preview"},
+			modelOption{model.VertexGemini25FlashImage, "Vertex Gemini 2.5 Flash Image"},
 		)
 	}
 

@@ -99,6 +99,15 @@ type Response struct {
 	// ToolCalls contains any tool invocation requests from the model.
 	// Check if len(ToolCalls) > 0 to determine if tools should be executed.
 	ToolCalls []ToolCall `json:"toolCalls,omitempty"`
+	// Parts contains multimodal output content (text, images).
+	// Populated when the model generates non-text content (e.g., images).
+	// For text-only responses, this may be empty and Content is used instead.
+	Parts []ContentPart `json:"parts,omitempty"`
+}
+
+// HasParts returns true if the response has multimodal content parts.
+func (r Response) HasParts() bool {
+	return len(r.Parts) > 0
 }
 
 // Usage contains token usage information for a request.

@@ -10,6 +10,21 @@ type Model interface {
 	Provider() Provider
 }
 
+// ImageOutputCapable is an optional interface that models can implement
+// to indicate they support image generation in chat responses.
+type ImageOutputCapable interface {
+	SupportsImageOutput() bool
+}
+
+// ModelSupportsImageOutput checks if a model supports image output.
+// Returns true if the model implements ImageOutputCapable and returns true.
+func ModelSupportsImageOutput(m Model) bool {
+	if ioc, ok := m.(ImageOutputCapable); ok {
+		return ioc.SupportsImageOutput()
+	}
+	return false
+}
+
 // ResponseFormat specifies how the model should format its response.
 type ResponseFormat string
 
@@ -42,6 +57,7 @@ type Options struct {
 	ResponseFormat ResponseFormat
 	ResponseSchema *ResponseSchema
 	RetryConfig    *RetryConfig // Per-call retry config override (nil = use client default)
+	ImageOutput    bool         // Enable image output for models that support it
 }
 
 // Option is a functional option for configuring chat requests.
@@ -114,6 +130,16 @@ func WithRetryDisabled() Option {
 	return func(o *Options) {
 		disabled := DisabledRetryConfig()
 		o.RetryConfig = &disabled
+	}
+}
+
+// WithImageOutput enables image generation in chat responses.
+// When enabled, models that support image output (e.g., Gemini image models)
+// will include generated images in Response.Parts.
+// Note: Only supported by Google and Vertex AI with specific models.
+func WithImageOutput() Option {
+	return func(o *Options) {
+		o.ImageOutput = true
 	}
 }
 

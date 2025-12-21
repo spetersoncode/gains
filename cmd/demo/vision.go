@@ -93,3 +93,62 @@ func saveBase64Image(b64 string, filename string) error {
 	}
 	return os.WriteFile(filename, data, 0644)
 }
+
+func demoChatImageGeneration(ctx context.Context, c *client.Client) {
+	fmt.Println("\n┌─────────────────────────────────────────┐")
+	fmt.Println("│     Chat-Based Image Generation Demo    │")
+	fmt.Println("└─────────────────────────────────────────┘")
+	fmt.Println()
+	fmt.Println("This demo uses Gemini native image generation via Chat API.")
+	fmt.Println("Unlike Imagen, this supports multimodal conversations with images.")
+	fmt.Println()
+
+	// Select chat image model
+	selectedModel := selectModel(getChatImageModels(), "Select chat image model:")
+	if selectedModel == nil {
+		fmt.Println("No chat image models available. Need Google or Vertex AI credentials.")
+		return
+	}
+
+	prompt := "Generate an image of a friendly robot serving coffee in a cozy cafe"
+	fmt.Printf("Prompt: %q\n\n", prompt)
+
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: prompt},
+	}
+
+	resp, err := c.Chat(ctx, messages,
+		ai.WithModel(selectedModel),
+		ai.WithImageOutput(),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Response text: %s\n", resp.Content)
+	fmt.Printf("[Tokens: %d in, %d out]\n\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
+
+	// Extract and save images from response parts
+	imageCount := 0
+	for _, part := range resp.Parts {
+		if part.Type == ai.ContentPartTypeImage && part.Base64 != "" {
+			imageCount++
+			ext := "png"
+			if part.MimeType == "image/jpeg" {
+				ext = "jpg"
+			}
+			filename := fmt.Sprintf("chat_image_%s_%d.%s", time.Now().Format("20060102_150405"), imageCount, ext)
+			if err := saveBase64Image(part.Base64, filename); err != nil {
+				fmt.Printf("Image %d: Failed to save (%v)\n", imageCount, err)
+			} else {
+				absPath, _ := filepath.Abs(filename)
+				fmt.Printf("Image %d: Saved to %s\n", imageCount, absPath)
+			}
+		}
+	}
+
+	if imageCount == 0 {
+		fmt.Println("No images generated in response.")
+	}
+}

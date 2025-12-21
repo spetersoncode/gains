@@ -32,12 +32,10 @@ var (
 	DefaultGPTImageModel = GPTImage15
 )
 
-// Google Imagen Models
+// Google Imagen Models (use GenerateImages API)
+// Note: Gemini native image models (gemini-*-image) use Chat with WithImageOutput() instead.
 // Model pricing last verified: December 19, 2025
 var (
-	// Gemini 3 Image Preview
-	Gemini3ProImagePreview = ImageModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
-
 	// Imagen 4 Series
 	Imagen4      = ImageModel{id: "imagen-4.0-generate-001", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
 	Imagen4Fast  = ImageModel{id: "imagen-4.0-fast-generate-001", provider: ai.ProviderGoogle, pricing: ImagePricing{PerImage: 0.04}}
@@ -47,13 +45,11 @@ var (
 	DefaultImagenModel = Imagen4
 )
 
-// Google Vertex AI Imagen Models (via Vertex AI backend)
+// Google Vertex AI Imagen Models (use GenerateImages API via Vertex AI backend)
 // Vertex AI uses Application Default Credentials instead of API keys.
+// Note: Gemini native image models (gemini-*-image) use Chat with WithImageOutput() instead.
 // Model pricing last verified: December 19, 2025
 var (
-	// Vertex Gemini 3 Image Preview
-	VertexGemini3ProImagePreview = ImageModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
-
 	// Vertex Imagen 4 Series
 	VertexImagen4      = ImageModel{id: "imagen-4.0-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}
 	VertexImagen4Fast  = ImageModel{id: "imagen-4.0-fast-generate-001", provider: ai.ProviderVertex, pricing: ImagePricing{PerImage: 0.04}}

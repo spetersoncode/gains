@@ -87,6 +87,11 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		config.ResponseMIMEType = "application/json"
 	}
 
+	// Enable image output if requested
+	if options.ImageOutput {
+		config.ResponseModalities = []string{"TEXT", "IMAGE"}
+	}
+
 	resp, err := c.client.Models.GenerateContent(ctx, model.String(), contents, config)
 	if err != nil {
 		return nil, google.WrapError(err)
@@ -94,10 +99,21 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 
 	content := ""
 	var toolCalls []ai.ToolCall
+	var parts []ai.ContentPart
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 		for _, part := range resp.Candidates[0].Content.Parts {
 			if part.Text != "" {
 				content += part.Text
+				if options.ImageOutput {
+					parts = append(parts, ai.NewTextPart(part.Text))
+				}
+			}
+			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				parts = append(parts, ai.ContentPart{
+					Type:     ai.ContentPartTypeImage,
+					Base64:   base64.StdEncoding.EncodeToString(part.InlineData.Data),
+					MimeType: part.InlineData.MIMEType,
+				})
 			}
 		}
 		toolCalls = google.ExtractToolCalls(resp.Candidates[0].Content.Parts)
@@ -119,6 +135,7 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		FinishReason: finishReason,
 		Usage:        usage,
 		ToolCalls:    toolCalls,
+		Parts:        parts,
 	}, nil
 }
 
@@ -158,6 +175,11 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		config.ResponseMIMEType = "application/json"
 	}
 
+	// Enable image output if requested
+	if options.ImageOutput {
+		config.ResponseModalities = []string{"TEXT", "IMAGE"}
+	}
+
 	ch := make(chan ai.StreamEvent)
 
 	go func() {
@@ -167,6 +189,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 		var finishReason string
 		var usage ai.Usage
 		var allParts []*genai.Part
+		var contentParts []ai.ContentPart
 		var iterCount int
 
 		for resp, err := range c.client.Models.GenerateContentStream(ctx, model.String(), contents, config) {
@@ -190,6 +213,16 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 					if part.Text != "" {
 						ch <- ai.StreamEvent{Delta: part.Text}
 						fullContent += part.Text
+						if options.ImageOutput {
+							contentParts = append(contentParts, ai.NewTextPart(part.Text))
+						}
+					}
+					if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+						contentParts = append(contentParts, ai.ContentPart{
+							Type:     ai.ContentPartTypeImage,
+							Base64:   base64.StdEncoding.EncodeToString(part.InlineData.Data),
+							MimeType: part.InlineData.MIMEType,
+						})
 					}
 				}
 				finishReason = string(resp.Candidates[0].FinishReason)
@@ -214,6 +247,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 				FinishReason: finishReason,
 				Usage:        usage,
 				ToolCalls:    google.ExtractToolCalls(allParts),
+				Parts:        contentParts,
 			},
 		}
 	}()

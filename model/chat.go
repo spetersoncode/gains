@@ -4,9 +4,10 @@ import ai "github.com/spetersoncode/gains"
 
 // ChatModel represents a chat/completion model from any provider.
 type ChatModel struct {
-	id       string
-	provider ai.Provider
-	pricing  ChatPricing
+	id                  string
+	provider            ai.Provider
+	pricing             ChatPricing
+	supportsImageOutput bool
 }
 
 // String returns the API identifier for this model.
@@ -23,6 +24,12 @@ func (m ChatModel) Pricing() ChatPricing { return m.pricing }
 // input tokens or long context tiers which require extended usage tracking.
 func (m ChatModel) Cost(usage ai.Usage) float64 {
 	return CalculateCost(usage, m.pricing)
+}
+
+// SupportsImageOutput returns true if this model can generate images
+// in chat responses when WithImageOutput() is enabled.
+func (m ChatModel) SupportsImageOutput() bool {
+	return m.supportsImageOutput
 }
 
 // Anthropic Claude Models
@@ -84,6 +91,11 @@ var (
 
 	// DefaultGeminiModel is the recommended default Google model.
 	DefaultGeminiModel = Gemini25Flash
+
+	// Gemini Image Models (chat models that support image output via ResponseModalities)
+	// Use these with WithImageOutput() to generate images in chat responses.
+	Gemini25FlashImage        = ChatModel{id: "gemini-2.5-flash-preview-image-generation", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 0.15, OutputPerMillion: 0.60}, supportsImageOutput: true}
+	Gemini3ProImagePreview    = ChatModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderGoogle, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00}, supportsImageOutput: true}
 )
 
 // Google Vertex AI Models (same models as Gemini, but via Vertex AI backend)
@@ -102,4 +114,9 @@ var (
 
 	// DefaultVertexModel is the recommended default Vertex AI model.
 	DefaultVertexModel = VertexGemini25Flash
+
+	// Vertex Gemini Image Models (chat models that support image output via ResponseModalities)
+	// Use these with WithImageOutput() to generate images in chat responses.
+	VertexGemini25FlashImage     = ChatModel{id: "gemini-2.5-flash-preview-image-generation", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 0.15, OutputPerMillion: 0.60}, supportsImageOutput: true}
+	VertexGemini3ProImagePreview = ChatModel{id: "gemini-3-pro-image-preview", provider: ai.ProviderVertex, pricing: ChatPricing{InputPerMillion: 2.00, OutputPerMillion: 12.00}, supportsImageOutput: true}
 )
