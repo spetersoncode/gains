@@ -28,6 +28,31 @@ func ModelSupportsImageOutput(m Model) bool {
 // ResponseFormat specifies how the model should format its response.
 type ResponseFormat string
 
+// ImageAspectRatio specifies the aspect ratio for generated images in chat responses.
+// Only supported by Google/Vertex AI models with image output capability.
+type ImageAspectRatio string
+
+const (
+	ImageAspectRatio1x1   ImageAspectRatio = "1:1"
+	ImageAspectRatio2x3   ImageAspectRatio = "2:3"
+	ImageAspectRatio3x2   ImageAspectRatio = "3:2"
+	ImageAspectRatio3x4   ImageAspectRatio = "3:4"
+	ImageAspectRatio4x3   ImageAspectRatio = "4:3"
+	ImageAspectRatio9x16  ImageAspectRatio = "9:16"
+	ImageAspectRatio16x9  ImageAspectRatio = "16:9"
+	ImageAspectRatio21x9  ImageAspectRatio = "21:9"
+)
+
+// ImageOutputSize specifies the resolution for generated images in chat responses.
+// Only supported by Google/Vertex AI models with image output capability.
+type ImageOutputSize string
+
+const (
+	ImageOutputSize1K ImageOutputSize = "1K" // Default
+	ImageOutputSize2K ImageOutputSize = "2K"
+	ImageOutputSize4K ImageOutputSize = "4K"
+)
+
 const (
 	// ResponseFormatText is the default text response format.
 	ResponseFormatText ResponseFormat = "text"
@@ -49,15 +74,17 @@ type ResponseSchema struct {
 
 // Options contains configuration for a chat request.
 type Options struct {
-	Model          Model
-	MaxTokens      int
-	Temperature    *float64
-	Tools          []Tool
-	ToolChoice     ToolChoice
-	ResponseFormat ResponseFormat
-	ResponseSchema *ResponseSchema
-	RetryConfig    *RetryConfig // Per-call retry config override (nil = use client default)
-	ImageOutput    bool         // Enable image output for models that support it
+	Model            Model
+	MaxTokens        int
+	Temperature      *float64
+	Tools            []Tool
+	ToolChoice       ToolChoice
+	ResponseFormat   ResponseFormat
+	ResponseSchema   *ResponseSchema
+	RetryConfig      *RetryConfig     // Per-call retry config override (nil = use client default)
+	ImageOutput      bool             // Enable image output for models that support it
+	ImageAspectRatio ImageAspectRatio // Aspect ratio for generated images (Google/Vertex only)
+	ImageOutputSize  ImageOutputSize  // Resolution for generated images (Google/Vertex only)
 }
 
 // Option is a functional option for configuring chat requests.
@@ -140,6 +167,24 @@ func WithRetryDisabled() Option {
 func WithImageOutput() Option {
 	return func(o *Options) {
 		o.ImageOutput = true
+	}
+}
+
+// WithImageAspectRatio sets the aspect ratio for generated images in chat responses.
+// Supported values: "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9".
+// Note: Only supported by Google and Vertex AI with image output enabled.
+func WithImageAspectRatio(ratio ImageAspectRatio) Option {
+	return func(o *Options) {
+		o.ImageAspectRatio = ratio
+	}
+}
+
+// WithImageOutputSize sets the resolution for generated images in chat responses.
+// Supported values: "1K" (default), "2K", "4K".
+// Note: Only supported by Google and Vertex AI with image output enabled.
+func WithImageOutputSize(size ImageOutputSize) Option {
+	return func(o *Options) {
+		o.ImageOutputSize = size
 	}
 }
 

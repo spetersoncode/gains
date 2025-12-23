@@ -152,3 +152,64 @@ func demoChatImageGeneration(ctx context.Context, c *client.Client) {
 		fmt.Println("No images generated in response.")
 	}
 }
+
+func demoChatImagePortrait(ctx context.Context, c *client.Client) {
+	fmt.Println("\n┌─────────────────────────────────────────┐")
+	fmt.Println("│    Portrait (9:16) Image Generation     │")
+	fmt.Println("└─────────────────────────────────────────┘")
+	fmt.Println()
+	fmt.Println("This demo generates a 9:16 portrait image using Gemini.")
+	fmt.Println("Uses WithImageAspectRatio for native aspect ratio control.")
+	fmt.Println()
+
+	// Select chat image model
+	selectedModel := selectModel(getChatImageModels(), "Select chat image model:")
+	if selectedModel == nil {
+		fmt.Println("No chat image models available. Need Google or Vertex AI credentials.")
+		return
+	}
+
+	prompt := "Generate an image of a magical tower reaching into the clouds with glowing windows and birds flying around it"
+	fmt.Printf("Prompt: %q\n", prompt)
+	fmt.Printf("Aspect Ratio: 9:16\n\n")
+
+	messages := []ai.Message{
+		{Role: ai.RoleUser, Content: prompt},
+	}
+
+	resp, err := c.Chat(ctx, messages,
+		ai.WithModel(selectedModel),
+		ai.WithImageOutput(),
+		ai.WithImageAspectRatio(ai.ImageAspectRatio9x16),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Response text: %s\n", resp.Content)
+	fmt.Printf("[Tokens: %d in, %d out]\n\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
+
+	// Extract and save images from response parts
+	imageCount := 0
+	for _, part := range resp.Parts {
+		if part.Type == ai.ContentPartTypeImage && part.Base64 != "" {
+			imageCount++
+			ext := "png"
+			if part.MimeType == "image/jpeg" {
+				ext = "jpg"
+			}
+			filename := fmt.Sprintf("chat_image_9x16_%s_%d.%s", time.Now().Format("20060102_150405"), imageCount, ext)
+			if err := saveBase64Image(part.Base64, filename); err != nil {
+				fmt.Printf("Image %d: Failed to save (%v)\n", imageCount, err)
+			} else {
+				absPath, _ := filepath.Abs(filename)
+				fmt.Printf("Image %d: Saved to %s\n", imageCount, absPath)
+			}
+		}
+	}
+
+	if imageCount == 0 {
+		fmt.Println("No images generated in response.")
+	}
+}

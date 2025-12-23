@@ -46,6 +46,7 @@ var demos = []Demo{
 	{Name: "vision", Description: "Vision/image input analysis", Category: CategoryChat, Run: demoVisionInput},
 	{Name: "image-gen", Description: "Image generation (Imagen)", Category: CategoryChat, Feature: client.FeatureImage, Run: demoImageGeneration},
 	{Name: "chat-image", Description: "Image generation via Chat (Gemini)", Category: CategoryChat, Run: demoChatImageGeneration},
+	{Name: "chat-image-9x16", Description: "Portrait 9:16 image generation", Category: CategoryChat, Run: demoChatImagePortrait},
 
 	// Tools & Agents
 	{Name: "agent", Description: "Agent with tool execution", Category: CategoryTools, Run: demoAgent},

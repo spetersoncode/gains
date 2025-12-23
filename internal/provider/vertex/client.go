@@ -90,6 +90,16 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 	// Enable image output if requested
 	if options.ImageOutput {
 		config.ResponseModalities = []string{"TEXT", "IMAGE"}
+		// Apply image configuration if aspect ratio or size is specified
+		if options.ImageAspectRatio != "" || options.ImageOutputSize != "" {
+			config.ImageConfig = &genai.ImageConfig{}
+			if options.ImageAspectRatio != "" {
+				config.ImageConfig.AspectRatio = string(options.ImageAspectRatio)
+			}
+			if options.ImageOutputSize != "" {
+				config.ImageConfig.ImageSize = string(options.ImageOutputSize)
+			}
+		}
 	}
 
 	resp, err := c.client.Models.GenerateContent(ctx, model.String(), contents, config)
@@ -178,6 +188,16 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 	// Enable image output if requested
 	if options.ImageOutput {
 		config.ResponseModalities = []string{"TEXT", "IMAGE"}
+		// Apply image configuration if aspect ratio or size is specified
+		if options.ImageAspectRatio != "" || options.ImageOutputSize != "" {
+			config.ImageConfig = &genai.ImageConfig{}
+			if options.ImageAspectRatio != "" {
+				config.ImageConfig.AspectRatio = string(options.ImageAspectRatio)
+			}
+			if options.ImageOutputSize != "" {
+				config.ImageConfig.ImageSize = string(options.ImageOutputSize)
+			}
+		}
 	}
 
 	ch := make(chan ai.StreamEvent)
