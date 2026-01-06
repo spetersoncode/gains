@@ -140,6 +140,9 @@ func demoObserverFile(ctx context.Context, c *client.Client) {
 
 	fmt.Printf("\nAgent response: %s\n", result.Response.Content)
 
+	// Close the multi observer to flush file writes before reading
+	multiObs.Close()
+
 	// Read and display the JSON file contents
 	fmt.Println("\n─── JSON File Contents ───")
 	jsonContent, err := os.ReadFile(tmpPath)

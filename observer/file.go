@@ -106,13 +106,23 @@ func (f *File) Observe(ctx context.Context, e event.Event) {
 	_ = f.enc.Encode(fe)
 }
 
+// syncer is implemented by types that can sync/flush their buffers.
+type syncer interface {
+	Sync() error
+}
+
 // Close closes the file if it was opened by NewFile.
+// It syncs before closing to ensure all data is written.
 func (f *File) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.closed = true
 	if f.closer != nil {
+		// Sync before closing to ensure all data is flushed to disk
+		if s, ok := f.w.(syncer); ok {
+			_ = s.Sync()
+		}
 		return f.closer.Close()
 	}
 	return nil
