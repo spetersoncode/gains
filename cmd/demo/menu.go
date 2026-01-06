@@ -13,11 +13,12 @@ import (
 type Category string
 
 const (
-	CategoryChat     Category = "Chat"
-	CategoryTools    Category = "Tools & Agents"
-	CategoryOutput   Category = "Structured Output"
-	CategoryWorkflow Category = "Workflows"
-	CategoryAGUI     Category = "AG-UI Protocol"
+	CategoryChat        Category = "Chat"
+	CategoryTools       Category = "Tools & Agents"
+	CategoryOutput      Category = "Structured Output"
+	CategoryWorkflow    Category = "Workflows"
+	CategoryObserver    Category = "Observability"
+	CategoryAGUI        Category = "AG-UI Protocol"
 )
 
 // categoryOrder defines the display order of categories.
@@ -26,6 +27,7 @@ var categoryOrder = []Category{
 	CategoryTools,
 	CategoryOutput,
 	CategoryWorkflow,
+	CategoryObserver,
 	CategoryAGUI,
 }
 
@@ -67,6 +69,10 @@ var demos = []Demo{
 	{Name: "loop", Description: "Iterative loop workflow", Category: CategoryWorkflow, Run: demoWorkflowLoop},
 	{Name: "tool-step", Description: "Direct tool execution in workflow", Category: CategoryWorkflow, Run: demoWorkflowToolStep},
 	{Name: "agent-step", Description: "Autonomous agent in workflow", Category: CategoryWorkflow, Run: demoWorkflowAgentStep},
+
+	// Observability
+	{Name: "observer", Description: "Console observer with cost tracking", Category: CategoryObserver, Run: demoObserver},
+	{Name: "observer-file", Description: "Multi observer with file output", Category: CategoryObserver, Run: demoObserverFile},
 
 	// AG-UI Protocol
 	{Name: "agui-stream", Description: "AG-UI event stream simulation", Category: CategoryAGUI, Run: demoAGUIStream},
