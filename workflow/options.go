@@ -5,6 +5,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/observer"
 )
 
 // ErrorHandler is called when a step encounters an error.
@@ -39,6 +40,10 @@ type Options struct {
 
 	// ChatOptions are passed to LLM calls within steps.
 	ChatOptions []ai.Option
+
+	// Observer receives events during workflow execution for tracing and monitoring.
+	// If nil, events are discarded. Use observer.NewNoop() for explicit no-op.
+	Observer observer.Observer
 }
 
 // Option is a functional option for workflow configuration.
@@ -84,6 +89,14 @@ func WithContinueOnError(enabled bool) Option {
 func WithChatOptions(opts ...ai.Option) Option {
 	return func(o *Options) {
 		o.ChatOptions = append(o.ChatOptions, opts...)
+	}
+}
+
+// WithObserver sets the observer for tracing and monitoring workflow execution.
+// Events are emitted for run lifecycle, step execution, routing, and errors.
+func WithObserver(obs observer.Observer) Option {
+	return func(o *Options) {
+		o.Observer = obs
 	}
 }
 

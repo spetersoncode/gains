@@ -193,6 +193,19 @@ type Event struct {
 	// Type identifies the kind of event.
 	Type Type
 
+	// Trace context fields for distributed tracing and observability.
+	// These fields enable correlation across services and trace reconstruction.
+
+	// TraceID is a unique identifier for the entire trace, spanning all spans
+	// from the initial request through all downstream operations.
+	TraceID string
+
+	// SpanID is a unique identifier for the current operation/span.
+	SpanID string
+
+	// ParentSpanID links this span to its parent, enabling trace hierarchy.
+	ParentSpanID string
+
 	// MessageID identifies the message for Start/Delta/End correlation.
 	MessageID string
 

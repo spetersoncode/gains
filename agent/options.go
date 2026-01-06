@@ -5,6 +5,7 @@ import (
 	"time"
 
 	ai "github.com/spetersoncode/gains"
+	"github.com/spetersoncode/gains/observer"
 )
 
 // ApproverFunc is called when a tool call requires approval.
@@ -50,6 +51,10 @@ type Options struct {
 
 	// ChatOptions are passed through to the underlying ChatProvider.
 	ChatOptions []ai.Option
+
+	// Observer receives events during agent execution for tracing and monitoring.
+	// If nil, events are discarded. Use observer.NewNoop() for explicit no-op.
+	Observer observer.Observer
 }
 
 // Option is a functional option for configuring agent execution.
@@ -118,6 +123,14 @@ func WithStopPredicate(fn StopFunc) Option {
 func WithChatOptions(opts ...ai.Option) Option {
 	return func(o *Options) {
 		o.ChatOptions = append(o.ChatOptions, opts...)
+	}
+}
+
+// WithObserver sets the observer for tracing and monitoring agent execution.
+// Events are emitted for run lifecycle, tool calls, and errors.
+func WithObserver(obs observer.Observer) Option {
+	return func(o *Options) {
+		o.Observer = obs
 	}
 }
 
