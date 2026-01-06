@@ -135,15 +135,15 @@ func (t *ToolStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Option
 
 	go func() {
 		defer close(ch)
-		event.Emit(ch, Event{Type: event.StepStart, StepName: t.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: t.name})
 
 		err := t.Run(ctx, state, opts...)
 		if err != nil {
-			event.Emit(ch, Event{Type: event.RunError, StepName: t.name, Error: err})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: t.name, Error: err})
 			return
 		}
 
-		event.Emit(ch, Event{Type: event.StepEnd, StepName: t.name})
+		event.Emit(ctx, ch, Event{Type: event.StepEnd, StepName: t.name})
 	}()
 
 	return ch

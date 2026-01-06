@@ -139,7 +139,7 @@ func (p *Parallel[S]) RunStream(ctx context.Context, state *S, opts ...Option) <
 			defer cancel()
 		}
 
-		event.Emit(ch, Event{Type: event.ParallelStart, StepName: p.name})
+		event.Emit(ctx, ch, Event{Type: event.ParallelStart, StepName: p.name})
 
 		branches := make(map[string]*S)
 		errors := make(map[string]error)
@@ -215,19 +215,19 @@ func (p *Parallel[S]) RunStream(ctx context.Context, state *S, opts ...Option) <
 
 		// Handle errors
 		if len(errors) > 0 && !options.ContinueOnError {
-			event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: &ParallelError{Errors: errors}})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: p.name, Error: &ParallelError{Errors: errors}})
 			return
 		}
 
 		// Aggregate
 		if p.aggregator != nil {
 			if err := p.aggregator(state, branches, errors); err != nil {
-				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
+				event.Emit(ctx, ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 				return
 			}
 		}
 
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:     event.ParallelEnd,
 			StepName: p.name,
 		})

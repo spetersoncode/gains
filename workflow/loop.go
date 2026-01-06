@@ -183,13 +183,13 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 			defer cancel()
 		}
 
-		event.Emit(ch, Event{Type: event.RunStart, StepName: l.name})
+		event.Emit(ctx, ch, Event{Type: event.RunStart, StepName: l.name})
 
 		for i := 1; i <= l.maxIters; i++ {
-			event.Emit(ch, Event{Type: event.LoopIteration, StepName: l.name, Iteration: i})
+			event.Emit(ctx, ch, Event{Type: event.LoopIteration, StepName: l.name, Iteration: i})
 
 			if err := ctx.Err(); err != nil {
-				event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: err})
+				event.Emit(ctx, ch, Event{Type: event.RunError, StepName: l.name, Error: err})
 				return
 			}
 
@@ -216,7 +216,7 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 					handlerErr := options.ErrorHandler(ctx, l.step.Name(), stepError)
 					if handlerErr != nil {
 						// Handler wants to propagate - emit the handler's error
-						event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: handlerErr})
+						event.Emit(ctx, ch, Event{Type: event.RunError, StepName: l.name, Error: handlerErr})
 						return
 					}
 					// Handler suppressed the error
@@ -224,7 +224,7 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 						continue
 					}
 					// Error suppressed, stop successfully
-					event.Emit(ch, Event{Type: event.RunEnd, StepName: l.name})
+					event.Emit(ctx, ch, Event{Type: event.RunEnd, StepName: l.name})
 					return
 				}
 				// No handler - error was already emitted by step, just stop
@@ -233,7 +233,7 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 
 			// Check exit condition after step execution
 			if l.exitCondition(ctx, state, i) {
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.RunEnd,
 					StepName: l.name,
 				})
@@ -242,7 +242,7 @@ func (l *Loop[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-cha
 		}
 
 		// Max iterations exceeded
-		event.Emit(ch, Event{Type: event.RunError, StepName: l.name, Error: ErrMaxIterationsExceeded})
+		event.Emit(ctx, ch, Event{Type: event.RunError, StepName: l.name, Error: ErrMaxIterationsExceeded})
 	}()
 
 	return ch

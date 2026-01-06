@@ -79,11 +79,11 @@ func (c *Chain[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-ch
 			defer cancel()
 		}
 
-		event.Emit(ch, Event{Type: event.RunStart, StepName: c.name})
+		event.Emit(ctx, ch, Event{Type: event.RunStart, StepName: c.name})
 
 		for _, step := range c.steps {
 			if err := ctx.Err(); err != nil {
-				event.Emit(ch, Event{Type: event.RunError, StepName: step.Name(), Error: err})
+				event.Emit(ctx, ch, Event{Type: event.RunError, StepName: step.Name(), Error: err})
 				return
 			}
 
@@ -110,7 +110,7 @@ func (c *Chain[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-ch
 					handlerErr := options.ErrorHandler(ctx, step.Name(), stepError)
 					if handlerErr != nil {
 						// Handler wants to propagate - emit the handler's error
-						event.Emit(ch, Event{Type: event.RunError, StepName: c.name, Error: handlerErr})
+						event.Emit(ctx, ch, Event{Type: event.RunError, StepName: c.name, Error: handlerErr})
 						return
 					}
 					// Handler suppressed the error
@@ -118,7 +118,7 @@ func (c *Chain[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-ch
 						continue
 					}
 					// Error suppressed, stop successfully
-					event.Emit(ch, Event{Type: event.RunEnd, StepName: c.name})
+					event.Emit(ctx, ch, Event{Type: event.RunEnd, StepName: c.name})
 					return
 				}
 				// No handler - error was already emitted by step, just stop
@@ -126,7 +126,7 @@ func (c *Chain[S]) RunStream(ctx context.Context, state *S, opts ...Option) <-ch
 			}
 		}
 
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:     event.RunEnd,
 			StepName: c.name,
 		})

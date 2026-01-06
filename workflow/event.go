@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"context"
+
 	"github.com/spetersoncode/gains/event"
 )
 
@@ -32,17 +34,18 @@ type StateEmitter interface {
 type channelEmitter struct {
 	ch       chan<- Event
 	stepName string
+	ctx      context.Context
 }
 
 // NewChannelEmitter creates a StateEmitter that sends events to the given channel.
 // The stepName is included in emitted events for tracing.
-func NewChannelEmitter(ch chan<- Event, stepName string) StateEmitter {
-	return &channelEmitter{ch: ch, stepName: stepName}
+func NewChannelEmitter(ctx context.Context, ch chan<- Event, stepName string) StateEmitter {
+	return &channelEmitter{ch: ch, stepName: stepName, ctx: ctx}
 }
 
 // EmitSnapshot sends a StateSnapshot event.
 func (e *channelEmitter) EmitSnapshot(state any) {
-	event.Emit(e.ch, Event{
+	event.Emit(e.ctx, e.ch, Event{
 		Type:     event.StateSnapshot,
 		StepName: e.stepName,
 		State:    state,
@@ -51,7 +54,7 @@ func (e *channelEmitter) EmitSnapshot(state any) {
 
 // EmitDelta sends a StateDelta event with the given patches.
 func (e *channelEmitter) EmitDelta(patches ...event.JSONPatch) {
-	event.Emit(e.ch, Event{
+	event.Emit(e.ctx, e.ch, Event{
 		Type:         event.StateDelta,
 		StepName:     e.stepName,
 		StatePatches: patches,

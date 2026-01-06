@@ -26,9 +26,9 @@ func (m *mockChatClient) ChatStream(ctx context.Context, messages []ai.Message, 
 	ch := make(chan event.Event, 10)
 	go func() {
 		defer close(ch)
-		event.Emit(ch, event.Event{Type: event.MessageStart, MessageID: "test-msg"})
-		event.Emit(ch, event.Event{Type: event.MessageDelta, MessageID: "test-msg", Delta: "Hello"})
-		event.Emit(ch, event.Event{Type: event.MessageEnd, MessageID: "test-msg", Response: m.response})
+		event.Emit(ctx, ch, event.Event{Type: event.MessageStart, MessageID: "test-msg"})
+		event.Emit(ctx, ch, event.Event{Type: event.MessageDelta, MessageID: "test-msg", Delta: "Hello"})
+		event.Emit(ctx, ch, event.Event{Type: event.MessageEnd, MessageID: "test-msg", Response: m.response})
 	}()
 	return ch, nil
 }

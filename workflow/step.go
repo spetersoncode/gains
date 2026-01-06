@@ -52,15 +52,15 @@ func (f *FuncStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) <
 	ch := make(chan Event, 10)
 	go func() {
 		defer close(ch)
-		event.Emit(ch, Event{Type: event.StepStart, StepName: f.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: f.name})
 
 		err := f.fn(ctx, state)
 		if err != nil {
-			event.Emit(ch, Event{Type: event.RunError, StepName: f.name, Error: err})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: f.name, Error: err})
 			return
 		}
 
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:     event.StepEnd,
 			StepName: f.name,
 		})
@@ -108,18 +108,18 @@ func (f *StatefulFuncStep[S]) RunStream(ctx context.Context, state *S, opts ...O
 	ch := make(chan Event, 100) // Larger buffer for state events
 	go func() {
 		defer close(ch)
-		event.Emit(ch, Event{Type: event.StepStart, StepName: f.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: f.name})
 
 		// Create emitter that sends to our channel
-		emitter := NewChannelEmitter(ch, f.name)
+		emitter := NewChannelEmitter(ctx, ch, f.name)
 
 		err := f.fn(ctx, state, emitter)
 		if err != nil {
-			event.Emit(ch, Event{Type: event.RunError, StepName: f.name, Error: err})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: f.name, Error: err})
 			return
 		}
 
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:     event.StepEnd,
 			StepName: f.name,
 		})
@@ -240,7 +240,7 @@ func (p *PromptStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Opti
 
 	go func() {
 		defer close(ch)
-		event.Emit(ch, Event{Type: event.StepStart, StepName: p.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: p.name})
 
 		options := ApplyOptions(opts...)
 
@@ -257,7 +257,7 @@ func (p *PromptStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Opti
 		msgs := p.prompt(state)
 		streamCh, err := p.chatClient.ChatStream(ctx, msgs, chatOpts...)
 		if err != nil {
-			event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 			return
 		}
 
@@ -265,14 +265,14 @@ func (p *PromptStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Opti
 		for ev := range streamCh {
 			switch ev.Type {
 			case event.RunError:
-				event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: ev.Error})
+				event.Emit(ctx, ch, Event{Type: event.RunError, StepName: p.name, Error: ev.Error})
 				return
 			case event.MessageStart:
-				event.Emit(ch, Event{Type: event.MessageStart, StepName: p.name, MessageID: ev.MessageID})
+				event.Emit(ctx, ch, Event{Type: event.MessageStart, StepName: p.name, MessageID: ev.MessageID})
 			case event.MessageDelta:
-				event.Emit(ch, Event{Type: event.MessageDelta, StepName: p.name, MessageID: ev.MessageID, Delta: ev.Delta})
+				event.Emit(ctx, ch, Event{Type: event.MessageDelta, StepName: p.name, MessageID: ev.MessageID, Delta: ev.Delta})
 			case event.MessageEnd:
-				event.Emit(ch, Event{Type: event.MessageEnd, StepName: p.name, MessageID: ev.MessageID, Response: ev.Response})
+				event.Emit(ctx, ch, Event{Type: event.MessageEnd, StepName: p.name, MessageID: ev.MessageID, Response: ev.Response})
 				response = ev.Response
 			}
 		}
@@ -280,12 +280,12 @@ func (p *PromptStep[S, T]) RunStream(ctx context.Context, state *S, opts ...Opti
 		if response != nil {
 			if p.field != nil {
 				if err := p.storeResult(state, response.Content); err != nil {
-					event.Emit(ch, Event{Type: event.RunError, StepName: p.name, Error: err})
+					event.Emit(ctx, ch, Event{Type: event.RunError, StepName: p.name, Error: err})
 					return
 				}
 			}
 
-			event.Emit(ch, Event{
+			event.Emit(ctx, ch, Event{
 				Type:     event.StepEnd,
 				StepName: p.name,
 				Response: response,

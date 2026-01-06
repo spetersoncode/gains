@@ -113,20 +113,20 @@ func (r *RunnerFunc[S]) RunStream(ctx context.Context, input any, opts ...Option
 		// Create state from input
 		state, err := r.factory(input)
 		if err != nil {
-			event.Emit(ch, Event{Type: event.RunError, Error: err})
+			event.Emit(ctx, ch, Event{Type: event.RunError, Error: err})
 			return
 		}
 
 		// Emit run start
-		event.Emit(ch, Event{Type: event.RunStart})
+		event.Emit(ctx, ch, Event{Type: event.RunStart})
 
 		// Run the workflow
 		for ev := range r.step.RunStream(ctx, state, opts...) {
-			event.Emit(ch, ev)
+			event.Emit(ctx, ch, ev)
 		}
 
 		// Emit run end
-		event.Emit(ch, Event{Type: event.RunEnd})
+		event.Emit(ctx, ch, Event{Type: event.RunEnd})
 	}()
 
 	return ch
@@ -202,7 +202,7 @@ func (r *Registry) RunStream(ctx context.Context, name string, input any, opts .
 	runner := r.Get(name)
 	if runner == nil {
 		ch := make(chan event.Event, 1)
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:  event.RunError,
 			Error: fmt.Errorf("workflow not found: %s", name),
 		})

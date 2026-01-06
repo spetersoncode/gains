@@ -149,7 +149,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 			defer cancel()
 		}
 
-		event.Emit(ch, Event{Type: event.StepStart, StepName: a.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: a.name})
 
 		msgs := a.prompt(state)
 
@@ -195,7 +195,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 					pendingToolResults = nil
 				}
 
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.StepStart,
 					StepName: a.name,
 					Step:     agentEvent.Step,
@@ -203,14 +203,14 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				})
 
 			case event.MessageStart:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:      event.MessageStart,
 					StepName:  a.name,
 					MessageID: agentEvent.MessageID,
 				})
 
 			case event.MessageDelta:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:      event.MessageDelta,
 					StepName:  a.name,
 					MessageID: agentEvent.MessageID,
@@ -218,7 +218,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				})
 
 			case event.MessageEnd:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:      event.MessageEnd,
 					StepName:  a.name,
 					MessageID: agentEvent.MessageID,
@@ -226,28 +226,28 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				})
 
 			case event.ToolCallStart:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallStart,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
 				})
 
 			case event.ToolCallArgs:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallArgs,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
 				})
 
 			case event.ToolCallApproved:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallApproved,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
 				})
 
 			case event.ToolCallRejected:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallRejected,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
@@ -255,14 +255,14 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				})
 
 			case event.ToolCallExecuting:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallExecuting,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
 				})
 
 			case event.ToolCallEnd:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.ToolCallEnd,
 					StepName: a.name,
 					ToolCall: agentEvent.ToolCall,
@@ -272,7 +272,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				if agentEvent.ToolResult != nil {
 					pendingToolResults = append(pendingToolResults, *agentEvent.ToolResult)
 				}
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:       event.ToolCallResult,
 					StepName:   a.name,
 					ToolCall:   agentEvent.ToolCall,
@@ -301,7 +301,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 				}
 
 			case event.RunError:
-				event.Emit(ch, Event{
+				event.Emit(ctx, ch, Event{
 					Type:     event.RunError,
 					StepName: a.name,
 					Error:    agentEvent.Error,
@@ -335,7 +335,7 @@ func (a *AgentStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 			output = lastResponse.Content
 		}
 
-		event.Emit(ch, Event{
+		event.Emit(ctx, ch, Event{
 			Type:     event.StepEnd,
 			StepName: a.name,
 			Response: lastResponse,

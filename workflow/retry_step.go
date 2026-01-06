@@ -68,7 +68,7 @@ func (r *RetryStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 
 	go func() {
 		defer close(ch)
-		event.Emit(ch, Event{Type: event.StepStart, StepName: r.name})
+		event.Emit(ctx, ch, Event{Type: event.StepStart, StepName: r.name})
 
 		// Create event channel for retry observability
 		retryEvents := make(chan retry.Event, 10)
@@ -96,11 +96,11 @@ func (r *RetryStep[S]) RunStream(ctx context.Context, state *S, opts ...Option) 
 
 		// Channel is closed, emit final event
 		if runErr != nil {
-			event.Emit(ch, Event{Type: event.RunError, StepName: r.name, Error: runErr})
+			event.Emit(ctx, ch, Event{Type: event.RunError, StepName: r.name, Error: runErr})
 			return
 		}
 
-		event.Emit(ch, Event{Type: event.StepEnd, StepName: r.name})
+		event.Emit(ctx, ch, Event{Type: event.StepEnd, StepName: r.name})
 	}()
 
 	return ch

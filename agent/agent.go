@@ -133,8 +133,12 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 		defer cancel()
 	}
 
+	// Create trace context for this run
+	tc := event.NewTraceContext()
+	ctx = event.WithTraceContext(ctx, tc)
+
 	// Emit run start
-	event.Emit(eventCh, Event{Type: event.RunStart})
+	event.Emit(ctx, eventCh, Event{Type: event.RunStart})
 
 	// Prepare chat options with tools
 	chatOpts := append([]ai.Option{ai.WithTools(a.registry.Tools())}, options.ChatOptions...)
@@ -149,30 +153,30 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 
 		// Check termination conditions before step
 		if reason := a.checkTermination(ctx, step, nil, options); reason != "" {
-			a.emitComplete(eventCh, step, nil, reason)
+			a.emitComplete(ctx, eventCh, step, nil, reason)
 			return
 		}
 
-		event.Emit(eventCh, Event{Type: event.StepStart, Step: step})
+		event.Emit(ctx, eventCh, Event{Type: event.StepStart, Step: step})
 
 		// Execute chat call with streaming
 		response, err := a.executeStep(ctx, history.Messages(), chatOpts, step, eventCh)
 		if err != nil {
-			event.Emit(eventCh, Event{Type: event.RunError, Step: step, Error: err})
+			event.Emit(ctx, eventCh, Event{Type: event.RunError, Step: step, Error: err})
 			return
 		}
 
-		event.Emit(eventCh, Event{Type: event.StepEnd, Step: step, Response: response})
+		event.Emit(ctx, eventCh, Event{Type: event.StepEnd, Step: step, Response: response})
 
 		// Check custom stop predicate
 		if options.StopPredicate != nil && options.StopPredicate(step, response) {
-			a.emitComplete(eventCh, step, response, TerminationCustom)
+			a.emitComplete(ctx, eventCh, step, response, TerminationCustom)
 			return
 		}
 
 		// No tool calls = natural completion
 		if len(response.ToolCalls) == 0 {
-			a.emitComplete(eventCh, step, response, TerminationComplete)
+			a.emitComplete(ctx, eventCh, step, response, TerminationComplete)
 			return
 		}
 
@@ -193,7 +197,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 			if len(processResult.results) > 0 {
 				history.Append(ai.NewToolResultMessage(processResult.results...))
 			}
-			a.emitClientToolCall(eventCh, step, response, processResult.clientToolCalls)
+			a.emitClientToolCall(ctx, eventCh, step, response, processResult.clientToolCalls)
 			return
 		}
 
@@ -202,7 +206,7 @@ func (a *Agent) runLoop(ctx context.Context, messages []ai.Message, eventCh chan
 
 		// If all tools were rejected, stop
 		if processResult.allRejected {
-			a.emitComplete(eventCh, step, response, TerminationRejected)
+			a.emitComplete(ctx, eventCh, step, response, TerminationRejected)
 			return
 		}
 	}
@@ -226,7 +230,7 @@ func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts
 
 		case event.MessageStart:
 			// Forward message start with our step-scoped message ID
-			event.Emit(eventCh, Event{
+			event.Emit(ctx, eventCh, Event{
 				Type:      event.MessageStart,
 				Step:      step,
 				MessageID: messageID,
@@ -236,14 +240,14 @@ func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts
 		case event.MessageDelta:
 			if !messageStarted {
 				// Emit start if we haven't yet (defensive)
-				event.Emit(eventCh, Event{
+				event.Emit(ctx, eventCh, Event{
 					Type:      event.MessageStart,
 					Step:      step,
 					MessageID: messageID,
 				})
 				messageStarted = true
 			}
-			event.Emit(eventCh, Event{
+			event.Emit(ctx, eventCh, Event{
 				Type:      event.MessageDelta,
 				Step:      step,
 				MessageID: messageID,
@@ -252,13 +256,13 @@ func (a *Agent) executeStep(ctx context.Context, messages []ai.Message, chatOpts
 
 		case event.MessageEnd:
 			if !messageStarted {
-				event.Emit(eventCh, Event{
+				event.Emit(ctx, eventCh, Event{
 					Type:      event.MessageStart,
 					Step:      step,
 					MessageID: messageID,
 				})
 			}
-			event.Emit(eventCh, Event{
+			event.Emit(ctx, eventCh, Event{
 				Type:      event.MessageEnd,
 				Step:      step,
 				MessageID: messageID,
@@ -310,39 +314,39 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 		isClient := a.registry.IsClientTool(tc.Name)
 
 		// Emit tool call start (name only) and args (arguments)
-		event.Emit(eventCh, Event{Type: event.ToolCallStart, Step: step, ToolCall: &tc})
-		event.Emit(eventCh, Event{Type: event.ToolCallArgs, Step: step, ToolCall: &tc})
+		event.Emit(ctx, eventCh, Event{Type: event.ToolCallStart, Step: step, ToolCall: &tc})
+		event.Emit(ctx, eventCh, Event{Type: event.ToolCallArgs, Step: step, ToolCall: &tc})
 
 		// Client tools are always "approved" from the backend's perspective
 		// The frontend will handle approval if needed
 		if isClient {
 			approvals[i] = approvalResult{call: tc, approved: true, isClient: true}
-			event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
+			event.Emit(ctx, eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 			// Emit end for client tools - they're "done" from backend perspective
-			event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+			event.Emit(ctx, eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
 			continue
 		}
 
 		if a.requiresApproval(tc.Name, options) {
 			// Emit activity snapshot for pending approval (enables AG-UI approval UI)
-			event.EmitToolApprovalPending(eventCh, tc.ID, tc.Name, tc.Arguments)
+			event.EmitToolApprovalPending(ctx, eventCh, tc.ID, tc.Name, tc.Arguments)
 
 			approved, reason := options.Approver(ctx, tc)
 			approvals[i] = approvalResult{call: tc, approved: approved, reason: reason, isClient: false}
 
 			if approved {
 				// Emit activity delta to update approval status
-				event.EmitToolApprovalApproved(eventCh, tc.ID)
-				event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
+				event.EmitToolApprovalApproved(ctx, eventCh, tc.ID)
+				event.Emit(ctx, eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 			} else {
 				// Emit activity delta to update rejection status
-				event.EmitToolApprovalRejected(eventCh, tc.ID, reason)
-				event.Emit(eventCh, Event{Type: event.ToolCallRejected, Step: step, ToolCall: &tc, Message: reason})
+				event.EmitToolApprovalRejected(ctx, eventCh, tc.ID, reason)
+				event.Emit(ctx, eventCh, Event{Type: event.ToolCallRejected, Step: step, ToolCall: &tc, Message: reason})
 			}
 		} else {
 			// Auto-approved
 			approvals[i] = approvalResult{call: tc, approved: true, isClient: false}
-			event.Emit(eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
+			event.Emit(ctx, eventCh, Event{Type: event.ToolCallApproved, Step: step, ToolCall: &tc})
 		}
 	}
 
@@ -373,8 +377,8 @@ func (a *Agent) processToolCalls(ctx context.Context, toolCalls []ai.ToolCall, o
 	if len(approvedBackendCalls) == 0 && len(clientToolCalls) == 0 {
 		for i := range rejectedResults {
 			tc := backendToolCalls[i]
-			event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
-			event.Emit(eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &rejectedResults[i]})
+			event.Emit(ctx, eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+			event.Emit(ctx, eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &rejectedResults[i]})
 		}
 		return toolCallProcessResult{results: rejectedResults, allRejected: true}
 	}
@@ -443,7 +447,7 @@ func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []ai.Too
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Options, step int, eventCh chan<- Event) ai.ToolResult {
-	event.Emit(eventCh, Event{Type: event.ToolCallExecuting, Step: step, ToolCall: &tc})
+	event.Emit(ctx, eventCh, Event{Type: event.ToolCallExecuting, Step: step, ToolCall: &tc})
 
 	// Apply handler timeout
 	execCtx := ctx
@@ -466,8 +470,8 @@ func (a *Agent) executeToolCall(ctx context.Context, tc ai.ToolCall, options *Op
 		}
 	}
 
-	event.Emit(eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
-	event.Emit(eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &result})
+	event.Emit(ctx, eventCh, Event{Type: event.ToolCallEnd, Step: step, ToolCall: &tc})
+	event.Emit(ctx, eventCh, Event{Type: event.ToolCallResult, Step: step, ToolCall: &tc, ToolResult: &result})
 	return result
 }
 
@@ -503,8 +507,8 @@ func (a *Agent) checkTermination(ctx context.Context, step int, response *ai.Res
 	return ""
 }
 
-func (a *Agent) emitComplete(ch chan<- Event, step int, response *ai.Response, reason TerminationReason) {
-	event.Emit(ch, Event{
+func (a *Agent) emitComplete(ctx context.Context, ch chan<- Event, step int, response *ai.Response, reason TerminationReason) {
+	event.Emit(ctx, ch, Event{
 		Type:     event.RunEnd,
 		Step:     step,
 		Response: response,
@@ -512,12 +516,12 @@ func (a *Agent) emitComplete(ch chan<- Event, step int, response *ai.Response, r
 	})
 }
 
-func (a *Agent) emitClientToolCall(ch chan<- Event, step int, response *ai.Response, clientToolCalls []ai.ToolCall) {
-	event.Emit(ch, Event{
-		Type:            event.RunEnd,
-		Step:            step,
-		Response:        response,
-		Message:         string(TerminationClientToolCall),
+func (a *Agent) emitClientToolCall(ctx context.Context, ch chan<- Event, step int, response *ai.Response, clientToolCalls []ai.ToolCall) {
+	event.Emit(ctx, ch, Event{
+		Type:             event.RunEnd,
+		Step:             step,
+		Response:         response,
+		Message:          string(TerminationClientToolCall),
 		PendingToolCalls: clientToolCalls,
 	})
 }

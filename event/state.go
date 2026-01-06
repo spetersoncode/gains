@@ -69,7 +69,7 @@ func (s *SharedState) Set(ctx context.Context, newState map[string]any) {
 
 	// Emit snapshot
 	if ch := ForwardChannelFromContext(ctx); ch != nil {
-		EmitSnapshot(ch, newState)
+		EmitSnapshot(ctx, ch, newState)
 	}
 }
 
@@ -93,7 +93,7 @@ func (s *SharedState) Update(ctx context.Context, patches ...JSONPatch) {
 
 	// Emit delta
 	if ch := ForwardChannelFromContext(ctx); ch != nil {
-		EmitDelta(ch, patches...)
+		EmitDelta(ctx, ch, patches...)
 	}
 }
 

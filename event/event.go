@@ -5,6 +5,8 @@ package event
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	ai "github.com/spetersoncode/gains"
@@ -265,8 +267,57 @@ type Event struct {
 	Timestamp time.Time
 }
 
-// emit sends an event with timestamp to the channel (non-blocking).
-func Emit(ch chan<- Event, e Event) {
+// TraceContext holds distributed tracing identifiers.
+// These fields enable correlation of events across services.
+type TraceContext struct {
+	TraceID      string
+	SpanID       string
+	ParentSpanID string
+}
+
+// NewTraceID generates a new random trace ID (128-bit, 32 hex chars).
+func NewTraceID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// NewSpanID generates a new random span ID (64-bit, 16 hex chars).
+func NewSpanID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// NewTraceContext creates a new root trace context with fresh TraceID and SpanID.
+func NewTraceContext() TraceContext {
+	return TraceContext{
+		TraceID: NewTraceID(),
+		SpanID:  NewSpanID(),
+	}
+}
+
+// traceContextKey is the context key for trace context.
+type traceContextKey struct{}
+
+// WithTraceContext returns a new context with the given trace context.
+func WithTraceContext(ctx context.Context, tc TraceContext) context.Context {
+	return context.WithValue(ctx, traceContextKey{}, tc)
+}
+
+// TraceContextFromContext retrieves the trace context from the context.
+// Returns an empty TraceContext if none is set.
+func TraceContextFromContext(ctx context.Context) TraceContext {
+	tc, _ := ctx.Value(traceContextKey{}).(TraceContext)
+	return tc
+}
+
+// Emit sends an event with timestamp and trace context to the channel (non-blocking).
+func Emit(ctx context.Context, ch chan<- Event, e Event) {
+	tc := TraceContextFromContext(ctx)
+	e.TraceID = tc.TraceID
+	e.SpanID = tc.SpanID
+	e.ParentSpanID = tc.ParentSpanID
 	e.Timestamp = time.Now()
 	select {
 	case ch <- e:
@@ -328,20 +379,20 @@ func Test(path string, value any) JSONPatch {
 
 // EmitSnapshot sends a StateSnapshot event to the channel.
 // Used internally by SharedState.Set().
-func EmitSnapshot(ch chan<- Event, state any) {
-	Emit(ch, NewStateSnapshot(state))
+func EmitSnapshot(ctx context.Context, ch chan<- Event, state any) {
+	Emit(ctx, ch, NewStateSnapshot(state))
 }
 
 // EmitDelta sends a StateDelta event to the channel.
 // Used internally by SharedState.Update().
-func EmitDelta(ch chan<- Event, patches ...JSONPatch) {
-	Emit(ch, NewStateDelta(patches...))
+func EmitDelta(ctx context.Context, ch chan<- Event, patches ...JSONPatch) {
+	Emit(ctx, ch, NewStateDelta(patches...))
 }
 
 // EmitField sends a StateDelta event for a single field update.
 // Used internally by SharedState.UpdateField().
-func EmitField(ch chan<- Event, path string, value any) {
-	Emit(ch, NewStateDelta(Replace(path, value)))
+func EmitField(ctx context.Context, ch chan<- Event, path string, value any) {
+	Emit(ctx, ch, NewStateDelta(Replace(path, value)))
 }
 
 // NewMessagesSnapshot creates a MessagesSnapshot event with the given messages.
@@ -355,9 +406,9 @@ func NewMessagesSnapshot(messages []ai.Message) Event {
 // EmitMessagesSnapshot is a convenience function that sends a MessagesSnapshot event.
 // Use this to sync the complete conversation history with the frontend:
 //
-//	event.EmitMessagesSnapshot(eventCh, conversation.Messages())
-func EmitMessagesSnapshot(ch chan<- Event, messages []ai.Message) {
-	Emit(ch, NewMessagesSnapshot(messages))
+//	event.EmitMessagesSnapshot(ctx, eventCh, conversation.Messages())
+func EmitMessagesSnapshot(ctx context.Context, ch chan<- Event, messages []ai.Message) {
+	Emit(ctx, ch, NewMessagesSnapshot(messages))
 }
 
 // NewActivitySnapshot creates an ActivitySnapshot event.
@@ -410,18 +461,18 @@ func NewToolApprovalRejected(toolCallID, reason string) Event {
 }
 
 // EmitToolApprovalPending emits a tool approval pending activity.
-func EmitToolApprovalPending(ch chan<- Event, toolCallID, toolName, arguments string) {
-	Emit(ch, NewToolApprovalPending(toolCallID, toolName, arguments))
+func EmitToolApprovalPending(ctx context.Context, ch chan<- Event, toolCallID, toolName, arguments string) {
+	Emit(ctx, ch, NewToolApprovalPending(toolCallID, toolName, arguments))
 }
 
 // EmitToolApprovalApproved emits a tool approval approved activity update.
-func EmitToolApprovalApproved(ch chan<- Event, toolCallID string) {
-	Emit(ch, NewToolApprovalApproved(toolCallID))
+func EmitToolApprovalApproved(ctx context.Context, ch chan<- Event, toolCallID string) {
+	Emit(ctx, ch, NewToolApprovalApproved(toolCallID))
 }
 
 // EmitToolApprovalRejected emits a tool approval rejected activity update.
-func EmitToolApprovalRejected(ch chan<- Event, toolCallID, reason string) {
-	Emit(ch, NewToolApprovalRejected(toolCallID, reason))
+func EmitToolApprovalRejected(ctx context.Context, ch chan<- Event, toolCallID, reason string) {
+	Emit(ctx, ch, NewToolApprovalRejected(toolCallID, reason))
 }
 
 // Context-based event forwarding for nested runs
@@ -502,21 +553,21 @@ func NewUserInputTimeout(requestID string) Event {
 }
 
 // EmitUserInputPending emits a user input pending activity.
-func EmitUserInputPending(ch chan<- Event, requestID, inputType, title, message string, choices []string, defaultVal, placeholder string) {
-	Emit(ch, NewUserInputPending(requestID, inputType, title, message, choices, defaultVal, placeholder))
+func EmitUserInputPending(ctx context.Context, ch chan<- Event, requestID, inputType, title, message string, choices []string, defaultVal, placeholder string) {
+	Emit(ctx, ch, NewUserInputPending(requestID, inputType, title, message, choices, defaultVal, placeholder))
 }
 
 // EmitUserInputResponded emits a user input responded activity update.
-func EmitUserInputResponded(ch chan<- Event, requestID, value string, confirmed bool) {
-	Emit(ch, NewUserInputResponded(requestID, value, confirmed))
+func EmitUserInputResponded(ctx context.Context, ch chan<- Event, requestID, value string, confirmed bool) {
+	Emit(ctx, ch, NewUserInputResponded(requestID, value, confirmed))
 }
 
 // EmitUserInputCancelled emits a user input cancelled activity update.
-func EmitUserInputCancelled(ch chan<- Event, requestID string) {
-	Emit(ch, NewUserInputCancelled(requestID))
+func EmitUserInputCancelled(ctx context.Context, ch chan<- Event, requestID string) {
+	Emit(ctx, ch, NewUserInputCancelled(requestID))
 }
 
 // EmitUserInputTimeout emits a user input timeout activity update.
-func EmitUserInputTimeout(ch chan<- Event, requestID string) {
-	Emit(ch, NewUserInputTimeout(requestID))
+func EmitUserInputTimeout(ctx context.Context, ch chan<- Event, requestID string) {
+	Emit(ctx, ch, NewUserInputTimeout(requestID))
 }

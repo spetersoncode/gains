@@ -566,7 +566,7 @@ func (c *Client) wrapProviderStream(ctx context.Context, providerCh <-chan ai.St
 
 	// Helper to emit and optionally forward to observer
 	emitEvent := func(ev event.Event) {
-		event.Emit(eventCh, ev)
+		event.Emit(ctx, eventCh, ev)
 		if c.observer != nil {
 			c.observer.Observe(ctx, ev)
 		}
