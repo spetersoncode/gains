@@ -73,6 +73,7 @@ var demos = []Demo{
 	// Observability
 	{Name: "observer", Description: "Console observer with cost tracking", Category: CategoryObserver, Run: demoObserver},
 	{Name: "observer-file", Description: "Multi observer with file output", Category: CategoryObserver, Run: demoObserverFile},
+	{Name: "observer-combat", Description: "Combat encounter with observer", Category: CategoryObserver, Run: demoObserverCombat},
 
 	// AG-UI Protocol
 	{Name: "agui-stream", Description: "AG-UI event stream simulation", Category: CategoryAGUI, Run: demoAGUIStream},
