@@ -13,6 +13,7 @@ import (
 	"github.com/spetersoncode/gains/internal/provider/openai"
 	"github.com/spetersoncode/gains/internal/provider/vertex"
 	"github.com/spetersoncode/gains/internal/retry"
+	"github.com/spetersoncode/gains/observer"
 )
 
 
@@ -90,6 +91,10 @@ type Config struct {
 	// Events is an optional channel for receiving client operation events.
 	// Events are sent non-blocking; if the channel is full, events are dropped.
 	Events chan<- Event
+
+	// Observer receives streaming events for tracing and monitoring.
+	// If set, events from ChatStream are forwarded to the observer.
+	Observer observer.Observer
 }
 
 // ErrFeatureNotSupported is returned when a feature is unavailable for the provider.
@@ -174,6 +179,7 @@ type Client struct {
 	defaults        Defaults
 	retryConfig     retry.Config
 	events          chan<- Event
+	observer        observer.Observer
 	defaultChatOpts []ai.Option
 
 	// Lazy-initialized providers (protected by mutex)
@@ -200,6 +206,7 @@ func New(cfg Config, opts ...ClientOption) *Client {
 		defaults:    cfg.Defaults,
 		retryConfig: retryConfig,
 		events:      cfg.Events,
+		observer:    cfg.Observer,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -531,7 +538,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 
 	// Wrap provider stream in unified event stream
 	eventCh := event.NewChannel()
-	go c.wrapProviderStream(providerCh, eventCh)
+	go c.wrapProviderStream(ctx, providerCh, eventCh)
 
 	return eventCh, nil
 }
@@ -539,11 +546,19 @@ func (c *Client) ChatStream(ctx context.Context, messages []ai.Message, opts ...
 // wrapProviderStream converts provider StreamEvents to unified events.
 // Emits: RunStart -> MessageStart -> MessageDelta* -> MessageEnd -> RunEnd
 // Or on error: RunStart -> RunError
-func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh chan<- event.Event) {
+func (c *Client) wrapProviderStream(ctx context.Context, providerCh <-chan ai.StreamEvent, eventCh chan<- event.Event) {
 	defer close(eventCh)
 
+	// Helper to emit and optionally forward to observer
+	emitEvent := func(ev event.Event) {
+		event.Emit(eventCh, ev)
+		if c.observer != nil {
+			c.observer.Observe(ctx, ev)
+		}
+	}
+
 	// Emit RunStart at the beginning
-	event.Emit(eventCh, event.Event{Type: event.RunStart})
+	emitEvent(event.Event{Type: event.RunStart})
 
 	messageID := generateMessageID()
 	messageStarted := false
@@ -551,7 +566,7 @@ func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh ch
 	for se := range providerCh {
 		// Handle errors
 		if se.Err != nil {
-			event.Emit(eventCh, event.Event{
+			emitEvent(event.Event{
 				Type:  event.RunError,
 				Error: se.Err,
 			})
@@ -562,14 +577,14 @@ func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh ch
 		if se.Delta != "" {
 			// Emit MessageStart on first delta
 			if !messageStarted {
-				event.Emit(eventCh, event.Event{
+				emitEvent(event.Event{
 					Type:      event.MessageStart,
 					MessageID: messageID,
 				})
 				messageStarted = true
 			}
 
-			event.Emit(eventCh, event.Event{
+			emitEvent(event.Event{
 				Type:      event.MessageDelta,
 				MessageID: messageID,
 				Delta:     se.Delta,
@@ -580,20 +595,20 @@ func (c *Client) wrapProviderStream(providerCh <-chan ai.StreamEvent, eventCh ch
 		if se.Done {
 			// Ensure message was started (handles empty responses)
 			if !messageStarted {
-				event.Emit(eventCh, event.Event{
+				emitEvent(event.Event{
 					Type:      event.MessageStart,
 					MessageID: messageID,
 				})
 			}
 
-			event.Emit(eventCh, event.Event{
+			emitEvent(event.Event{
 				Type:      event.MessageEnd,
 				MessageID: messageID,
 				Response:  se.Response,
 			})
 
 			// Emit RunEnd with the response
-			event.Emit(eventCh, event.Event{
+			emitEvent(event.Event{
 				Type:     event.RunEnd,
 				Response: se.Response,
 			})

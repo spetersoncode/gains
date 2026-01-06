@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+
+	"github.com/spetersoncode/gains/event"
 )
 
 // Workflow is the top-level orchestrator that wraps a root step.
@@ -23,8 +25,27 @@ func (w *Workflow[S]) Name() string { return w.name }
 // State is mutated in place - access results via state fields after completion.
 // The state parameter must not be nil.
 func (w *Workflow[S]) Run(ctx context.Context, state *S, opts ...Option) (*Result[S], error) {
-	err := w.root.Run(ctx, state, opts...)
-	if err != nil {
+	// Get observer from options if set
+	options := ApplyOptions(opts...)
+	obs := options.Observer
+
+	// Use RunStream to get events
+	eventCh := w.RunStream(ctx, state, opts...)
+
+	var lastErr error
+	for ev := range eventCh {
+		// Forward event to observer if configured
+		if obs != nil {
+			obs.Observe(ctx, ev)
+		}
+
+		// Track errors
+		if ev.Type == event.RunError {
+			lastErr = ev.Error
+		}
+	}
+
+	if lastErr != nil {
 		termination := TerminationError
 		if ctx.Err() == context.Canceled {
 			termination = TerminationCancelled
@@ -34,9 +55,9 @@ func (w *Workflow[S]) Run(ctx context.Context, state *S, opts ...Option) (*Resul
 		return &Result[S]{
 			WorkflowName: w.name,
 			State:        state,
-			Error:        err,
+			Error:        lastErr,
 			Termination:  termination,
-		}, err
+		}, lastErr
 	}
 
 	return &Result[S]{
