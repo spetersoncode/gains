@@ -68,7 +68,13 @@ func NewFileWriter(w io.Writer) *File {
 }
 
 // Observe writes the event as JSON to the file.
+// Delta events are skipped as they are too granular for file logging.
 func (f *File) Observe(ctx context.Context, e event.Event) {
+	// Skip delta events - too granular for file logging
+	if e.Type == event.MessageDelta {
+		return
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
