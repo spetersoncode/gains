@@ -443,6 +443,11 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 			Duration:  time.Since(start),
 			Error:     err,
 		})
+		// Emit observer events for error
+		if c.observer != nil {
+			c.observer.Observe(ctx, event.Event{Type: event.RunStart})
+			c.observer.Observe(ctx, event.Event{Type: event.RunError, Error: err})
+		}
 		return nil, err
 	}
 
@@ -457,6 +462,16 @@ func (c *Client) Chat(ctx context.Context, messages []ai.Message, opts ...ai.Opt
 		Duration:  time.Since(start),
 		Usage:     usage,
 	})
+
+	// Emit observer events for successful completion
+	if c.observer != nil {
+		messageID := generateMessageID()
+		c.observer.Observe(ctx, event.Event{Type: event.RunStart})
+		c.observer.Observe(ctx, event.Event{Type: event.MessageStart, MessageID: messageID})
+		c.observer.Observe(ctx, event.Event{Type: event.MessageEnd, MessageID: messageID, Response: resp})
+		c.observer.Observe(ctx, event.Event{Type: event.RunEnd, Response: resp})
+	}
+
 	return resp, nil
 }
 
