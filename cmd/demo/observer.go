@@ -92,18 +92,16 @@ func demoObserverFile(ctx context.Context, c *client.Client) {
 		},
 	)
 
-	// Create a temp file for JSON output
-	tmpFile, err := os.CreateTemp("", "gains-observer-*.jsonl")
+	// Create file in home directory for JSON output
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating temp file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
 		return
 	}
-	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	defer os.Remove(tmpPath)
+	filePath := homeDir + "/gains-observer-demo.jsonl"
 
 	// Create File observer
-	fileObs, err := observer.NewFile(tmpPath)
+	fileObs, err := observer.NewFile(filePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating file observer: %v\n", err)
 		return
@@ -116,8 +114,8 @@ func demoObserverFile(ctx context.Context, c *client.Client) {
 
 	fmt.Println("\nThis demo shows the Multi observer combining:")
 	fmt.Println("  1. Console observer (human-readable to stderr)")
-	fmt.Println("  2. File observer (JSON lines to temp file)")
-	fmt.Printf("\nJSON output will be written to: %s\n", tmpPath)
+	fmt.Println("  2. File observer (JSON lines to home directory)")
+	fmt.Printf("\nJSON output will be written to: %s\n", filePath)
 	fmt.Println("\n─── Observer Output (stderr) ───")
 
 	// Create agent with observer
@@ -145,7 +143,7 @@ func demoObserverFile(ctx context.Context, c *client.Client) {
 
 	// Read and display the JSON file contents
 	fmt.Println("\n─── JSON File Contents ───")
-	jsonContent, err := os.ReadFile(tmpPath)
+	jsonContent, err := os.ReadFile(filePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading JSON file: %v\n", err)
 		return
