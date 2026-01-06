@@ -32,6 +32,10 @@ func New(c chat.Client, registry *tool.Registry) *Agent {
 func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) (*Result, error) {
 	eventCh := a.RunStream(ctx, messages, opts...)
 
+	// Get observer from options if set
+	options := ApplyOptions(opts...)
+	obs := options.Observer
+
 	result := &Result{
 		history: store.NewMessageStoreFrom(messages, nil),
 	}
@@ -42,6 +46,11 @@ func (a *Agent) Run(ctx context.Context, messages []ai.Message, opts ...Option) 
 	var pendingToolResults []ai.ToolResult
 
 	for ev := range eventCh {
+		// Forward event to observer if configured
+		if obs != nil {
+			obs.Observe(ctx, ev)
+		}
+
 		result.Steps = ev.Step
 
 		switch ev.Type {
